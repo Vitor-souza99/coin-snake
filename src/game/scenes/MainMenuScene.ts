@@ -13,6 +13,10 @@ export class MainMenuScene extends Phaser.Scene {
       ui = new ScreenUI(this);
     reconcileWorldUnlocks(p);
     this.cameras.main.setBackgroundColor("#f6f5e6");
+    this.events.on("androidBackButton", this.confirmExit, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      this.events.off("androidBackButton", this.confirmExit, this),
+    );
     const body = textureURL(this, `${p.selectedSkin}-body`),
       head = textureURL(this, `${p.selectedSkin}-head`);
     ui.html(
@@ -24,5 +28,12 @@ export class MainMenuScene extends Phaser.Scene {
     ui.on("#missions", () => this.scene.start("Missions"));
     ui.on("#settings", () => this.scene.start("Settings"));
     if (save.error) ui.toast(save.error);
+  }
+  private confirmExit() {
+    const ui = new ScreenUI(this);
+    ui.modal("Sair do jogo?", "Tem certeza de que deseja sair?", [
+      { label: "Sair", run: () => { void import("@capacitor/app").then(({ App }) => App.exitApp()); } },
+      { label: "Cancelar", run: () => ui.destroy() },
+    ]);
   }
 }

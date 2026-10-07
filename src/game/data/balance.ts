@@ -86,6 +86,7 @@ export const B = {
     maxObstacles: 16,
     warningSeconds: 2,
   },
+  boss: { greenValleyEnergyRequired: 350, defaultEnergyRequired: 500 },
   xp: { perRun: 25, scoreDivisor: 20, perMission: 75, perLevel: 250 },
   prices: [0, 500, 1000, 2000, 5000],
   spawn: { attempts: 120, edge: 34, bodyClearance: 44, headClearance: 200 },

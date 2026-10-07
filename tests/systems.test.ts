@@ -172,6 +172,8 @@ describe("roadmap progression systems", () => {
     expect(portal.bossEnergy("mythic")).toBe(100);
     expect(portal.bossEnergy("boss")).toBe(0);
     expect(before.totalCoins).toBe(0);
+    expect(B.boss.greenValleyEnergyRequired).toBe(350);
+    expect(B.boss.defaultEnergyRequired).toBe(500);
   });
   it("Bee coin weights add three percentage points to blue without changing other tiers", async () => {
     const { beeCoins } = await import("../src/game/data/balance");

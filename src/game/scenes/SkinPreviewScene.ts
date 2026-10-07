@@ -58,11 +58,6 @@ export class SkinPreviewScene extends Phaser.Scene {
     this.previewPanel = this.add.rectangle(centerX, centerY, width, height, 0xf1f3e1).setStrokeStyle(2, 0xd5dec4).setDepth(-1);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    const controls = this.ui.get<HTMLElement>("#skin-preview-controls");
-    controls.style.position = "fixed";
-    controls.style.left = "50%";
-    controls.style.top = `${centerY + height / 2 + 8}px`;
-    controls.style.transform = "translateX(-50%)";
     this.createPreview(width, height, centerX, centerY);
     const resize = () => {
       const w = Math.min(this.scale.width - 32, 680);
@@ -78,7 +73,6 @@ export class SkinPreviewScene extends Phaser.Scene {
       canvas.style.height = `${h}px`;
       this.previewPanel.setPosition(x, y).setSize(w, h);
       this.createPreview(w, h, x, y);
-      controls.style.top = `${y + h / 2 + 8}px`;
     };
     this.scale.on(Phaser.Scale.Events.RESIZE, resize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, resize));

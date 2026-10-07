@@ -20,6 +20,14 @@ if (Capacitor.isNativePlatform()) {
     const scene = game.scene.getScene("Game");
     if (scene instanceof GameScene && game.scene.isActive("Game"))
       scene.requestPause();
+    else if (game.scene.isActive("Menu")) {
+      const menu = game.scene.getScene("Menu");
+      if (menu instanceof Phaser.Scene) menu.events.emit("androidBackButton");
+    } else if (game.scene.isActive("GameOver")) {
+      game.scene.start("Menu");
+    } else {
+      game.scene.start("Menu");
+    }
   });
 }
 // Developer-only handle for browser smoke tests, absent from production bundles.

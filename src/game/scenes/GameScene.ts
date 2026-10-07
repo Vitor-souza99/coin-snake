@@ -202,7 +202,7 @@ export class GameScene extends Phaser.Scene {
     );
     if (this.rushMode) this.ui.root.classList.add("rush-mode");
     this.ui.html(
-      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : "GREEN VALLEY"}</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
+      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : "GREEN VALLEY"}</div><div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
@@ -215,7 +215,7 @@ export class GameScene extends Phaser.Scene {
     this.ui.on("#pause", () => this.requestPause());
     this.hud = new GameplayHUD(this.ui);
     this.bossHud = this.ui.get("#boss-hud");
-    this.bossEnergyHud = this.ui.get("#effects");
+    this.bossEnergyHud = this.ui.get("#boss-energy");
     this.joystick = new FloatingJoystick(this.ui.get("#joystick"));
     this.turboButton = new TurboButton(
       this.ui.get<HTMLButtonElement>("#turbo"),
@@ -397,7 +397,7 @@ export class GameScene extends Phaser.Scene {
     this.hud.update(this.run, this.combo, this.powers, this.turbo);
     if (this.bossEnergyHud && !this.boss) this.bossEnergyHud.textContent = this.rushMode
       ? `COIN RUSH · ${Math.ceil(this.run.rushRemaining)} s restantes`
-      : `${this.currentWorld.toUpperCase()} · BossEnergy ${Math.floor(this.run.bossEnergy)}/500`;
+      : `BOSS ENERGY ${Math.floor(this.run.bossEnergy)}/${this.bossEnergyRequirement()}`;
     this.updateCamera(Math.min(delta / 1000, 0.05));
   }
   private step(dt: number) {
@@ -460,15 +460,16 @@ export class GameScene extends Phaser.Scene {
       this.enterWorld(destination);
     }
     if (this.bossPortal && distance(this.snake, this.bossPortal) < 75) {
-      if (this.run.bossEnergy < 500) {
+      const requiredEnergy = this.bossEnergyRequirement(this.bossDefinition?.id);
+      if (this.run.bossEnergy < requiredEnergy) {
         const energy = Math.floor(this.run.bossEnergy);
         if (this.bossPortal.getData("lastEnergyNotice") !== energy) {
           this.bossPortal.setData("lastEnergyNotice", energy);
-          this.ui.toast(`Portal de chefe: colete 500 Boss Energy para entrar. Atual: ${energy}.`);
+          this.ui.toast(`Portal de chefe: colete ${requiredEnergy} Boss Energy para entrar. Atual: ${energy}.`);
         }
       } else if (this.bossDefinition) {
         const definition = this.bossDefinition;
-        this.run.bossEnergy -= 500;
+        this.run.bossEnergy -= requiredEnergy;
         this.startBoss(definition);
       }
     }
@@ -802,8 +803,19 @@ export class GameScene extends Phaser.Scene {
     this.halted = true;
     this.pauseKind = "pause";
     this.resetControls();
+    this.showPauseModal();
+  }
+  private showPauseModal() {
     this.overlay = this.ui.modal("Pausado", "Seu vale pode esperar.", [
       { label: "Continuar", run: () => this.continue() },
+      {
+        label: `Câmera: ${save.profile.settings.cameraMode === "standard" ? "Padrão" : "Panorâmica"}`,
+        run: () => {
+          save.profile.settings.cameraMode = save.profile.settings.cameraMode === "standard" ? "panoramic" : "standard";
+          void save.save();
+          this.showPauseModal();
+        },
+      },
       {
         label: "Reiniciar",
         run: () => {
@@ -918,7 +930,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(world.background);
     for (const obstacle of this.obstacles) obstacle.image.setTint(world.accent);
     this.ui.get("#world-tag").textContent = world.name.toUpperCase();
-    this.ui.get<HTMLElement>("#world-tag").style.backgroundColor = `#${world.accent.toString(16).padStart(6, "0")}`;
+    this.ui.get<HTMLElement>("#world-tag").style.backgroundColor = "transparent";
     analytics.track("portalEntered", { world: world.id });
     void save.save();
     this.ui.toast(`Você chegou a ${world.name}.`);
@@ -949,8 +961,14 @@ export class GameScene extends Phaser.Scene {
     this.bossPortal = this.add.container(p.x, p.y, [g, t]).setDepth(9);
     this.bossDefinition = bosses.find((boss) => boss.id === bossId);
     this.bossPortalExpiresAt = this.run.elapsed + 25;
-    const required = Math.max(0, 500 - this.run.bossEnergy);
-    this.ui.toast(`Portal para ${this.bossDefinition?.name ?? "chefe"} apareceu. Atravesse-o com a cobrinha; requer 500 Boss Energy${required ? ` (faltam ${Math.ceil(required)})` : ""}.`);
+    const requiredEnergy = this.bossEnergyRequirement(bossId);
+    const required = Math.max(0, requiredEnergy - this.run.bossEnergy);
+    this.ui.toast(`Portal para ${this.bossDefinition?.name ?? "chefe"} apareceu. Atravesse-o com a cobrinha; requer ${requiredEnergy} Boss Energy${required ? ` (faltam ${Math.ceil(required)})` : ""}.`);
+  }
+  private bossEnergyRequirement(bossId = worldById(this.currentWorld).bossId) {
+    return bossId === "king-snake"
+      ? B.boss.greenValleyEnergyRequired
+      : B.boss.defaultEnergyRequired;
   }
   private startBoss(definition: BossDefinition) {
     this.bossPortal?.destroy(); this.bossPortal = undefined;
