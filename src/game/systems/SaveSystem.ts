@@ -34,6 +34,7 @@ export function defaults(): PlayerProfile {
       musicVolume: 0.2,
       sfxVolume: 0.35,
       reducedMotion: false,
+      cameraMode: "standard",
     },
     firstLaunch: true,
     tutorialCompleted: false,
@@ -108,6 +109,7 @@ export function validateSave(input: unknown): PlayerProfile {
       : 0.35;
   p.settings.leftHanded = bool(s.leftHanded, false);
   p.settings.reducedMotion = bool(s.reducedMotion, false);
+  p.settings.cameraMode = s.cameraMode === "panoramic" ? "panoramic" : "standard";
   const volume = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v)
       ? Math.max(0, Math.min(1, v))

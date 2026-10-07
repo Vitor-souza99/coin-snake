@@ -202,7 +202,7 @@ export class GameScene extends Phaser.Scene {
     );
     if (this.rushMode) this.ui.root.classList.add("rush-mode");
     this.ui.html(
-      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button">Pausa</button></div><div id="effects" class="effects">${this.rushMode ? "COIN RUSH · 60 s" : "Colete moedas. Evite obstáculos."}</div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : "GREEN VALLEY"}</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
+      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : "GREEN VALLEY"}</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
@@ -278,10 +278,16 @@ export class GameScene extends Phaser.Scene {
         this.lastOrientation !== undefined &&
         this.lastOrientation !== layout.isLandscape;
       this.lastOrientation = layout.isLandscape;
+      const zoom = save.profile.settings.cameraMode === "panoramic"
+        ? Math.min(
+            layout.screenWidth / (B.arena.right - B.arena.left),
+            layout.screenHeight / (B.arena.bottom - B.arena.top),
+          ) * 0.92
+        : Math.min(layout.screenWidth, layout.screenHeight) / 600;
       this.cameras.main.setZoom(
         clamp(
-          Math.min(layout.screenWidth, layout.screenHeight) / 600,
-          controls.minZoom,
+          zoom,
+          save.profile.settings.cameraMode === "panoramic" ? 0.15 : controls.minZoom,
           controls.maxZoom,
         ),
       );

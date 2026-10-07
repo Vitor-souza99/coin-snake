@@ -10,6 +10,7 @@ export interface Settings {
   musicVolume: number;
   sfxVolume: number;
   reducedMotion: boolean;
+  cameraMode: "standard" | "panoramic";
 }
 export interface GameStatistics {
   totalGames: number;

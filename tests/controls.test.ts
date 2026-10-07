@@ -98,11 +98,17 @@ describe("v1 migration", () => {
   it("round-trips current controls and help flags", () => {
     const p = defaults();
     p.settings.leftHanded = true;
+    p.settings.cameraMode = "panoramic";
     p.hints.shrink = true;
     expect(
       validateSave(JSON.parse(JSON.stringify(p))).settings.leftHanded,
     ).toBe(true);
+    expect(validateSave(JSON.parse(JSON.stringify(p))).settings.cameraMode).toBe("panoramic");
     expect(validateSave(p).hints.shrink).toBe(true);
+  });
+  it("defaults missing or invalid camera modes to standard", () => {
+    expect(validateSave({ ...defaults(), settings: {} }).settings.cameraMode).toBe("standard");
+    expect(validateSave({ ...defaults(), settings: { cameraMode: "invalid" } }).settings.cameraMode).toBe("standard");
   });
   it("counts new statistics once per run", () => {
     const p = defaults(),

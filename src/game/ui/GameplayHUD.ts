@@ -38,9 +38,7 @@ export class GameplayHUD {
     if (p.slowed > 0) powers.push(`VENENO ${Math.ceil(p.slowed)}s`);
     set(
       this.effects,
-      powers.length
-        ? powers.join(" · ")
-        : "Colete moedas. Evite pedras e o corpo.",
+      powers.join(" · "),
     );
     this.bar.style.width = `${t.energy}%`;
     set(
