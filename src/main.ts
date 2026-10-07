@@ -23,9 +23,14 @@ if (Capacitor.isNativePlatform()) {
     else if (game.scene.isActive("Menu")) {
       const menu = game.scene.getScene("Menu");
       if (menu instanceof Phaser.Scene) menu.events.emit("androidBackButton");
-    } else if (game.scene.isActive("GameOver")) {
-      game.scene.start("Menu");
     } else {
+      // A scene.start() only replaces the scene it is called on. Stop all
+      // foreground screens first so their DOM overlays cannot remain above Menu.
+      for (const activeScene of game.scene.getScenes(true)) {
+        if (activeScene.scene.key === "Boot") continue;
+        if (activeScene instanceof GameScene) activeScene.finalize();
+        game.scene.stop(activeScene.scene.key);
+      }
       game.scene.start("Menu");
     }
   });

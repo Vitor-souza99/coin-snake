@@ -95,7 +95,8 @@ export class SkinPreviewScene extends Phaser.Scene {
     this.effects?.destroy();
     this.effects = this.add.graphics().setDepth(1);
     const count = this.skin.previewConfig.segments;
-    for (let index = count - 1; index >= 0; index--) {
+    // Keep the head at index 0: update() animates from the head toward the tail.
+    for (let index = 0; index < count; index++) {
       const head = index === 0;
       const texture = head ? `${this.skin.id}-preview-head` : `${this.skin.id}-preview-body`;
       const fallback = head ? `${this.skin.id}-head` : `${this.skin.id}-body`;
@@ -123,26 +124,47 @@ export class SkinPreviewScene extends Phaser.Scene {
     const rx = Math.min(this.previewWidth * 0.34, 190);
     const ry = Math.min(this.previewHeight * 0.3, 100);
     const phase = this.elapsed * speed;
+    const spacing = 0.13;
+    const pointAt = (angle: number) => ({
+      x: cx + Math.cos(angle) * rx,
+      y: cy + Math.sin(angle * 2) * ry,
+    });
     this.effects.clear();
+    this.effects.lineStyle(14, this.skin.dark, 0.16).beginPath();
+    for (let index = 0; index < this.sprites.length; index++) {
+      const point = pointAt(phase - index * spacing);
+      if (index === 0) this.effects.moveTo(point.x, point.y);
+      else this.effects.lineTo(point.x, point.y);
+    }
+    this.effects.strokePath();
     if (this.skin.trailConfig.enabled) {
-      this.effects.lineStyle(this.skin.trailConfig.width, this.skin.trailConfig.color, this.mode === "turbo" ? 0.78 : 0.32);
-      this.effects.beginPath();
+      this.effects.lineStyle(
+        this.skin.trailConfig.width,
+        this.skin.trailConfig.color,
+        this.mode === "turbo" ? 0.78 : 0.38,
+      ).beginPath();
       for (let index = 0; index < this.sprites.length; index++) {
-        const angle = phase - index * 0.13;
-        const x = cx + Math.cos(angle) * rx;
-        const y = cy + Math.sin(angle * 2) * ry;
-        if (index === 0) this.effects.moveTo(x, y); else this.effects.lineTo(x, y);
+        const point = pointAt(phase - index * spacing);
+        if (index === 0) this.effects.moveTo(point.x, point.y);
+        else this.effects.lineTo(point.x, point.y);
       }
       this.effects.strokePath();
     }
     for (let index = 0; index < this.sprites.length; index++) {
-      const angle = phase - index * 0.13;
-      const x = cx + Math.cos(angle) * rx;
-      const y = cy + Math.sin(angle * 2) * ry;
+      const angle = phase - index * spacing;
+      const point = pointAt(angle);
+      const nextPoint = pointAt(angle + 0.001);
       const sprite = this.sprites[index];
-      sprite.setPosition(x, y).setRotation(Math.atan2(Math.cos(angle * 2) * 2 * ry, -Math.sin(angle) * rx));
-      const pulse = this.skin.visualConfig.animation === "pulse" ? 1 + Math.sin(this.elapsed * 3 - index * 0.4) * 0.05 : 1;
-      sprite.setScale((index === 0 ? 0.72 : 0.61) * pulse);
+      sprite
+        .setPosition(point.x, point.y)
+        .setRotation(Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x));
+      const pulse = this.skin.visualConfig.animation === "pulse"
+        ? 1 + Math.sin(this.elapsed * 3 - index * 0.4) * 0.06
+        : 1;
+      const breathe = this.skin.visualConfig.animation === "float"
+        ? 1 + Math.sin(this.elapsed * 2 - index * 0.28) * 0.035
+        : 1;
+      sprite.setScale((index === 0 ? 0.76 : 0.63) * pulse * breathe);
       if (this.skin.visualConfig.glow > 0) sprite.setTint(this.skin.color);
     }
     if (this.mode === "turbo" || this.mode === "victory") {

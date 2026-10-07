@@ -12,7 +12,6 @@ import { creditCoins, finishRun } from "../systems/EconomySystem";
 import { reportRun } from "../systems/MissionSystem";
 import { newRun, type RunState, type Point } from "../types/game";
 import { clamp, distance } from "../utils/math";
-
 import { C, text } from "../ui/Theme";
 import { ScreenUI } from "../ui/ScreenUI";
 import { GameplayHUD } from "../ui/GameplayHUD";
@@ -811,6 +810,8 @@ export class GameScene extends Phaser.Scene {
       {
         label: `Câmera: ${save.profile.settings.cameraMode === "standard" ? "Padrão" : "Panorâmica"}`,
         run: () => {
+          this.overlay?.destroy();
+          this.overlay = undefined;
           save.profile.settings.cameraMode = save.profile.settings.cameraMode === "standard" ? "panoramic" : "standard";
           void save.save();
           this.showPauseModal();
