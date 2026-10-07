@@ -31,6 +31,7 @@ export interface SkinDefinition {
   victoryEffect: SkinEffect;
   previewConfig: { segments: number; speed: number; showTurbo: boolean; showVictory: boolean };
   worldId?: string;
+  bossRewardId?: string;
   requirementValue?: number;
   available: boolean;
 }
@@ -58,9 +59,10 @@ const catalog: SkinDefinition[] = [
   skin("cat", "Cat Snake", "RARE", "COINS", 500, 0xffbc85, 0xcf795d, "cat", { headConfig: { horns: false, ears: true, crown: false, eyes: 0x173a35 }, bodyConfig: { pattern: "spots", accent: 0xffefd2 } }),
   skin("robot", "Robot Snake", "RARE", "COINS", 1000, 0x8ed8ea, 0x44899f, "robot", { bodyConfig: { pattern: "plates", accent: 0xe5fbff } }),
   skin("dino", "Dino Snake", "RARE", "COINS", 2000, 0x92cf64, 0x568340, "dino", { headConfig: { horns: true, ears: false, crown: false, eyes: 0x173a35 }, bodyConfig: { pattern: "plates", accent: 0xcaf28a } }),
-  skin("ghost", "Ghost Snake", "EPIC", "ACHIEVEMENT", null, 0xc4f4f1, 0x629baf, "ghost", { description: "Uma aparição luminosa. Desbloqueie ao derrotar qualquer chefe.", bodyConfig: { pattern: "waves", accent: 0xffffff }, trailConfig: { enabled: true, color: 0xa8fff4, width: 3 }, particleConfig: { enabled: true, color: 0xc5fff6, rate: 18, max: 24 }, visualConfig: { effect: "sparkle", glow: 0.35, animation: "float" } }),
+  skin("king-snake", "King Snake Skin", "EPIC", "BOSS_REWARD", null, 0xe5bd43, 0x815c22, "king-snake", { description: "Recompensa por derrotar King Snake.", bossRewardId: "king-snake", headConfig: { horns: true, ears: false, crown: true, eyes: 0xffef9c }, bodyConfig: { pattern: "scales", accent: 0xffe58a }, visualConfig: { effect: "sparkle", glow: 0.35, animation: "pulse" } }),
+  skin("ghost", "Ghost Snake", "EPIC", "BOSS_REWARD", null, 0xc4f4f1, 0x629baf, "ghost", { description: "Recompensa por derrotar Kraken.", bossRewardId: "kraken", bodyConfig: { pattern: "waves", accent: 0xffffff }, trailConfig: { enabled: true, color: 0xa8fff4, width: 3 }, particleConfig: { enabled: true, color: 0xc5fff6, rate: 18, max: 24 }, visualConfig: { effect: "sparkle", glow: 0.35, animation: "float" } }),
   skin("dragon", "Dragon Snake", "EPIC", "COINS", 5000, 0xc49bff, 0x835db6, "dragon", { family: "dragon", headConfig: { horns: true, ears: false, crown: false, eyes: 0xffdf74 }, bodyConfig: { pattern: "scales", accent: 0xffe3a5 }, trailConfig: { enabled: true, color: 0xc99cff, width: 3 }, particleConfig: { enabled: true, color: 0xe6c9ff, rate: 14, max: 20 }, visualConfig: { effect: "sparkle", glow: 0.25, animation: "pulse" } }),
-  skin("candy-dragon", "Candy Dragon", "EPIC", "BOSS_REWARD", null, 0xff83c8, 0xb43d88, "candy-dragon", { family: "dragon", description: "Um dragão doce, recompensa de gameplay ao derrotar Candy Monster.", worldId: "candy-world", bodyConfig: { pattern: "stripes", accent: 0xffe39c }, trailConfig: { enabled: true, color: 0xffa4df, width: 3 }, particleConfig: { enabled: true, color: 0xffc5e8, rate: 16, max: 20 } }),
+  skin("candy-dragon", "Candy Dragon", "EPIC", "BOSS_REWARD", null, 0xff83c8, 0xb43d88, "candy-dragon", { family: "dragon", description: "Recompensa por derrotar Candy Monster.", bossRewardId: "candy-monster", worldId: "candy-world", bodyConfig: { pattern: "stripes", accent: 0xffe39c }, trailConfig: { enabled: true, color: 0xffa4df, width: 3 }, particleConfig: { enabled: true, color: 0xffc5e8, rate: 16, max: 20 } }),
   skin("fire-dragon", "Fire Dragon", "LEGENDARY", "PREMIUM", null, 0xff5738, 0x9f241e, "fire-dragon", { family: "dragon", futureProductId: "coinsnake.skin.fire_dragon", description: "Escamas rubras, olhos de brasa e rastros de fogo. Cosmética premium, sem bônus.", headConfig: { horns: true, ears: false, crown: false, eyes: 0xffe36c }, bodyConfig: { pattern: "scales", accent: 0xffc047 }, trailConfig: { enabled: true, color: 0xff6a28, width: 5 }, particleConfig: { enabled: true, color: 0xff8b32, rate: 24, max: 32 }, visualConfig: { effect: "fire", glow: 0.65, animation: "pulse" }, turboEffect: "fire", entranceEffect: "fire", victoryEffect: "fire", previewConfig: { segments: 12, speed: 0.55, showTurbo: true, showVictory: true } }),
   skin("rainbow", "Rainbow Serpent", "LEGENDARY", "PREMIUM", null, 0xff78b9, 0x8152c7, "rainbow", { futureProductId: "coinsnake.skin.rainbow_serpent", bodyConfig: { pattern: "stripes", accent: 0x72e5dc }, trailConfig: { enabled: true, color: 0xff9ae6, width: 5 }, particleConfig: { enabled: true, color: 0xffd679, rate: 20, max: 26 }, visualConfig: { effect: "rainbow", glow: 0.55, animation: "orbit" }, turboEffect: "rainbow", entranceEffect: "rainbow", victoryEffect: "rainbow", previewConfig: { segments: 12, speed: 0.55, showTurbo: true, showVictory: true } }),
   skin("leviathan", "Leviathan", "LEGENDARY", "PREMIUM", null, 0x319eb3, 0x174c77, "leviathan", { futureProductId: "coinsnake.skin.leviathan", bodyConfig: { pattern: "waves", accent: 0x9df4e8 }, trailConfig: { enabled: true, color: 0x47d8ed, width: 5 }, particleConfig: { enabled: true, color: 0x75e8fa, rate: 20, max: 26 }, visualConfig: { effect: "ocean", glow: 0.55, animation: "float" }, turboEffect: "ocean", entranceEffect: "ocean", victoryEffect: "ocean", previewConfig: { segments: 12, speed: 0.55, showTurbo: true, showVictory: true } }),
@@ -84,6 +86,7 @@ export const skinUnlockTypes: SkinUnlockType[] = ["FREE", "COINS", "PLAYER_LEVEL
 export const isSkinRarity = (value: unknown): value is SkinRarity => typeof value === "string" && skinRarities.includes(value as SkinRarity);
 export const isSkinUnlockType = (value: unknown): value is SkinUnlockType => typeof value === "string" && skinUnlockTypes.includes(value as SkinUnlockType);
 export const getSkin = (id: string) => skins.find((entry) => entry.id === id);
+export const getBossSkinRewards = (bossId: string) => skins.filter((entry) => entry.bossRewardId === bossId);
 export const skinsByFamily = (family: string) => skins.filter((entry) => entry.family === family);
 export const getSkinPreviewConfig = (id: string) => getSkin(id)?.previewConfig;
 export function skinUnlockStatus(skin: SkinDefinition, profile: { unlockedSkins: string[]; playerLevel: number; bossesDefeated: string[]; mastery: Record<string, number>; achievements: string[] }) {
@@ -92,7 +95,7 @@ export function skinUnlockStatus(skin: SkinDefinition, profile: { unlockedSkins:
     case "FREE": return { unlocked: true, label: "Grátis" };
     case "PREMIUM": return { unlocked: false, label: "Premium — em breve" };
     case "PLAYER_LEVEL": return { unlocked: profile.playerLevel >= (skin.requirementValue ?? 1), label: `Nível ${skin.requirementValue ?? 1}` };
-    case "BOSS_REWARD": return { unlocked: profile.bossesDefeated.length > 0, label: "Derrote qualquer chefe" };
+    case "BOSS_REWARD": return { unlocked: !!skin.bossRewardId && profile.bossesDefeated.includes(skin.bossRewardId), label: `Derrote ${skin.bossRewardId ?? "o chefe indicado"}` };
     case "MASTERY": return { unlocked: (profile.mastery[skin.id] ?? 0) >= 10, label: "Domínio nível 10" };
     case "ACHIEVEMENT": return { unlocked: profile.achievements.includes("boss-hunter"), label: "Derrote qualquer chefe" };
     case "EVENT": return { unlocked: false, label: "Evento futuro" };

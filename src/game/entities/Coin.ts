@@ -29,6 +29,26 @@ export class Coin {
     this.label.setText(this.kind.label).setVisible(true);
     this.render();
   }
+  spawnCandy(x: number, y: number) {
+    this.x = x;
+    this.kind = B.coins.find((coin) => coin.id === "candy_coin")!;
+    this.y = y;
+    this.active = true;
+    this.image.setTexture("coin-candy_coin").setVisible(true);
+    this.label.setText(this.kind.label).setVisible(true);
+    this.render();
+  }
+  spawnPearl(x: number, y: number) {
+    const pearl = B.coins.find((coin) => coin.id === "pearl_coin");
+    if (!pearl) return;
+    this.x = x;
+    this.y = y;
+    this.kind = pearl as CoinKind;
+    this.active = true;
+    this.image.setTexture("coin-pearl_coin").setVisible(true);
+    this.label.setText(this.kind.label).setVisible(true);
+    this.render();
+  }
   render() {
     this.image.setPosition(this.x, this.y);
     this.label.setPosition(this.x, this.y);

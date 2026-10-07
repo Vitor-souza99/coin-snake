@@ -16,8 +16,8 @@ export const turboConfig = {
   regeneration: 11,
   regenerationDelay: 0.6,
   restartEnergy: 15,
-  multiplier: 1.4,
-  coinCharge: { normal: 1, blue: 3, diamond: 8, golden: 15, mythic: 30 },
+  multiplier: 1.4, // Must match B.power.turboSpeed: manual and pickup Turbo share speed.
+  coinCharge: { normal: 1, blue: 3, diamond: 8, golden: 15, mythic: 30, candy_coin: 15, pearl_coin: 15 },
 } as const;
 export const shrinkConfig = {
   fraction: 0.25,

@@ -42,7 +42,7 @@ export interface PlayerProfile {
   settings: Settings;
   firstLaunch: boolean;
   tutorialCompleted: boolean;
-  hints: { joystick: boolean; turbo: boolean; shrink: boolean };
+  hints: { joystick: boolean; turbo: boolean; shrink: boolean; ocean: boolean; oceanCurrent: boolean; pearl: boolean; deepTrench: boolean };
   statistics: GameStatistics;
   missionDate: string;
   missions: Record<string, MissionProgress>;

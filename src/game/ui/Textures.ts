@@ -103,7 +103,17 @@ export function generateTextures(s: Phaser.Scene) {
     g.fillStyle(coin.color).fillCircle(25, 24, 21);
     g.lineStyle(3, 0xffffff, 0.65).strokeCircle(25, 24, 16);
     g.fillStyle(0xffffff, 0.6).fillEllipse(18, 15, 10, 5);
+    if (coin.id === "pearl_coin") {
+      g.fillStyle(0xffffff, 0.8).fillCircle(25, 24, 9);
+      g.fillStyle(0xb5e8f1, 0.65).fillCircle(22, 21, 4);
+      g.lineStyle(2, 0x7bc9da, 0.9).strokeCircle(25, 24, 15);
+    }
     g.generateTexture(`coin-${coin.id}`, 50, 52);
+    if (coin.id === "candy_coin") {
+      g.fillStyle(0xffffff, 0.65).fillTriangle(25, 10, 38, 34, 12, 34).fillTriangle(25, 38, 38, 14, 12, 14);
+      g.lineStyle(3, 0xa52d78).strokeCircle(25, 24, 21);
+      g.generateTexture("coin-candy_coin", 50, 52);
+    }
   }
   g.clear();
   g.fillStyle(0x45d66b).fillCircle(28, 28, 24);

@@ -1,6 +1,6 @@
 import { Preferences } from "@capacitor/preferences";
 import { B } from "../data/balance";
-import { skins } from "../data/skins";
+import { getBossSkinRewards, skins } from "../data/skins";
 import { missions } from "../data/missions";
 import { bosses } from "../data/bosses";
 import { earnablePetIds } from "../data/pets";
@@ -38,7 +38,7 @@ export function defaults(): PlayerProfile {
     },
     firstLaunch: true,
     tutorialCompleted: false,
-    hints: { joystick: false, turbo: false, shrink: false },
+    hints: { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false },
     statistics: {
       totalGames: 0,
       totalCoinsCollected: 0,
@@ -121,6 +121,10 @@ export function validateSave(input: unknown): PlayerProfile {
     joystick: bool(hints.joystick, false),
     turbo: bool(hints.turbo, false),
     shrink: bool(hints.shrink, false),
+    ocean: bool(hints.ocean, false),
+    oceanCurrent: bool(hints.oceanCurrent, false),
+    pearl: bool(hints.pearl, false),
+    deepTrench: bool(hints.deepTrench, false),
   };
   const stats = record(r.statistics);
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
@@ -132,6 +136,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
   const bossIds = new Set(bosses.map((boss) => boss.id));
   p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => typeof id === "string" && bossIds.has(id)))] : [];
+  p.unlockedSkins = [...new Set([...p.unlockedSkins, ...p.bossesDefeated.flatMap((bossId) => getBossSkinRewards(bossId).map((skin) => skin.id))])];
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
   p.mastery = Object.fromEntries(skins.map((skin) => [skin.id, isV3 ? num(mastery[skin.id]) : 0]));
@@ -203,6 +208,21 @@ export class SaveSystem {
         this.error = null;
       } catch {
         this.error = "Progresso não salvo. Confira o armazenamento.";
+      }
+    });
+    return this.queue;
+  }
+  reset(): Promise<void> {
+    if (this.incompatibleVersion) return Promise.resolve();
+    this.profile = defaults();
+    this.error = null;
+    const snapshot = JSON.stringify(this.profile);
+    this.queue = this.queue.then(async () => {
+      try {
+        await this.backend.set(snapshot);
+        this.error = null;
+      } catch {
+        this.error = "Progresso reiniciado nesta sessão, mas não foi possível salvar a alteração.";
       }
     });
     return this.queue;

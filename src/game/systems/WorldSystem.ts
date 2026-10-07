@@ -33,6 +33,9 @@ export function reconcileWorldUnlocks(state: WorldPlayerState) {
 export function eligiblePortalWorlds(state: WorldPlayerState, current: string) {
   return worlds.filter((world) => world.id !== "green-valley" && world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && isWorldUnlocked(world, state) && world.portalWeight > 0);
 }
+export function traversableWorlds(state: WorldPlayerState, current: string) {
+  return worlds.filter((world) => world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && isWorldUnlocked(world, state));
+}
 export function weightedWorldChoice(candidates: WorldDefinition[], lastWorld = "", random = Math.random): WorldDefinition | undefined {
   const pool = candidates.filter((world) => world.id !== canonicalWorldId(lastWorld));
   const choices = pool.length ? pool : candidates;

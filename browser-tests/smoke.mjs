@@ -148,6 +148,23 @@ try {
   await page.setViewportSize({ width: 844, height: 390 });
   await page.getByRole("heading", { name: "Pausado" }).waitFor();
   assert.equal((await state()).id, runId, "rotate preserves run");
+  await page.getByRole("button", { name: "Câmera: Padrão", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "Câmera: Panorâmica", exact: true }).count(), 1, "camera mode toggles while paused");
+  const panoramicZoom = await page.evaluate(() => window.coinSnake.scene.getScene("Game").cameras.main.zoom);
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator(".dialog-backdrop").count(), 0, "continue closes pause after rotation");
+  assert.equal((await state()).id, runId, "resume preserves current run");
+  assert.equal(await page.evaluate(() => window.coinSnake.scene.getScene("Game").halted), false, "resume unhalts simulation after rotation");
+  assert.equal(await page.evaluate(() => window.coinSnake.scene.getScene("Game").cameras.main.zoom), panoramicZoom, "camera mode remains applied after resume");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.click("#pause");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.getByRole("heading", { name: "Pausado" }).waitFor();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator(".dialog-backdrop").count(), 0, "continue stays closed after rotating from portrait to landscape");
+  assert.equal(await page.evaluate(() => window.coinSnake.scene.getScene("Game").halted), false, "portrait-to-landscape resume unhalts simulation");
   await bounds(".dialog");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await bounds("#pause");
@@ -203,6 +220,8 @@ try {
     const s = window.coinSnake.scene.getScene("Game");
     s.halted = false;
   });
+  await page.evaluate(() => window.coinSnake.scene.getScene("Game").enterWorld("ocean"));
+  assert.equal(await page.locator("#world-tag").textContent(), "OCEAN WORLD", "HUD displays the active world after switching worlds");
   await page.screenshot({ path: "browser-results/game-landscape.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
@@ -271,6 +290,30 @@ try {
   await page.reload();
   await page.waitForSelector("#play");
   await page.click("#shop");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('[data-skin="cat"] [data-view]').click();
+  await page.waitForSelector('[data-scene="SkinPreview"]');
+  for (const [width, height] of [[360, 640], [390, 844], [844, 390], [1280, 720]]) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(150);
+    const preview = await page.evaluate(() => {
+      const stage = document.querySelector(".skin-preview-stage").getBoundingClientRect();
+      const canvas = document.querySelector("#skin-preview-canvas").getBoundingClientRect();
+      const info = document.querySelector(".skin-preview-info").getBoundingClientRect();
+      const controls = document.querySelector("#skin-preview-controls").getBoundingClientRect();
+      return { stage: { left: stage.left, right: stage.right, bottom: stage.bottom }, canvas: { left: canvas.left, right: canvas.right, top: canvas.top, bottom: canvas.bottom }, info: { left: info.left, right: info.right, top: info.top }, controls: { top: controls.top, bottom: controls.bottom }, viewport: { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight } };
+    });
+    assert(preview.canvas.left >= preview.stage.left - 1 && preview.canvas.right <= preview.stage.right + 1, "preview stays inside its stage");
+    assert(preview.canvas.right <= preview.viewport.width + 1 && preview.controls.bottom <= preview.viewport.height + 1, "preview controls stay in viewport");
+    if (width > 700) assert(preview.canvas.right <= preview.info.left + 1, "desktop preview does not overlap skin details");
+    else assert(preview.canvas.bottom <= preview.info.top + 1, "mobile preview does not overlap skin details");
+  }
+  await page.locator("#back").click();
+  await page.locator('[data-filter="OWNED"]').click();
+  assert.equal(await page.locator("[data-skin]").count(), 1, "owned filter includes progress-unlocked skins");
+  await page.locator('[data-filter="LOCKED"]').click();
+  assert.equal(await page.locator("[data-skin]").count(), 0, "locked filter excludes progress-unlocked skins");
+  await page.locator('[data-filter="ALL"]').click();
   await page.click("#skin-cat");
   await page.waitForSelector("#skin-cat:disabled");
   await page.setViewportSize({ width: 844, height: 390 });

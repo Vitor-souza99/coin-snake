@@ -262,6 +262,7 @@ canvas {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
 }
 .skin-card img {
   width: 68px;
@@ -274,6 +275,7 @@ canvas {
   flex: 1;
   min-width: 0;
 }
+.skin-card .details > * { min-width: 0; }
 .skin-card h2 {
   font-size: 17px;
   margin: 0 0 7px;
@@ -282,6 +284,7 @@ canvas {
   font-size: 13px;
   color: #526e5e;
   margin: 0 0 12px;
+  overflow-wrap: anywhere;
 }
 .skin-filters {
   max-width: 1050px;
@@ -314,7 +317,7 @@ canvas {
 }
 .skin-card { cursor: pointer; }
 .skin-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.skin-card-actions .action { flex: 1 1 auto; }
+.skin-card-actions .action { flex: 1 1 96px; min-width: 0; }
 .rarity-card { border-top: 4px solid #a9b59c; }
 .rarity-rare { border-color: #4a9ad0; }
 .rarity-epic { border-color: #9c65d6; }
@@ -333,32 +336,35 @@ canvas {
 }
 .skin-preview-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.8fr);
-  align-items: center;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(min(100%, 280px), 0.8fr);
+  align-items: start;
+  gap: clamp(16px, 3vw, 32px);
   max-width: 1050px;
   margin: auto;
 }
 .skin-preview-stage {
   display: grid;
-  justify-items: center;
-  gap: 12px;
+  align-content: start;
+  gap: 16px;
   min-width: 0;
+  width: 100%;
 }
 .skin-preview-canvas {
   display: block;
-  width: min(100%, 680px);
-  height: min(44vh, 420px);
-  max-height: min(44vh, 420px);
+  width: 100%;
+  height: clamp(220px, 40vh, 420px);
+  min-width: 0;
   border: 1px solid #d5dec4;
   border-radius: 22px;
   background: transparent;
   pointer-events: none;
 }
-.skin-preview-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.skin-preview-info h2 { margin: 10px 0; font-size: 26px; }
-.skin-preview-info p { line-height: 1.45; }
-.skin-preview-actions { margin-top: 16px; }
+.skin-preview-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
+.skin-preview-controls .action { flex: 1 1 100px; }
+.skin-preview-info { min-width: 0; overflow-wrap: anywhere; }
+.skin-preview-info h2 { margin: 10px 0; font-size: clamp(21px, 2.4vw, 28px); line-height: 1.15; }
+.skin-preview-info p { line-height: 1.55; }
+.skin-preview-actions { margin-top: 20px; }
 .skin-preview-actions .action { width: 100%; }
 .skin-preview-screen {
   background: transparent;
@@ -368,10 +374,22 @@ canvas {
   z-index: 1;
 }
 @media (max-width: 700px) {
-  .skin-preview-layout { grid-template-columns: 1fr; gap: 10px; }
-  .skin-preview-canvas { max-height: 36vh; }
-  .skin-preview-info { padding: 16px; }
-  .skin-preview-info h2 { font-size: 21px; }
+  .skin-preview-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .skin-preview-canvas { height: clamp(210px, 30vh, 300px); }
+  .skin-preview-info { padding: 18px; }
+}
+@media (max-width: 380px) {
+  .skin-card { align-items: flex-start; gap: 10px; }
+  .skin-card img { width: 52px; height: 52px; flex-basis: 52px; }
+  .skin-card-actions .action { flex-basis: 84px; padding-inline: 8px; }
+  .skin-preview-controls .action { flex-basis: 88px; padding-inline: 8px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .skin-preview-screen { padding-block: 12px; }
+  .skin-preview-screen .screen-header { margin-bottom: 12px; }
+  .skin-preview-layout { grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr); }
+  .skin-preview-canvas { height: 46vh; min-height: 170px; }
+  .skin-preview-info { padding: 14px; }
 }
 .mission h2 {
   font-size: 20px;
@@ -487,7 +505,7 @@ canvas {
   position: absolute;
   top: 126px;
   left: 18px;
-  color: #446540;
+  color: #fff;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 1px;

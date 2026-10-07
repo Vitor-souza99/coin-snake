@@ -18,10 +18,12 @@ import {
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
 import { difficulty } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
+import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
+import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, oceanWorldConfig } from "../src/game/data/oceanWorld";
 import { B } from "../src/game/data/balance";
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
-import { eligiblePortalWorlds, reconcileWorldUnlocks, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
+import { eligiblePortalWorlds, reconcileWorldUnlocks, traversableWorlds, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
 import { worldById, worlds } from "../src/game/data/worlds";
 import { bosses } from "../src/game/data/bosses";
 import { earnablePetIds, pets } from "../src/game/data/pets";
@@ -98,8 +100,19 @@ describe("combo and balance", () => {
     expect(start).toBe(B.snake.speed);
     expect(start).toBeLessThan(200);
     expect(grown).toBeGreaterThan(start);
-    expect(grown - start).toBeLessThan(40);
+    expect(grown - start).toBeLessThan(50);
     expect(capped).toBe(B.snake.maxSpeed);
+  });
+  it("uses the increased base speed and raises the cap through growth and levels", () => {
+    const start = difficulty(0, 0, B.snake.initial);
+    const levelUp = difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial);
+    const grown = difficulty(0, 0, B.snake.initial + 10);
+
+    expect(start.speed).toBe(180);
+    expect(levelUp.speed).toBeGreaterThan(start.speed);
+    expect(grown.speed).toBeGreaterThan(start.speed);
+    expect(B.snake.maxSpeed).toBe(300);
+    expect(difficulty(100_000, 1_000_000, B.snake.max).speed).toBe(300);
   });
   it("caps and expires at 2.5 seconds", () => {
     const c = new ComboSystem();
@@ -155,6 +168,16 @@ describe("roadmap progression systems", () => {
     expect(eligiblePortalWorlds(profile, "candy-world").map((world) => world.id)).toEqual(["ocean"]);
     expect(weightedWorldChoice([worldById("candy-world"), worldById("ocean")], "", () => 0.99)?.id).toBe("ocean");
     expect(weightedWorldChoice([worldById("dragon_kingdom")], "", () => 0)).toBeUndefined();
+  });
+  it("offers permanent passages only to unlocked implemented worlds and updates after unlock", () => {
+    const profile = defaults();
+    expect(traversableWorlds(profile, "green-valley")).toEqual([]);
+    profile.playerLevel = 10;
+    profile.bossesDefeated.push("king-snake", "candy-monster");
+    reconcileWorldUnlocks(profile);
+    expect(traversableWorlds(profile, "green-valley").map((world) => world.id)).toEqual(["candy-world", "ocean"]);
+    expect(traversableWorlds(profile, "ocean").map((world) => world.id)).toEqual(["green-valley", "candy-world"]);
+    expect(traversableWorlds(profile, "green-valley").some((world) => ["desert", "dragon_kingdom"].includes(world.id))).toBe(false);
   });
   it("classifies locked, premium, future and selected world cards", () => {
     const profile = defaults();
@@ -216,6 +239,27 @@ describe("skin collection catalog", () => {
     expect(skinsByFamily("dragon").map((entry) => entry.id)).toEqual(expect.arrayContaining(["dragon", "fire-dragon", "ancient-dragon", "celestial-dragon", "candy-dragon"]));
     const profile = defaults();
     expect(skinUnlockStatus(getSkin("ancient-dragon")!, profile)).toEqual({ unlocked: false, label: "Premium — em breve" });
+  });
+  it("assigns boss skins to King Snake, Candy Monster, and Kraken", () => {
+    const profile = defaults();
+    const kingSkin = getSkin("king-snake")!, candySkin = getSkin("candy-dragon")!, ghostSkin = getSkin("ghost")!;
+    expect(kingSkin.bossRewardId).toBe("king-snake");
+    expect(candySkin.bossRewardId).toBe("candy-monster");
+    expect(ghostSkin.bossRewardId).toBe("kraken");
+    expect(skinUnlockStatus(kingSkin, profile).unlocked).toBe(false);
+    profile.bossesDefeated.push("king-snake");
+    expect(skinUnlockStatus(kingSkin, profile).unlocked).toBe(true);
+    expect(skinUnlockStatus(candySkin, profile).unlocked).toBe(false);
+    profile.bossesDefeated.push("candy-monster");
+    expect(skinUnlockStatus(candySkin, profile).unlocked).toBe(true);
+    expect(skinUnlockStatus(ghostSkin, profile).unlocked).toBe(false);
+    profile.bossesDefeated.push("kraken");
+    expect(skinUnlockStatus(ghostSkin, profile).unlocked).toBe(true);
+  });
+  it("migrates previously defeated bosses into their skin rewards", () => {
+    const profile = validateSave({ saveVersion: 5, bossesDefeated: ["king-snake", "kraken"] });
+    expect(profile.unlockedSkins).toEqual(expect.arrayContaining(["king-snake", "ghost"]));
+    expect(profile.unlockedSkins).not.toContain("candy-dragon");
   });
   it("preserves existing skin coin prices and equips already-owned skins", () => {
     const profile = defaults();
@@ -351,6 +395,58 @@ describe("missions", () => {
   });
 });
 describe("snake and powers", () => {
+  it("applies regional Ocean currents additively while preserving player input and clamping Turbo speed", () => {
+    const spawn = { x: 700, y: 750 };
+    const zones = oceanCurrentZones(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom, spawn);
+    const strong = zones.find((zone) => zone.type === "STRONG")!;
+    const force = currentForceAt({ x: strong.x, y: strong.y }, [strong]);
+    expect(force.x).toBeGreaterThan(0);
+    const input = { x: -250, y: 0 };
+    const against = oceanMovement(input, force, oceanWorldConfig.maxEffectiveSpeed);
+    expect(against.x).toBeGreaterThan(input.x);
+    const withCurrent = oceanMovement({ x: 300, y: 0 }, force, oceanWorldConfig.maxEffectiveSpeed);
+    expect(Math.hypot(withCurrent.x, withCurrent.y)).toBeLessThanOrEqual(oceanWorldConfig.maxEffectiveSpeed);
+    const snake = new Snake();
+    const before = { x: snake.x, y: snake.y };
+    snake.moveVector(1 / 120, 0, 340, { x: 36, y: 0 }, B.snake.rotation, oceanWorldConfig.maxEffectiveSpeed);
+    expect(Math.hypot(snake.x - before.x, snake.y - before.y) * 120).toBeLessThanOrEqual(oceanWorldConfig.maxEffectiveSpeed);
+    expect(["SOFT", "STRONG", "RAPID"]).toEqual(expect.arrayContaining(zones.map((zone) => zone.type)));
+  });
+  it("keeps Pearl Coin Ocean-only and uses MatchCoins value without a separate wallet", () => {
+    const pearl = B.coins.find((coin) => coin.id === "pearl_coin");
+    expect(pearl).toMatchObject({ value: 30, score: 1500, weight: 0 });
+    expect(pearlCoinSpawnAllowed("green-valley", 0, 1)).toBe(false);
+    expect(pearlCoinSpawnAllowed("ocean", 0.07, oceanWorldConfig.pearlCoinChance)).toBe(true);
+    expect(pearlCoinSpawnAllowed("ocean", 0.09, oceanWorldConfig.pearlCoinChance)).toBe(false);
+    expect(pearlCoinSpawnAllowed("ocean", 0.1, oceanWorldConfig.pearlCoinChance, true)).toBe(true);
+  });
+  it("rejects coral collision spawns and does not place strong current on snake spawn", () => {
+    const spawn = { x: 700, y: 750 };
+    const zones = oceanCurrentZones(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom, spawn);
+    expect(zones.some((zone) => zone.type !== "SOFT" && spawn.x >= zone.x - zone.width / 2 && spawn.x <= zone.x + zone.width / 2 && spawn.y >= zone.y - zone.height / 2 && spawn.y <= zone.y + zone.height / 2)).toBe(false);
+    expect(isSafeOceanSpawn({ x: 500, y: 500 }, spawn, [{ x: 500, y: 500, radius: 30, kind: "coralRock" }], zones)).toBe(false);
+    expect(deepTrenchCoinChance(0, true)).toBe(oceanWorldConfig.deepTrenchRareCoinBonus);
+    expect(deepTrenchCoinChance(0, false)).toBe(0);
+  });
+  it("applies Candy sticky slow and smoothly recovers after leaving", () => {
+    const slowed = stickySpeedMultiplier(1, true, 0.1);
+    expect(slowed).toBeLessThan(1);
+    expect(stickySpeedMultiplier(slowed, false, 0.1)).toBeGreaterThan(slowed);
+    expect(candyWorldConfig.sticky.slowMultiplier).toBe(0.75);
+    expect(candyFinalSpeed(230, 1.4, 0.75)).toBe(241.5);
+  });
+  it("keeps Candy Coin exclusive to Candy World with the configured value", () => {
+    expect(B.coins.find((coin) => coin.id === "candy_coin")?.value).toBe(25);
+    expect(B.coins.find((coin) => coin.id === "candy_coin")?.score).toBe(1000);
+    expect(candyCoinSpawnAllowed("green-valley", 0, 1)).toBe(false);
+    expect(candyCoinSpawnAllowed("candy-world", 0.2, 0.35)).toBe(true);
+  });
+  it("models wafer crossings and rejects unsafe obstacle positions", () => {
+    expect(inCandyRiver({ x: 720, y: 1150 }, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)).toBe(true);
+    expect(inCandyRiver({ x: 400, y: 1150 }, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)).toBe(false);
+    expect(candyObstacleSafe({ x: 100, y: 100 }, { x: 110, y: 110 }, undefined, [], 100)).toBe(false);
+    expect(candyObstacleSafe({ x: 500, y: 500 }, { x: 100, y: 100 }, undefined, [{ x: 500, y: 500, radius: 60 }], 100)).toBe(false);
+  });
   it("keeps body spaced at different frame rates", () => {
     for (const hz of [30, 60, 120]) {
       const s = new Snake();

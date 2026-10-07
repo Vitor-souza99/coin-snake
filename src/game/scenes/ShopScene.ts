@@ -29,7 +29,9 @@ export class ShopScene extends Phaser.Scene {
 
     const renderSkins = () => {
       const list = skins.filter((skin) =>
-        (filter === "ALL" || (filter === "OWNED" ? profile.unlockedSkins.includes(skin.id) : !profile.unlockedSkins.includes(skin.id))) &&
+        (filter === "ALL" || (filter === "OWNED"
+          ? profile.unlockedSkins.includes(skin.id) || skinUnlockStatus(skin, profile).unlocked
+          : !profile.unlockedSkins.includes(skin.id) && !skinUnlockStatus(skin, profile).unlocked)) &&
         (rarity === "ALL" || skin.rarity === rarity));
       return `<div class="skin-filters" role="group" aria-label="Filtrar skins">
         <button class="action small ${filter === "ALL" ? "" : "secondary"}" data-filter="ALL">TODAS</button>

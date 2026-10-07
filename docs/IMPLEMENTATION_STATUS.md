@@ -47,6 +47,9 @@
 Detalhes da coleção: [`SKINS.md`](SKINS.md).
 
 ## Roadmap — parcial, necessita playtest e fechamento
+- [x] Redesign regional procedural do Candy World, Sticky Zones localizadas, Gummies lentos, rio atravessável com pontes largas e Candy Coin sem nova carteira.
+- [x] Layout Ocean regional, correntes vetoriais SOFT/STRONG/RAPID, corais, Bubble Garden, Deep Trench, Pearl Coin e Kraken Arena visual.
+- [ ] Playtest real de leitura/navegação em cobra grande, bosses, portrait/landscape e Android; arena do boss é visual e não altera fases do encontro.
 - [x] Save v5 migra v1–v4, preserva IDs legados de mundo, salva seleção e não concede Premium por save.
 - [x] Seleção de mundo no menu com cards, preview procedural, requisitos e estados bloqueado/futuro/Premium.
 - [x] Requisitos Candy (nível 5 + King Snake) e Ocean (nível 10 + Candy Monster), reconciliação após level/boss.
@@ -54,7 +57,7 @@ Detalhes da coleção: [`SKINS.md`](SKINS.md).
 - [x] Catálogo de bosses, encontro King Snake/Candy Monster, fases, energia, Boss Coins e recompensas locais.
 - [x] Bee/Candy Blob, seleção de pet, bônus de spawn e XP, tela de coleção.
 - [x] Coin Rush de 60 segundos, conquistas iniciais, mastery simples e serviço de analytics local/no-op.
-- [ ] Candy aplica redução global de velocidade e Ocean aplica leve deriva; sticky zones espaciais localizadas ainda não existem.
+- [ ] Playtest manual do redesign Ocean (Snake pequena/grande, Turbo, Magnet, Shield, orientação e câmera panorâmica); Kraken não recebeu novas fases/tentáculos neste escopo.
 - [ ] Bosses/portais precisam balanceamento e teste manual; ataques e controles atuais são protótipos.
 - [ ] Mastery não concede cosméticos e a UI só mostra contador básico.
 - [ ] Música final, temas por mundo e fanfarras.

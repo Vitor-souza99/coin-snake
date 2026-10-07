@@ -63,6 +63,28 @@ export class Snake {
     this.residual = (this.residual + travel) % B.snake.trailStep;
     this.placeBody();
   }
+  moveVector(dt: number, target: number, speed: number, force: Point, turnSpeed: number = B.snake.rotation, maxSpeed = Number.POSITIVE_INFINITY) {
+    this.angle = turnToward(this.angle, target, turnSpeed * dt);
+    const oldX = this.x, oldY = this.y;
+    let velocity = { x: Math.cos(this.angle) * speed + force.x, y: Math.sin(this.angle) * speed + force.y };
+    const velocityMagnitude = Math.hypot(velocity.x, velocity.y);
+    if (velocityMagnitude > maxSpeed) velocity = { x: velocity.x / velocityMagnitude * maxSpeed, y: velocity.y / velocityMagnitude * maxSpeed };
+    const travel = Math.hypot(velocity.x, velocity.y) * dt;
+    if (travel <= 0) return;
+    const dx = velocity.x / Math.hypot(velocity.x, velocity.y), dy = velocity.y / Math.hypot(velocity.x, velocity.y);
+    this.x += velocity.x * dt;
+    this.y += velocity.y * dt;
+    let next = B.snake.trailStep - this.residual;
+    while (next <= travel) {
+      this.cursor = (this.cursor + 1) % this.capacity;
+      const p = this.trail[this.cursor];
+      p.x = oldX + dx * next;
+      p.y = oldY + dy * next;
+      next += B.snake.trailStep;
+    }
+    this.residual = (this.residual + travel) % B.snake.trailStep;
+    this.placeBody();
+  }
   private placeBody() {
     this.body[0].x = this.x;
     this.body[0].y = this.y;

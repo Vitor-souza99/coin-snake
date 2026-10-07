@@ -50,32 +50,30 @@ export class SkinPreviewScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("rgba(0,0,0,0)");
     const canvas = this.ui.get<HTMLElement>("#skin-preview-canvas");
-    const portrait = this.scale.height >= this.scale.width;
-    const width = Math.min(this.scale.width - 32, 680);
-    const height = Math.min(portrait ? Math.min(390, Math.max(220, this.scale.height * 0.3)) : Math.min(360, Math.max(220, this.scale.height * 0.5)), Math.max(120, this.scale.height * 0.44));
-    const centerX = this.scale.width / 2;
-    const centerY = this.scale.height * (portrait ? 0.38 : 0.42);
+    const getPreviewBounds = () => {
+      const bounds = canvas.getBoundingClientRect();
+      const width = Math.max(120, bounds.width);
+      const height = Math.max(120, bounds.height);
+      return {
+        width,
+        height,
+        centerX: bounds.left + width / 2,
+        centerY: bounds.top + height / 2,
+      };
+    };
+    const { width, height, centerX, centerY } = getPreviewBounds();
     this.previewPanel = this.add.rectangle(centerX, centerY, width, height, 0xf1f3e1).setStrokeStyle(2, 0xd5dec4).setDepth(-1);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
     this.createPreview(width, height, centerX, centerY);
     const resize = () => {
-      const w = Math.min(this.scale.width - 32, 680);
-      const h = Math.min(
-        this.scale.height >= this.scale.width
-          ? Math.min(390, Math.max(220, this.scale.height * 0.3))
-          : Math.min(360, Math.max(220, this.scale.height * 0.5)),
-        Math.max(120, this.scale.height * 0.44),
-      );
-      const x = this.scale.width / 2;
-      const y = this.scale.height * (this.scale.height >= this.scale.width ? 0.38 : 0.42);
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
-      this.previewPanel.setPosition(x, y).setSize(w, h);
-      this.createPreview(w, h, x, y);
+      const bounds = getPreviewBounds();
+      this.previewPanel.setPosition(bounds.centerX, bounds.centerY).setSize(bounds.width, bounds.height);
+      this.createPreview(bounds.width, bounds.height, bounds.centerX, bounds.centerY);
     };
     this.scale.on(Phaser.Scale.Events.RESIZE, resize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, resize));
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(canvas);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => resizeObserver.disconnect());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.sprites.forEach((sprite) => sprite.destroy());
       this.effects?.destroy();

@@ -8,7 +8,11 @@ import {
 import { defaults, validateSave, SaveSystem } from "../src/game/systems/SaveSystem";
 import { finishRun } from "../src/game/systems/EconomySystem";
 import { newRun } from "../src/game/types/game";
+import { B } from "../src/game/data/balance";
 describe("manual turbo", () => {
+  it("uses the Turbo power-up speed multiplier", () => {
+    expect(B.power.turboSpeed).toBe(1.4);
+  });
   it("drains only when held and recovers after release", () => {
     const t = new TurboSystem();
     t.update(1, true);

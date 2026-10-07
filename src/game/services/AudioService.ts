@@ -8,6 +8,11 @@ type Sound =
   | "coin_blue"
   | "coin_diamond"
   | "coin_golden"
+  | "candy_coin"
+  | "pearl_coin"
+  | "bubble_pop"
+  | "clam_open"
+  | "current_flow"
   | "coin_mythic"
   | "combo"
   | "turbo_start"
@@ -41,6 +46,11 @@ class AudioService {
       coin_blue: 1046,
       coin_diamond: 1318,
       coin_golden: 1568,
+      candy_coin: 1760,
+      pearl_coin: 2100,
+      bubble_pop: 1200,
+      clam_open: 720,
+      current_flow: 390,
       coin_mythic: 1976,
       combo: 1174,
       turbo_start: 180,
