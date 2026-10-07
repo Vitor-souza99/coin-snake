@@ -90,6 +90,17 @@ describe("economy", () => {
   });
 });
 describe("combo and balance", () => {
+  it("starts slow and increases speed gradually with growth, with a firm cap", () => {
+    const start = difficulty(0, 0, B.snake.initial).speed;
+    const grown = difficulty(0, 0, B.snake.initial + 20).speed;
+    const capped = difficulty(10_000, 1_000_000, B.snake.max).speed;
+
+    expect(start).toBe(B.snake.speed);
+    expect(start).toBeLessThan(200);
+    expect(grown).toBeGreaterThan(start);
+    expect(grown - start).toBeLessThan(40);
+    expect(capped).toBe(B.snake.maxSpeed);
+  });
   it("caps and expires at 2.5 seconds", () => {
     const c = new ComboSystem();
     expect(c.collect()).toBe(1);
@@ -111,8 +122,9 @@ describe("combo and balance", () => {
     expect(weighted(B.coins, () => 0.9995).value).toBe(100);
   });
   it("caps difficulty and limits angular velocity", () => {
-    expect(difficulty(0, 0, 5).speed).toBe(230);
+    expect(difficulty(0, 0, B.snake.initial).speed).toBe(B.snake.speed);
     expect(difficulty(99999, 99999, 180).level).toBe(B.difficulty.maxLevel);
+    expect(difficulty(99999, 99999, 180).speed).toBe(B.snake.maxSpeed);
     expect(turnToward(0, Math.PI, 0.1)).toBeCloseTo(0.1);
   });
 });

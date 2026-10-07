@@ -9,9 +9,13 @@ export function difficulty(seconds: number, score: number, length: number) {
         Math.max(0, length - B.snake.initial) / d.segmentsPerLevel,
     ),
   );
+  const growthSpeed =
+    B.snake.speed +
+    Math.max(0, length - B.snake.initial) * B.snake.growthSpeedStep;
+  const levelSpeed = B.snake.speed + level * d.speedStep;
   return {
     level,
-    speed: B.snake.speed + level * d.speedStep,
+    speed: Math.min(B.snake.maxSpeed, Math.max(growthSpeed, levelSpeed)),
     coins: Math.min(d.maxCoins, d.initialCoins + level),
     obstacles: Math.min(d.maxObstacles, d.initialObstacles + level),
   };
