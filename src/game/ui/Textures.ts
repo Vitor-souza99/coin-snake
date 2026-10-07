@@ -5,10 +5,21 @@ import { powerups } from "../data/powerups";
 export function generateTextures(s: Phaser.Scene) {
   const g = s.add.graphics();
   for (const skin of skins) {
+    const pattern = skin.bodyConfig.pattern;
     g.clear();
     g.fillStyle(skin.dark).fillCircle(32, 34, 23);
     g.fillStyle(skin.color).fillCircle(32, 30, 22);
     g.fillStyle(0xffffff, 0.24).fillEllipse(25, 23, 18, 10);
+    if (pattern === "plates") {
+      g.lineStyle(3, skin.bodyConfig.accent, 0.75).strokeRoundedRect(12, 12, 40, 38, 12);
+    } else if (pattern === "spots" || pattern === "stars") {
+      g.fillStyle(skin.bodyConfig.accent, 0.85).fillCircle(20, 22, 5).fillCircle(42, 39, 5);
+      if (pattern === "stars") g.fillStyle(0xffffff).fillCircle(40, 18, 2);
+    } else if (pattern === "stripes" || pattern === "waves" || pattern === "scales") {
+      g.lineStyle(4, skin.bodyConfig.accent, 0.72)
+        .lineBetween(14, 21, 49, 21)
+        .lineBetween(14, 39, 49, 39);
+    }
     if (skin.id === "robot") {
       g.lineStyle(3, skin.dark).strokeRoundedRect(14, 13, 36, 36, 10);
       g.fillStyle(0xffffff).fillRect(27, 16, 5, 5);
@@ -37,10 +48,25 @@ export function generateTextures(s: Phaser.Scene) {
     }
     if (skin.id === "dino")
       g.fillStyle(skin.dark).fillTriangle(9, 13, 0, 30, 9, 48);
+    if (skin.headConfig.horns)
+      g.fillStyle(skin.bodyConfig.accent)
+        .fillTriangle(10, 20, 6, 2, 23, 13)
+        .fillTriangle(37, 13, 57, 2, 52, 22);
+    if (skin.headConfig.ears)
+      g.fillStyle(skin.color)
+        .fillTriangle(8, 20, 11, 0, 29, 12)
+        .fillTriangle(35, 12, 54, 0, 58, 20);
+    if (skin.headConfig.crown) {
+      g.fillStyle(skin.bodyConfig.accent)
+        .fillTriangle(13, 13, 17, 1, 26, 12)
+        .fillTriangle(26, 12, 32, 0, 38, 12)
+        .fillTriangle(38, 12, 48, 1, 51, 13)
+        .fillRect(15, 12, 35, 6);
+    }
     g.fillStyle(0xffffff)
       .fillEllipse(39, 18, 16, 20)
       .fillEllipse(39, 41, 16, 20);
-    g.fillStyle(0x173a35).fillCircle(43, 19, 5).fillCircle(43, 40, 5);
+    g.fillStyle(skin.headConfig.eyes).fillCircle(43, 19, 5).fillCircle(43, 40, 5);
     g.fillStyle(0xffffff).fillCircle(44, 17, 2).fillCircle(44, 38, 2);
     g.lineStyle(2, skin.dark)
       .beginPath()
@@ -52,6 +78,24 @@ export function generateTextures(s: Phaser.Scene) {
         .lineBetween(47, 36, 62, 44);
     }
     g.generateTexture(`${skin.id}-head`, 64, 64);
+    g.clear();
+    g.fillStyle(skin.dark).fillRoundedRect(2, 2, 60, 60, 24);
+    g.fillStyle(skin.color).fillRoundedRect(5, 5, 54, 52, 22);
+    g.fillStyle(skin.bodyConfig.accent, 0.8).fillCircle(18, 20, 5).fillCircle(44, 42, 5);
+    g.generateTexture(`${skin.id}-preview-body`, 64, 64);
+    g.clear();
+    g.fillStyle(skin.dark).fillCircle(32, 34, 28);
+    g.fillStyle(skin.color).fillCircle(32, 30, 27);
+    if (skin.detail === "cat") g.fillStyle(skin.color).fillTriangle(8, 22, 10, 0, 29, 15).fillTriangle(35, 15, 54, 0, 56, 22);
+    if (skin.detail === "robot") g.fillStyle(skin.dark).fillRoundedRect(7, 6, 50, 48, 12);
+    if (skin.detail === "dino") g.fillStyle(skin.dark).fillTriangle(8, 17, 0, 30, 8, 45);
+    if (skin.detail === "dragon" || skin.detail.includes("dragon") || skin.detail === "frost-wyvern" || skin.detail === "inferno-titan") g.fillStyle(skin.bodyConfig.accent).fillTriangle(8, 21, 8, 0, 27, 15).fillTriangle(37, 15, 56, 0, 56, 21);
+    if (skin.headConfig.horns) g.fillStyle(skin.bodyConfig.accent).fillTriangle(8, 21, 8, 0, 27, 15).fillTriangle(37, 15, 56, 0, 56, 21);
+    if (skin.headConfig.ears) g.fillStyle(skin.color).fillTriangle(8, 20, 10, 0, 29, 15).fillTriangle(35, 15, 54, 0, 56, 20);
+    if (skin.headConfig.crown) g.fillStyle(skin.bodyConfig.accent).fillTriangle(12, 15, 17, 0, 27, 14).fillTriangle(27, 14, 32, 0, 39, 14).fillTriangle(39, 14, 49, 0, 53, 15);
+    g.fillStyle(0xffffff).fillCircle(40, 24, 6).fillCircle(40, 39, 6);
+    g.fillStyle(skin.headConfig.eyes).fillCircle(42, 24, 3).fillCircle(42, 39, 3);
+    g.generateTexture(`${skin.id}-preview-head`, 64, 64);
   }
   for (const coin of B.coins) {
     g.clear();
@@ -61,6 +105,11 @@ export function generateTextures(s: Phaser.Scene) {
     g.fillStyle(0xffffff, 0.6).fillEllipse(18, 15, 10, 5);
     g.generateTexture(`coin-${coin.id}`, 50, 52);
   }
+  g.clear();
+  g.fillStyle(0x45d66b).fillCircle(28, 28, 24);
+  g.fillStyle(0x183c22).fillCircle(20, 21, 3).fillCircle(36, 21, 3);
+  g.lineStyle(4, 0x183c22).lineBetween(20, 37, 36, 37);
+  g.generateTexture("hazard-poison", 56, 56);
   for (const power of powerups) {
     g.clear();
     g.fillStyle(power.color).fillRoundedRect(2, 2, 52, 52, 17);
@@ -92,10 +141,10 @@ export function snakePreview(
         .image(
           x - i * 29 * scale,
           y + Math.sin(i * 0.7) * 24 * scale,
-          `${id}-body`,
+          s.textures.exists(`${id}-preview-body`) ? `${id}-preview-body` : `${id}-body`,
         )
         .setScale(scale),
     );
-  items.push(s.add.image(x, y, `${id}-head`).setScale(scale * 1.18));
+  items.push(s.add.image(x, y, s.textures.exists(`${id}-preview-head`) ? `${id}-preview-head` : `${id}-head`).setScale(scale * 1.18));
   return items;
 }

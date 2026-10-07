@@ -46,6 +46,14 @@ export const B = {
       color: 0xff9c36,
       label: "50",
     },
+    {
+      id: "mythic",
+      value: 100,
+      score: 1000,
+      weight: 0.1,
+      color: 0xff4fd8,
+      label: "100",
+    },
   ],
   power: {
     interval: 12,
@@ -63,6 +71,7 @@ export const B = {
     shieldGrace: 1.5,
     reviveGrace: 2,
   },
+  hazard: { poisonDuration: 4, slowMultiplier: 0.7 },
   difficulty: {
     secondsPerLevel: 30,
     scorePerLevel: 4000,
@@ -84,5 +93,6 @@ export const beeCoins = [
   { id: "blue", value: 5, score: 50, weight: 21, color: 0x4cc9f0, label: "5" },
   { id: "diamond", value: 20, score: 200, weight: 6, color: 0xd9a7ff, label: "20" },
   { id: "golden", value: 50, score: 500, weight: 1, color: 0xff9c36, label: "50" },
+  { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
 ] as const;
 export type CoinKind = (typeof B.coins)[number];

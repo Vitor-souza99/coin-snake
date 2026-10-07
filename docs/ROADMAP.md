@@ -5,8 +5,12 @@ A instrução final pede implementar somente a próxima fase necessária, preser
 ## Entregue — versão1.1
 Controles, resize/rotação, look-ahead, turbo e Shrink Fruit, migração e configurações. Sistemas originais preservados.
 
-## Implementação inicial — portais e mundos (protótipo)
-Há catálogo `WorldDefinition`, sorteio de mundos desbloqueados por nível, portal de retorno e variação visual. Candy aplica slowdown global; Ocean aplica leve deriva. Sticky zones localizadas, testes de repetição e playtest ainda faltam.
+## Progressão de mundos — integrada, aguardando playtest
+Save v5 preserva IDs e seleção; Candy requer nível 5 + King Snake; Ocean requer nível 10 + Candy Monster e Candy prévio. Menu oferece seleção e previews temáticos até para conteúdo futuro. Portais ponderados filtram mundos não elegíveis e mantêm retorno a Green Valley. Premium segue indisponível sem entitlement de loja. Testes cobrem requisitos, elegibilidade, pesos, Premium e migração. Sticky zones localizadas e validação visual/dispositivo ainda faltam.
+
+## Próximas entregas na ordem escolhida
+1. Desafios diários: regras rotativas, progresso persistido por dia local, resgate único de moedas/XP virtuais.
+2. Mais padrões para bosses: telegraphs distintos, ataques por fase e balanceamento/playtest.
 
 ## Implementação inicial — bosses e pets (protótipo)
 Há BossEnergy separada do saldo, Boss Portal opcional com expiração de25s, King Snake/Candy Monster com três estados de fase, Boss Coins separadas, recompensas idempotentes, Bee e Candy Blob com um pet equipado. A luta usa coleta de moedas para dano. Telegraph, padrões, balanceamento e validação de jogo ainda são necessários.

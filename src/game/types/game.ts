@@ -28,11 +28,13 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 3;
+  saveVersion: 5;
   totalCoins: number;
   bestScore: number;
   selectedSkin: string;
   unlockedSkins: string[];
+  /** Informational local cache only; not proof of a store purchase. */
+  premiumEntitlements: string[];
   xp: number;
   playerLevel: number;
   completedMissions: string[];
@@ -49,6 +51,7 @@ export interface PlayerProfile {
   achievements: string[];
   mastery: Record<string, number>;
   worldsUnlocked: string[];
+  selectedWorld: string;
 }
 export interface RunState {
   id: string;

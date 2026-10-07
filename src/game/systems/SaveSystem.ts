@@ -15,11 +15,12 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 3,
+    saveVersion: 5,
     totalCoins: 0,
     bestScore: 0,
     selectedSkin: "classic",
     unlockedSkins: ["classic"],
+    premiumEntitlements: [],
     xp: 0,
     playerLevel: 1,
     completedMissions: [],
@@ -55,12 +56,13 @@ export function defaults(): PlayerProfile {
     achievements: [],
     mastery: {},
     worldsUnlocked: ["green-valley"],
+    selectedWorld: "green-valley",
   };
 }
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (r.saveVersion !== 1 && r.saveVersion !== 2 && r.saveVersion !== 3) return p;
+  if (r.saveVersion !== 1 && r.saveVersion !== 2 && r.saveVersion !== 3 && r.saveVersion !== 4 && r.saveVersion !== 5) return p;
   p.totalCoins = num(r.totalCoins);
   p.bestScore = num(r.bestScore);
   p.xp = num(r.xp);
@@ -76,6 +78,9 @@ export function validateSave(input: unknown): PlayerProfile {
         : []),
     ]),
   ];
+  // Previous versions had only earned/coin skins; preserve ownership and never
+  // trust a local save to grant premium entitlements.
+  p.premiumEntitlements = [];
   p.selectedSkin =
     typeof r.selectedSkin === "string" &&
     p.unlockedSkins.includes(r.selectedSkin)
@@ -117,7 +122,7 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = r.saveVersion === 3;
+  const isV3 = r.saveVersion === 3 || r.saveVersion === 4 || r.saveVersion === 5;
   p.unlockedPets = isV3 && Array.isArray(r.unlockedPets) ? [...new Set(r.unlockedPets.filter((id): id is string => id === "bee" || id === "candy-blob"))] : [];
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
   p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => id === "king-snake" || id === "candy-monster"))] : [];
@@ -125,7 +130,23 @@ export function validateSave(input: unknown): PlayerProfile {
   const mastery = record(r.mastery);
   p.mastery = Object.fromEntries(skins.map((skin) => [skin.id, isV3 ? num(mastery[skin.id]) : 0]));
   const worldIds = new Set(["green-valley", "candy-world", "ocean"]);
-  p.worldsUnlocked = [...new Set(["green-valley", ...(isV3 && Array.isArray(r.worldsUnlocked) ? r.worldsUnlocked.filter((id): id is string => typeof id === "string" && worldIds.has(id)) : [])])];
+  const legacyWorldAliases: Record<string, string> = { green_valley: "green-valley", candy_world: "candy-world", ocean_world: "ocean" };
+  const savedWorlds = isV3 && Array.isArray(r.worldsUnlocked)
+    ? r.worldsUnlocked.flatMap((id): string[] => {
+        if (typeof id !== "string") return [];
+        const canonical = legacyWorldAliases[id] ?? id;
+        return worldIds.has(canonical) ? [canonical] : [];
+      })
+    : [];
+  p.worldsUnlocked = [...new Set(["green-valley", ...savedWorlds])];
+  const defeated = new Set(isV3 && Array.isArray(r.bossesDefeated) ? r.bossesDefeated.filter((id): id is string => id === "king-snake" || id === "candy-monster") : []);
+  if (p.playerLevel >= 5 && defeated.has("king-snake")) p.worldsUnlocked.push("candy-world");
+  if (p.playerLevel >= 10 && defeated.has("candy-monster") && p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("ocean");
+  p.worldsUnlocked = [...new Set(p.worldsUnlocked)];
+  p.selectedWorld = typeof r.selectedWorld === "string" && p.worldsUnlocked.includes(legacyWorldAliases[r.selectedWorld] ?? r.selectedWorld)
+    ? legacyWorldAliases[r.selectedWorld] ?? r.selectedWorld
+    : "green-valley";
+  if (p.worldsUnlocked.includes("ocean") && !p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("candy-world");
   p.missionDate =
     typeof r.missionDate === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(r.missionDate)
@@ -160,7 +181,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>3){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>5){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

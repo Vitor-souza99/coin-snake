@@ -5,6 +5,7 @@ export class PowerUpSystem {
   turbo = 0;
   shield = false;
   invincible = 0;
+  slowed = 0;
   lives = B.power.initialLives;
   gainLife(): boolean {
     if (this.lives >= B.power.maxLives) return false;
@@ -25,6 +26,10 @@ export class PowerUpSystem {
     this.magnet = Math.max(0, this.magnet - dt);
     this.turbo = Math.max(0, this.turbo - dt);
     this.invincible = Math.max(0, this.invincible - dt);
+    this.slowed = Math.max(0, this.slowed - dt);
+  }
+  applyPoison(duration = B.hazard.poisonDuration) {
+    this.slowed = Math.max(this.slowed, duration);
   }
   absorb(): boolean {
     if (this.invincible > 0) return true;

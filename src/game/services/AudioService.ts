@@ -8,6 +8,7 @@ type Sound =
   | "coin_blue"
   | "coin_diamond"
   | "coin_golden"
+  | "coin_mythic"
   | "combo"
   | "turbo_start"
   | "turbo_end"
@@ -40,6 +41,7 @@ class AudioService {
       coin_blue: 1046,
       coin_diamond: 1318,
       coin_golden: 1568,
+      coin_mythic: 1976,
       combo: 1174,
       turbo_start: 180,
       turbo_end: 130,

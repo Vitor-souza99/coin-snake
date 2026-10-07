@@ -280,6 +280,71 @@ canvas {
   color: #526e5e;
   margin: 0 0 12px;
 }
+.skin-filters {
+  max-width: 1050px;
+  margin: 0 auto 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.skin-filters select {
+  min-height: 44px;
+  border: 1px solid #cbd8bf;
+  border-radius: 12px;
+  padding: 8px 12px;
+  color: #204b3b;
+  background: #fffef5;
+}
+.skin-card { cursor: pointer; }
+.rarity-card { border-top: 4px solid #a9b59c; }
+.rarity-rare { border-color: #4a9ad0; }
+.rarity-epic { border-color: #9c65d6; }
+.rarity-legendary { border-color: #e59a35; }
+.rarity-mythic { border-color: #cf60ad; }
+.skin-rarity {
+  display: inline-block;
+  margin: 2px 0 8px;
+  padding: 4px 8px;
+  border-radius: 99px;
+  background: #e4eadb;
+  color: #243b31;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+}
+.skin-preview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.8fr);
+  align-items: center;
+  gap: 20px;
+  max-width: 1050px;
+  margin: auto;
+}
+.skin-preview-stage {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.skin-preview-canvas {
+  display: block;
+  width: min(100%, 680px);
+  max-height: min(44vh, 420px);
+  border: 1px solid #d5dec4;
+  border-radius: 22px;
+  background: #f1f3e1;
+}
+.skin-preview-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.skin-preview-info h2 { margin: 10px 0; font-size: 26px; }
+.skin-preview-info p { line-height: 1.45; }
+.skin-preview-actions { margin-top: 16px; }
+.skin-preview-actions .action { width: 100%; }
+@media (max-width: 700px) {
+  .skin-preview-layout { grid-template-columns: 1fr; gap: 10px; }
+  .skin-preview-canvas { max-height: 36vh; }
+  .skin-preview-info { padding: 16px; }
+  .skin-preview-info h2 { font-size: 21px; }
+}
 .mission h2 {
   font-size: 20px;
   margin: 0 0 8px;

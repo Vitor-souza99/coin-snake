@@ -17,7 +17,7 @@ export const turboConfig = {
   regenerationDelay: 0.6,
   restartEnergy: 15,
   multiplier: 1.4,
-  coinCharge: { normal: 1, blue: 3, diamond: 8, golden: 15 },
+  coinCharge: { normal: 1, blue: 3, diamond: 8, golden: 15, mythic: 30 },
 } as const;
 export const shrinkConfig = {
   fraction: 0.25,

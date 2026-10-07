@@ -35,6 +35,7 @@ export class GameplayHUD {
     if (p.shield) powers.push("ESCUDO");
     if (p.turbo > 0) powers.push(`TURBO ×2 ${Math.ceil(p.turbo)}s`);
     if (p.invincible > 0) powers.push("PROTEGIDO");
+    if (p.slowed > 0) powers.push(`VENENO ${Math.ceil(p.slowed)}s`);
     set(
       this.effects,
       powers.length

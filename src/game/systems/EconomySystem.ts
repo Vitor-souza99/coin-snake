@@ -1,16 +1,28 @@
 import { B } from "../data/balance";
-import { skins } from "../data/skins";
+import { skins, skinUnlockStatus } from "../data/skins";
 import type { PlayerProfile, RunState } from "../types/game";
+import { reconcileWorldUnlocks } from "./WorldSystem";
 export function addXP(p: PlayerProfile, amount: number) {
   p.xp += Math.max(0, Math.floor(amount));
   p.playerLevel = 1 + Math.floor(p.xp / B.xp.perLevel);
+  reconcileWorldUnlocks(p);
 }
 export function buySkin(p: PlayerProfile, id: string): boolean {
   const skin = skins.find((s) => s.id === id);
-  if (!skin) return false;
+  if (!skin || skin.unlockType === "PREMIUM") return false;
+  if (skin.unlockType !== "COINS" && skin.unlockType !== "FREE") {
+    if (!skinUnlockStatus(skin, p).unlocked) return false;
+    p.unlockedSkins.push(id);
+    p.selectedSkin = id;
+    return true;
+  }
   if (!p.unlockedSkins.includes(id)) {
-    if (p.totalCoins < skin.price) return false;
-    p.totalCoins -= skin.price;
+    if (skin.unlockType === "COINS") {
+      if (skin.coinPrice === null || p.totalCoins < skin.coinPrice) return false;
+      p.totalCoins -= skin.coinPrice;
+    } else if (skin.unlockType === "FREE") {
+      if (skin.coinPrice !== 0) return false;
+    } else return false;
     p.unlockedSkins.push(id);
   }
   p.selectedSkin = id;

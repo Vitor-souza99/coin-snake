@@ -1,6 +1,8 @@
 # Design 1.1 — Próxima fase: controle
 
-Objetivo desta versão: manter o loop atual de coletar/crescer/combos/skins/missões e tornar o movimento confortável nas duas orientações. Portais, mundos e bosses pertencem à sequência de desenvolvimento, não a este build.
+Objetivo: manter o loop de coletar/crescer/combos/skins/missões, com controles confortáveis nas duas orientações e progressão de mundos desbloqueável. Mundos premium permanecem como conteúdo futuro, sem compra real.
+
+Progressão: Green Valley é o hub inicial. Candy World requer nível 5 e King Snake derrotado; Ocean World requer nível 10 e Candy Monster derrotado. Cada mundo de progressão exige também o mundo anterior desbloqueado. O jogador pode escolher qualquer mundo desbloqueado no menu; portais oferecem destinos elegíveis ponderados e o retorno leva a Green Valley. Ver `WORLDS.md` para catálogo, requisitos e previews.
 
 O mundo Green Valley é uma arena com câmera móvel. A cobra se move a 230 unidades/s inicialmente; giro máximo 4,4 rad/s, interpolação exponencial do alvo, corpo por histórico espacial. Joystick usa raio 54px e dead zone 9px.
 
@@ -10,7 +12,7 @@ Shrink Fruit surge após 20–35s quando comprimento >=8 e há posição livre p
 
 Moedas: 1/5/20/50; pesos75/18/6/1, score10/50/200/500. Combo até ×5 com janela de2,5s. Arena maior usa18 moedas iniciais (cap30),8 obstáculos iniciais (cap16). Spawn exclui corpo/pedra/bordas/itens; pedras novas têm aviso visual.
 
-Loja original: Classic0, Cat500, Robot1000, Dino2000, Dragon5000. Missões e XP permanecem acessíveis como no MVP, sem impor retroativamente novos bloqueios por nível. Benefícios futuros de pets não são simulados.
+Coleção de skins data-driven: Classic grátis, Cat500, Robot1000, Dino2000 e Dragon5000 Coins; os preços e IDs legados são preservados. Common/Rare e algumas Epic podem usar Coins. Ghost/Candy Dragon têm requisitos de gameplay planejados; skins Premium Legendary/Mythic são visíveis e podem ser pré-visualizadas, mas não compráveis nem equipáveis. Nenhuma skin dá bônus de gameplay. Detalhes e família Dragon estão em `SKINS.md`.
 
 GameOver oferece revive uma vez apenas em DEV. Moedas são creditadas pelo delta; XP e estatísticas só ao concluir/reiniciar. Partida abandonada pelo pause é finalizada normalmente. Sem cloud save ou dinheiro real.
 

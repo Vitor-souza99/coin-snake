@@ -21,7 +21,11 @@ import { Snake } from "../src/game/entities/Snake";
 import { B } from "../src/game/data/balance";
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
+import { eligiblePortalWorlds, reconcileWorldUnlocks, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
+import { worldById } from "../src/game/data/worlds";
 import { awardAchievement, achievementDefinitions } from "../src/game/systems/AchievementSystem";
+import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
+import { purchases } from "../src/game/services/PurchaseService";
 import {
   distance,
   weighted,
@@ -34,6 +38,15 @@ describe("economy", () => {
     expect(buySkin(p, "cat")).toBe(false);
     expect(buySkin(p, "bad")).toBe(false);
     expect(p.totalCoins).toBe(0);
+  });
+  it("keeps premium skins unpurchasable and unequippable even with abundant Coins", () => {
+    const p = defaults();
+    p.totalCoins = 999_999;
+    expect(buySkin(p, "fire-dragon")).toBe(false);
+    expect(buySkin(p, "ancient-dragon")).toBe(false);
+    expect(p.totalCoins).toBe(999_999);
+    expect(p.selectedSkin).toBe("classic");
+    expect(p.unlockedSkins).not.toContain("fire-dragon");
   });
   it("purchases once and selects unlocked skin for free", () => {
     const p = defaults();
@@ -88,11 +101,12 @@ describe("combo and balance", () => {
     expect(c.max).toBe(5);
   });
   it("selects each weighted tier at boundaries", () => {
-    expect(B.coins.reduce((s, c) => s + c.weight, 0)).toBe(100);
+    expect(B.coins.reduce((s, c) => s + c.weight, 0)).toBe(100.1);
     expect(weighted(B.coins, () => 0).value).toBe(1);
     expect(weighted(B.coins, () => 0.75).value).toBe(5);
     expect(weighted(B.coins, () => 0.93).value).toBe(20);
     expect(weighted(B.coins, () => 0.999).value).toBe(50);
+    expect(weighted(B.coins, () => 0.9995).value).toBe(100);
   });
   it("caps difficulty and limits angular velocity", () => {
     expect(difficulty(0, 0, 5).speed).toBe(230);
@@ -101,21 +115,50 @@ describe("combo and balance", () => {
   });
 });
 describe("roadmap progression systems", () => {
+  it("unlocks Candy after level and King Snake, then Ocean after Candy Monster", () => {
+    const profile = defaults();
+    profile.playerLevel = 10;
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual([]);
+    profile.bossesDefeated.push("king-snake");
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual(["candy-world"]);
+    expect(worldRequirementText(worldById("ocean"), profile)).toContain("Candy Monster");
+    profile.bossesDefeated.push("candy-monster");
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual(["ocean"]);
+    expect(reconcileWorldUnlocks(profile)).toEqual([]);
+  });
+  it("keeps portal candidates implemented, unlocked, weighted and non-premium", () => {
+    const profile = defaults();
+    profile.worldsUnlocked.push("candy-world", "ocean");
+    profile.bossesDefeated.push("king-snake", "candy-monster");
+    profile.playerLevel = 10;
+    expect(eligiblePortalWorlds(profile, "green-valley").map((world) => world.id)).toEqual(["candy-world", "ocean"]);
+    expect(eligiblePortalWorlds(profile, "candy-world").map((world) => world.id)).toEqual(["ocean"]);
+    expect(weightedWorldChoice([worldById("candy-world"), worldById("ocean")], "", () => 0.99)?.id).toBe("ocean");
+    expect(weightedWorldChoice([worldById("dragon_kingdom")], "", () => 0)).toBeUndefined();
+  });
+  it("classifies locked, premium, future and selected world cards", () => {
+    const profile = defaults();
+    expect(worldStatus(worldById("candy-world"), profile)).toBe("LOCKED");
+    expect(worldStatus(worldById("dragon_kingdom"), profile)).toBe("PREMIUM_LOCKED");
+    expect(worldStatus(worldById("desert"), profile)).toBe("COMING_SOON");
+    expect(worldStatus(worldById("green-valley"), profile)).toBe("SELECTED");
+  });
   it("keeps boss energy separate from virtual coins and maps coin values", () => {
     const portal = new PortalSystem(), before = defaults();
     expect(portal.bossEnergy("normal")).toBe(1);
     expect(portal.bossEnergy("blue")).toBe(5);
     expect(portal.bossEnergy("diamond")).toBe(20);
     expect(portal.bossEnergy("golden")).toBe(50);
+    expect(portal.bossEnergy("mythic")).toBe(100);
     expect(portal.bossEnergy("boss")).toBe(0);
     expect(before.totalCoins).toBe(0);
   });
   it("Bee coin weights add three percentage points to blue without changing other tiers", async () => {
     const { beeCoins } = await import("../src/game/data/balance");
     expect(beeCoins.map(({ id, weight }) => [id, weight])).toEqual([
-      ["normal", 72], ["blue", 21], ["diamond", 6], ["golden", 1],
+      ["normal", 72], ["blue", 21], ["diamond", 6], ["golden", 1], ["mythic", 0.1],
     ]);
-    expect(beeCoins.reduce((total, coin) => total + coin.weight, 0)).toBe(100);
+    expect(beeCoins.reduce((total, coin) => total + coin.weight, 0)).toBe(100.1);
   });
   it("awards known achievements once and rejects unknown IDs", () => {
     const profile = defaults(), id = achievementDefinitions[0].id;
@@ -125,12 +168,53 @@ describe("roadmap progression systems", () => {
     expect(profile.achievements).toEqual([id]);
   });
 });
+describe("skin collection catalog", () => {
+  it("defines every rarity and validates rarity/unlock metadata", () => {
+    expect(skinRarities).toEqual(["COMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"]);
+    expect(isSkinRarity("MYTHIC")).toBe(true);
+    expect(isSkinRarity("INVALID")).toBe(false);
+    expect(isSkinUnlockType("PREMIUM")).toBe(true);
+    expect(isSkinUnlockType("INVALID")).toBe(false);
+    expect(skins.some((entry) => entry.id === "dragon" && entry.rarity === "EPIC")).toBe(true);
+  });
+  it("keeps premium preview metadata visible and grouped in the dragon family", () => {
+    expect(getSkinPreviewConfig("ancient-dragon")?.showTurbo).toBe(true);
+    expect(skinsByFamily("dragon").map((entry) => entry.id)).toEqual(expect.arrayContaining(["dragon", "fire-dragon", "ancient-dragon", "celestial-dragon", "candy-dragon"]));
+    const profile = defaults();
+    expect(skinUnlockStatus(getSkin("ancient-dragon")!, profile)).toEqual({ unlocked: false, label: "Premium — em breve" });
+  });
+  it("preserves existing skin coin prices and equips already-owned skins", () => {
+    const profile = defaults();
+    expect(getSkin("cat")?.coinPrice).toBe(500);
+    expect(getSkin("robot")?.coinPrice).toBe(1000);
+    expect(getSkin("dino")?.coinPrice).toBe(2000);
+    expect(getSkin("dragon")?.coinPrice).toBe(5000);
+    profile.unlockedSkins.push("cat");
+    profile.totalCoins = 1;
+    expect(buySkin(profile, "cat")).toBe(true);
+    expect(profile.selectedSkin).toBe("cat");
+    expect(profile.totalCoins).toBe(1);
+  });
+  it("provides a no-op purchase boundary without real billing", async () => {
+    expect(purchases.isAvailable()).toBe(false);
+    expect(purchases.getProduct("coinsnake.skin.ancient_dragon")?.type).toBe("non-consumable");
+    expect(await purchases.purchase("coinsnake.skin.ancient_dragon")).toEqual({ status: "notAvailable", productId: "coinsnake.skin.ancient_dragon" });
+    expect(await purchases.restorePurchases()).toEqual({ status: "notAvailable" });
+  });
+});
 describe("save validation and I/O", () => {
   it("falls back on unsupported or corrupt structures", () => {
     expect(validateSave(null)).toEqual(defaults());
     expect(validateSave({ saveVersion: 99, totalCoins: 900 })).toEqual(
       defaults(),
     );
+  });
+  it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
+    const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
+    expect(migrated.saveVersion).toBe(5);
+    expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
+    expect(migrated.selectedSkin).toBe("cat");
+    expect(migrated.premiumEntitlements).toEqual([]);
   });
   it("sanitizes nested fields and derives level from XP", () => {
     const p = validateSave({
@@ -155,10 +239,19 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(3);
+    expect(migrated.saveVersion).toBe(5);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
+  });
+  it("migrates world aliases and selected world while preserving legacy unlocks", () => {
+    const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
+    expect(migrated.saveVersion).toBe(5);
+    expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
+    expect(migrated.selectedWorld).toBe("ocean");
+    const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
+    expect(old.worldsUnlocked).toContain("ocean");
+    expect(old.selectedWorld).toBe("green-valley");
   });
   it("recovers malformed JSON and reports write failure", async () => {
     const s = new SaveSystem({
@@ -272,5 +365,22 @@ describe("snake and powers", () => {
     expect(p.magnet).toBe(3);
     p.update(4);
     expect(p.magnet).toBe(0);
+  });
+  it("poison slows movement temporarily and refreshes instead of stacking", () => {
+    const p = new PowerUpSystem();
+    p.applyPoison();
+    expect(p.slowed).toBe(B.hazard.poisonDuration);
+    p.update(1.5);
+    expect(p.slowed).toBeCloseTo(B.hazard.poisonDuration - 1.5);
+    p.applyPoison();
+    expect(p.slowed).toBe(B.hazard.poisonDuration);
+    p.update(B.hazard.poisonDuration);
+    expect(p.slowed).toBe(0);
+  });
+  it("adds a very rare 100-value coin tier", () => {
+    const mythic = B.coins.find((coin) => coin.id === "mythic");
+    expect(mythic?.value).toBe(100);
+    expect(mythic?.weight).toBeLessThan(1);
+    expect(B.coins.reduce((total, coin) => total + coin.weight, 0)).toBe(100.1);
   });
 });

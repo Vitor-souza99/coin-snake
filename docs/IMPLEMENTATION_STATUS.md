@@ -34,9 +34,23 @@
 - [ ] Instalação no seu aparelho, notch/rotação e haptics reais.
 - [ ] Desempenho de 60 FPS em Android intermediário; balanceamento por playtesting.
 
+## Coleção visual de skins
+- [x] Catálogo data-driven com raridades COMMON/RARE/EPIC/LEGENDARY/MYTHIC, requisitos, família Dragon e configuração cosmética.
+- [x] Catálogo exposto na coleção com filtros ALL/OWNED/LOCKED/raridade e cards sempre visualizáveis.
+- [x] Preview animado em cena própria: corpo completo, trail, Turbo e Vitória; limpeza no encerramento e suporte a resize.
+- [x] Legendary/Mythic Premium bloqueadas; Coins não as compram e o save não concede ownership premium.
+- [x] PurchaseService no-op com API de disponibilidade/produto/compra/restauração; sem SDK ou pagamentos reais.
+- [x] Save v4 migra v1/v2/v3, preserva propriedade e seleção válidas e separa `premiumEntitlements` (não autoritativo).
+- [ ] Testar preview/coleção, rotação e efeitos no jogo, especialmente FPS em Android intermediário.
+- [ ] Candy Dragon é metadata/requisito planejado; a recompensa automática após Candy Monster ainda requer integração explícita.
+
+Detalhes da coleção: [`SKINS.md`](SKINS.md).
+
 ## Roadmap — parcial, necessita playtest e fechamento
-- [x] Save v3 migra v1/v2 e armazena pets, bosses, mundos, conquistas e mastery.
-- [x] Catálogo de mundos com níveis de desbloqueio, portais, viagem/retorno e aparência base.
+- [x] Save v5 migra v1–v4, preserva IDs legados de mundo, salva seleção e não concede Premium por save.
+- [x] Seleção de mundo no menu com cards, preview procedural, requisitos e estados bloqueado/futuro/Premium.
+- [x] Requisitos Candy (nível 5 + King Snake) e Ocean (nível 10 + Candy Monster), reconciliação após level/boss.
+- [x] Portais ponderados filtram destinos não implementados, bloqueados, Premium e mundo atual; retorno ao Green Valley preservado.
 - [x] Catálogo de bosses, encontro King Snake/Candy Monster, fases, energia, Boss Coins e recompensas locais.
 - [x] Bee/Candy Blob, seleção de pet, bônus de spawn e XP, tela de coleção.
 - [x] Coin Rush de 60 segundos, conquistas iniciais, mastery simples e serviço de analytics local/no-op.
@@ -46,6 +60,7 @@
 - [ ] Música final, temas por mundo e fanfarras.
 - [ ] Coin Rush ainda precisa validar fluxo de Game Over/revive e recompensas em aparelho.
 - [ ] PurchaseService é boundary no-op; compras reais não integradas.
+- [ ] Playtest visual/responsivo e balanceamento dos portais em dispositivo real.
 - [ ] Backend, multiplayer, login, cloud save, anúncios/compras reais e Play Store.
 
 BossEnergy e Boss Coins são campos separados do saldo; a fruta continua isolada da economia. Recursos novos não foram testados em aparelho Android e não devem ser considerados prontos para publicação.
