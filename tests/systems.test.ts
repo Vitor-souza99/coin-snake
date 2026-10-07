@@ -22,7 +22,9 @@ import { B } from "../src/game/data/balance";
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
 import { eligiblePortalWorlds, reconcileWorldUnlocks, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
-import { worldById } from "../src/game/data/worlds";
+import { worldById, worlds } from "../src/game/data/worlds";
+import { bosses } from "../src/game/data/bosses";
+import { earnablePetIds, pets } from "../src/game/data/pets";
 import { awardAchievement, achievementDefinitions } from "../src/game/systems/AchievementSystem";
 import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
 import { purchases } from "../src/game/services/PurchaseService";
@@ -115,6 +117,12 @@ describe("combo and balance", () => {
   });
 });
 describe("roadmap progression systems", () => {
+  it("defines a boss for every implemented world and allows the Ocean Kraken save ID", () => {
+    const implementedWorldBossIds = worlds.filter((world) => world.isImplemented).map((world) => world.bossId);
+    expect(implementedWorldBossIds.every((bossId) => bosses.some((boss) => boss.id === bossId))).toBe(true);
+    expect(bosses.map((boss) => boss.id)).toEqual(["king-snake", "candy-monster", "kraken"]);
+    expect(validateSave({ saveVersion: 5, bossesDefeated: ["kraken", "unknown"] }).bossesDefeated).toEqual(["kraken"]);
+  });
   it("unlocks Candy after level and King Snake, then Ocean after Candy Monster", () => {
     const profile = defaults();
     profile.playerLevel = 10;
@@ -159,6 +167,18 @@ describe("roadmap progression systems", () => {
       ["normal", 72], ["blue", 21], ["diamond", 6], ["golden", 1], ["mythic", 0.1],
     ]);
     expect(beeCoins.reduce((total, coin) => total + coin.weight, 0)).toBe(100.1);
+  });
+  it("Baby Octopus increases magnet duration by five percent and is earned from Kraken", () => {
+    const powers = new PowerUpSystem();
+    powers.activate("magnet", 0.05);
+    expect(powers.magnet).toBeCloseTo(8.4);
+    expect(bosses.find((boss) => boss.id === "kraken")?.petReward).toBe("baby-octopus");
+    expect(pets.find((pet) => pet.id === "baby-octopus")?.rarity).toBe("EPIC");
+  });
+  it("save validation accepts earnable pets but never grants the premium pet", () => {
+    const profile = validateSave({ saveVersion: 5, unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
+    expect(profile.unlockedPets).toEqual(earnablePetIds);
+    expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
   });
   it("awards known achievements once and rejects unknown IDs", () => {
     const profile = defaults(), id = achievementDefinitions[0].id;

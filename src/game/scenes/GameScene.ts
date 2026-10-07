@@ -557,7 +557,7 @@ export class GameScene extends Phaser.Scene {
             this.feedback(this.power.x, this.power.y, "VIDAS CHEIAS", kind.color);
           }
         } else {
-          this.powers.activate(kind.id);
+          this.powers.activate(kind.id, save.profile.selectedPet === "baby-octopus" ? 0.05 : 0);
           this.feedback(this.power.x, this.power.y, kind.name, kind.color);
         }
         this.run.powerups++;
@@ -870,9 +870,11 @@ export class GameScene extends Phaser.Scene {
     if (combo >= 5) awardAchievement(save.profile, "combo-master");
   }
   private spawnWorldPortal() {
-    if (this.currentWorld === "green-valley" && this.run.bossEnergy >= 500 && !save.profile.bossesDefeated.includes("king-snake")) {
-      this.spawnBossPortal("king-snake");
-      return;
+    const currentBoss = worldById(this.currentWorld).bossId;
+    if (currentBoss && bosses.some((boss) => boss.id === currentBoss)) {
+      if (this.currentWorld !== "green-valley" || this.run.bossEnergy >= 500)
+        this.spawnBossPortal(currentBoss);
+      if (this.currentWorld === "green-valley") return;
     }
     const target = this.currentWorld === "green-valley"
       ? this.portalSystem.choose(save.profile, this.currentWorld)
@@ -895,6 +897,9 @@ export class GameScene extends Phaser.Scene {
   private enterWorld(id: string) {
     const world = worldById(id);
     this.worldPortal?.destroy(); this.worldPortal = undefined;
+    this.bossPortal?.destroy(); this.bossPortal = undefined;
+    this.bossDefinition = undefined;
+    this.bossPortalExpiresAt = 0;
     this.returnPortalAt = 0;
     this.currentWorld = world.id;
     this.worldSpeedMultiplier = world.speedMultiplier;
@@ -915,12 +920,7 @@ export class GameScene extends Phaser.Scene {
     if (world.hazard === "current") this.ui.toast("Correntes oceânicas alteram suavemente sua direção.");
     this.nextPortalAt = this.run.elapsed + 25;
     if (world.id !== "green-valley") this.returnPortalAt = this.run.elapsed + 25;
-    else {
-      this.bossPortal?.destroy();
-      this.bossPortal = undefined;
-      this.bossDefinition = undefined;
-    }
-    if (world.bossId && !save.profile.bossesDefeated.includes(world.bossId))
+    if (world.bossId && bosses.some((boss) => boss.id === world.bossId))
       this.spawnBossPortal(world.bossId);
   }
   private spawnReturnPortal() {
@@ -1057,17 +1057,21 @@ export class GameScene extends Phaser.Scene {
       save.profile.bossesDefeated.push(defeated.id);
       const newlyUnlocked = reconcileWorldUnlocks(save.profile);
       if (newlyUnlocked.length) this.ui.toast(`Mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}.`);
-      save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, defeated.petReward])];
+      if (defeated.petReward) save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, defeated.petReward])];
       save.profile.totalCoins += defeated.rewardCoins;
       addXP(save.profile, defeated.rewardXP);
     }
     this.run.bossDefeats++;
     this.run.bossCoins += 3;
-    if (first) {
+    if (first && defeated.petReward) {
       awardAchievement(save.profile, "boss-hunter");
       awardAchievement(save.profile, "pet-collector");
+    } else if (first) {
+      awardAchievement(save.profile, "boss-hunter");
     }
-    this.ui.toast(first ? `${defeated.name} derrotado! Pet ${defeated.petReward} desbloqueado; +${defeated.rewardCoins} moedas e +3 Boss Coins.` : `${defeated.name} derrotado! +3 Boss Coins.`);
+    this.ui.toast(first
+      ? `${defeated.name} derrotado!${defeated.petReward ? ` Pet ${defeated.petReward} desbloqueado;` : ""} +${defeated.rewardCoins} moedas e +3 Boss Coins.`
+      : `${defeated.name} derrotado! +3 Boss Coins.`);
     analytics.track("bossDefeated", { boss: defeated.id });
     void save.save();
   }

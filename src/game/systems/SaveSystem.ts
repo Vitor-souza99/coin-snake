@@ -2,6 +2,8 @@ import { Preferences } from "@capacitor/preferences";
 import { B } from "../data/balance";
 import { skins } from "../data/skins";
 import { missions } from "../data/missions";
+import { bosses } from "../data/bosses";
+import { earnablePetIds } from "../data/pets";
 import type { PlayerProfile } from "../types/game";
 const record = (v: unknown): Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v)
@@ -123,9 +125,11 @@ export function validateSave(input: unknown): PlayerProfile {
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
   const isV3 = r.saveVersion === 3 || r.saveVersion === 4 || r.saveVersion === 5;
-  p.unlockedPets = isV3 && Array.isArray(r.unlockedPets) ? [...new Set(r.unlockedPets.filter((id): id is string => id === "bee" || id === "candy-blob"))] : [];
+  const validPetIds = new Set(earnablePetIds);
+  p.unlockedPets = isV3 && Array.isArray(r.unlockedPets) ? [...new Set(r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)))] : [];
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
-  p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => id === "king-snake" || id === "candy-monster"))] : [];
+  const bossIds = new Set(bosses.map((boss) => boss.id));
+  p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => typeof id === "string" && bossIds.has(id)))] : [];
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
   p.mastery = Object.fromEntries(skins.map((skin) => [skin.id, isV3 ? num(mastery[skin.id]) : 0]));
@@ -139,7 +143,7 @@ export function validateSave(input: unknown): PlayerProfile {
       })
     : [];
   p.worldsUnlocked = [...new Set(["green-valley", ...savedWorlds])];
-  const defeated = new Set(isV3 && Array.isArray(r.bossesDefeated) ? r.bossesDefeated.filter((id): id is string => id === "king-snake" || id === "candy-monster") : []);
+  const defeated = new Set(p.bossesDefeated);
   if (p.playerLevel >= 5 && defeated.has("king-snake")) p.worldsUnlocked.push("candy-world");
   if (p.playerLevel >= 10 && defeated.has("candy-monster") && p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("ocean");
   p.worldsUnlocked = [...new Set(p.worldsUnlocked)];

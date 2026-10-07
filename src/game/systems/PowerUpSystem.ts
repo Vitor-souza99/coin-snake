@@ -17,9 +17,9 @@ export class PowerUpSystem {
     this.lives--;
     return true;
   }
-  activate(kind: PowerKind) {
+  activate(kind: PowerKind, magnetBonus = 0) {
     if (kind === "shield") this.shield = true;
-    else if (kind === "magnet") this.magnet = B.power.magnetDuration;
+    else if (kind === "magnet") this.magnet = B.power.magnetDuration * (1 + magnetBonus);
     else this.turbo = B.power.turboDuration;
   }
   update(dt: number) {
