@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { skins, skinRarities, skinUnlockStatus, type SkinRarity } from "../data/skins";
 import { save } from "../systems/SaveSystem";
+import { buySkin } from "../systems/EconomySystem";
 import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
 import { ScreenUI, header, textureURL } from "../ui/ScreenUI";
@@ -23,17 +24,32 @@ export class ShopScene extends Phaser.Scene {
           const status = skinUnlockStatus(s, p);
           const premium = s.unlockType === "PREMIUM";
           const price = s.unlockType === "COINS" ? `${s.coinPrice?.toLocaleString("pt-BR")} COINS` : status.label;
+          const equipAction = !premium && (owned || status.unlocked)
+            ? selected
+              ? '<button class="action small secondary" data-equip disabled>EQUIPADA</button>'
+              : '<button class="action small" data-equip> EQUIPAR</button>'
+            : "";
           return `<article class="card skin-card rarity-card rarity-${s.rarity.toLowerCase()}" data-skin="${s.id}" tabindex="0" role="button" aria-label="Visualizar ${s.name}, ${s.rarity}">
             <img src="${textureURL(this, `${s.id}-preview-head`)}" alt="Preview de ${s.name}">
             <div class="details"><h2>${s.name}</h2><span class="skin-rarity rarity-${s.rarity.toLowerCase()}">${s.rarity}</span><p>${premium ? "🔒 PREMIUM · EM BREVE" : owned ? selected ? "✓ EQUIPADA" : "✓ OWNED" : price}</p>
-            <button class="action small secondary" data-view="${s.id}">VIEW</button></div></article>`;
+            <div class="skin-card-actions"><button class="action small secondary" data-view="${s.id}">VIEW</button>${equipAction}</div></div></article>`;
         }).join("")}</div>`);
       ui.on("#back", () => this.scene.start("Menu"));
       for (const button of ui.root.querySelectorAll<HTMLElement>("[data-view]"))
         button.addEventListener("click", (event) => { event.stopPropagation(); this.preview(button.dataset.view!); });
+      for (const button of ui.root.querySelectorAll<HTMLElement>("[data-equip]:not(:disabled)"))
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const id = button.closest<HTMLElement>("[data-skin]")?.dataset.skin;
+          if (!id || !buySkin(p, id)) return;
+          void save.save();
+          audio.play("click");
+          haptic("power");
+          render(filter, rarity);
+        });
       for (const card of ui.root.querySelectorAll<HTMLElement>("[data-skin]")) {
-        card.addEventListener("click", () => this.preview(card.dataset.skin!));
-        card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); this.preview(card.dataset.skin!); } });
+        card.addEventListener("click", (event) => { if (!(event.target as HTMLElement).closest("button")) this.preview(card.dataset.skin!); });
+        card.addEventListener("keydown", (event) => { if ((event.key === "Enter" || event.key === " ") && event.target === card) { event.preventDefault(); this.preview(card.dataset.skin!); } });
       }
       ui.on("#filter-all", () => render("ALL", rarity));
       ui.on("#filter-owned", () => render("OWNED", rarity));

@@ -30,7 +30,7 @@ export class SkinPreviewScene extends Phaser.Scene {
     this.ui.html(`${header("Preview da skin", "Veja todos os detalhes · cosmético")}
       <section class="skin-preview-layout">
         <div class="skin-preview-stage" aria-label="Preview animado da cobrinha">
-          <canvas class="skin-preview-canvas" width="720" height="420" id="skin-preview-canvas"></canvas>
+          <div class="skin-preview-canvas" id="skin-preview-canvas" aria-hidden="true"></div>
           <div class="skin-preview-controls" id="skin-preview-controls">
             <button class="action small" id="preview-normal">Normal</button>
             <button class="action small secondary" id="preview-turbo">Turbo</button>
@@ -49,15 +49,15 @@ export class SkinPreviewScene extends Phaser.Scene {
       </section>`);
 
     this.cameras.main.setBackgroundColor("rgba(0,0,0,0)");
-    const canvas = this.ui.get<HTMLCanvasElement>("#skin-preview-canvas");
+    const canvas = this.ui.get<HTMLElement>("#skin-preview-canvas");
     const portrait = this.scale.height >= this.scale.width;
     const width = Math.min(this.scale.width - 32, 680);
-    const height = portrait ? Math.min(390, Math.max(220, this.scale.height * 0.3)) : Math.min(360, Math.max(220, this.scale.height * 0.5));
+    const height = Math.min(portrait ? Math.min(390, Math.max(220, this.scale.height * 0.3)) : Math.min(360, Math.max(220, this.scale.height * 0.5)), Math.max(120, this.scale.height * 0.44));
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height * (portrait ? 0.38 : 0.42);
     this.previewPanel = this.add.rectangle(centerX, centerY, width, height, 0xf1f3e1).setStrokeStyle(2, 0xd5dec4).setDepth(-1);
-    canvas.width = width;
-    canvas.height = height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
     const controls = this.ui.get<HTMLElement>("#skin-preview-controls");
     controls.style.position = "fixed";
     controls.style.left = "50%";
@@ -66,13 +66,16 @@ export class SkinPreviewScene extends Phaser.Scene {
     this.createPreview(width, height, centerX, centerY);
     const resize = () => {
       const w = Math.min(this.scale.width - 32, 680);
-      const h = this.scale.height >= this.scale.width
-        ? Math.min(390, Math.max(220, this.scale.height * 0.3))
-        : Math.min(360, Math.max(220, this.scale.height * 0.5));
+      const h = Math.min(
+        this.scale.height >= this.scale.width
+          ? Math.min(390, Math.max(220, this.scale.height * 0.3))
+          : Math.min(360, Math.max(220, this.scale.height * 0.5)),
+        Math.max(120, this.scale.height * 0.44),
+      );
       const x = this.scale.width / 2;
       const y = this.scale.height * (this.scale.height >= this.scale.width ? 0.38 : 0.42);
-      canvas.width = w;
-      canvas.height = h;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
       this.previewPanel.setPosition(x, y).setSize(w, h);
       this.createPreview(w, h, x, y);
       controls.style.top = `${y + h / 2 + 8}px`;

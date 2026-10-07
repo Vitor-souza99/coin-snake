@@ -296,6 +296,8 @@ canvas {
   background: #fffef5;
 }
 .skin-card { cursor: pointer; }
+.skin-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.skin-card-actions .action { flex: 1 1 auto; }
 .rarity-card { border-top: 4px solid #a9b59c; }
 .rarity-rare { border-color: #4a9ad0; }
 .rarity-epic { border-color: #9c65d6; }
@@ -329,10 +331,12 @@ canvas {
 .skin-preview-canvas {
   display: block;
   width: min(100%, 680px);
+  height: min(44vh, 420px);
   max-height: min(44vh, 420px);
   border: 1px solid #d5dec4;
   border-radius: 22px;
-  background: #f1f3e1;
+  background: transparent;
+  pointer-events: none;
 }
 .skin-preview-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .skin-preview-info h2 { margin: 10px 0; font-size: 26px; }
