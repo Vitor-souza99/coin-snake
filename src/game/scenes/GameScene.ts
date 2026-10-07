@@ -66,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private portalSystem = new PortalSystem();
   private worldPortal?: Phaser.GameObjects.Container;
   private bossPortal?: Phaser.GameObjects.Container;
+  private bossPortalExpiresAt = 0;
   private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Container };
   private bossHud?: HTMLElement;
   private bossEnergyHud?: HTMLElement;
@@ -89,6 +90,7 @@ export class GameScene extends Phaser.Scene {
     this.masteryCredited = false;
     this.worldPortal = undefined;
     this.bossPortal = undefined;
+    this.bossPortalExpiresAt = 0;
     this.boss = undefined;
     this.bossDefinition = undefined;
     this.petSprite?.destroy();
@@ -411,6 +413,30 @@ export class GameScene extends Phaser.Scene {
     );
     if (worldById(this.currentWorld).hazard === "current") {
       this.snake.angle += Math.sin(this.run.elapsed * 0.7) * 0.0007;
+    }
+    if (this.worldPortal && distance(this.snake, this.worldPortal) < 75) {
+      const destination = this.worldPortal.getData("destination") as string;
+      this.enterWorld(destination);
+    }
+    if (this.bossPortal && distance(this.snake, this.bossPortal) < 75) {
+      if (this.run.bossEnergy < 500) {
+        const energy = Math.floor(this.run.bossEnergy);
+        if (this.bossPortal.getData("lastEnergyNotice") !== energy) {
+          this.bossPortal.setData("lastEnergyNotice", energy);
+          this.ui.toast(`Portal de chefe: colete 500 Boss Energy para entrar. Atual: ${energy}.`);
+        }
+      } else if (this.bossDefinition) {
+        const definition = this.bossDefinition;
+        this.run.bossEnergy -= 500;
+        this.startBoss(definition);
+      }
+    }
+    if (this.bossPortal && this.bossPortalExpiresAt > 0 && this.run.elapsed >= this.bossPortalExpiresAt) {
+      this.bossPortal.destroy();
+      this.bossPortal = undefined;
+      this.bossDefinition = undefined;
+      this.bossPortalExpiresAt = 0;
+      this.ui.toast(`Portal de chefe expirou. Boss Energy (${Math.floor(this.run.bossEnergy)}) preservada.`);
     }
     if (this.boss) this.updateBoss(dt);
     else if (!this.rushMode && this.run.elapsed >= this.nextPortalAt && !this.worldPortal && !this.bossPortal) {
@@ -793,13 +819,13 @@ export class GameScene extends Phaser.Scene {
     g.lineStyle(8, target.accent, 0.95).strokeEllipse(0, 0, 72, 108);
     const label = this.add.text(0, 70, `${target.id === "green-valley" ? "RETORNAR" : "VIAJAR"} · ${target.name}`, { fontSize: "16px", color: "#163f36", fontStyle: "bold" }).setOrigin(0.5);
     this.worldPortal = this.add.container(p.x, p.y, [g, label]).setDepth(9);
-    this.worldPortal.setSize(100, 150).setInteractive();
-    this.worldPortal.on("pointerdown", () => this.enterWorld(target.id));
-    this.ui.toast(`Portal para ${target.name} apareceu. Toque nele para viajar.`);
+    this.worldPortal.setData("destination", target.id);
+    this.ui.toast(`Novo mapa disponível: ${target.name}. Leve a cobrinha até o portal para entrar.`);
   }
   private enterWorld(id: string) {
     const world = worldById(id);
     this.worldPortal?.destroy(); this.worldPortal = undefined;
+    this.returnPortalAt = 0;
     this.currentWorld = world.id;
     this.worldSpeedMultiplier = world.speedMultiplier;
     if (world.id === "green-valley") this.returnPortalAt = 0;
@@ -808,17 +834,22 @@ export class GameScene extends Phaser.Scene {
     awardAchievement(save.profile, "world-traveler");
     this.cameras.main.setBackgroundColor(world.background);
     for (const obstacle of this.obstacles) obstacle.image.setTint(world.accent);
-    if (world.hazard === "sticky") this.ui.toast("Sticky zones reduzem sua velocidade por instantes.");
-    if (world.hazard === "current") this.ui.toast("Correntes oceânicas alteram suavemente sua direção.");
     this.ui.get("#world-tag").textContent = world.name.toUpperCase();
     this.ui.get<HTMLElement>("#world-tag").style.backgroundColor = `#${world.accent.toString(16).padStart(6, "0")}`;
     analytics.track("portalEntered", { world: world.id });
     void save.save();
-    if (world.bossId && !save.profile.bossesDefeated.includes(world.bossId)) this.spawnBossPortal(world.bossId);
-    this.ui.toast(`${world.name}: portal de retorno aparecerá em breve.`);
+    this.ui.toast(`Você chegou a ${world.name}.`);
+    if (world.hazard === "sticky") this.ui.toast("Sticky zones reduzem sua velocidade por instantes.");
+    if (world.hazard === "current") this.ui.toast("Correntes oceânicas alteram suavemente sua direção.");
     this.nextPortalAt = this.run.elapsed + 25;
     if (world.id !== "green-valley") this.returnPortalAt = this.run.elapsed + 25;
-    else { this.bossPortal?.destroy(); this.bossPortal = undefined; this.bossDefinition = undefined; }
+    else {
+      this.bossPortal?.destroy();
+      this.bossPortal = undefined;
+      this.bossDefinition = undefined;
+    }
+    if (world.bossId && !save.profile.bossesDefeated.includes(world.bossId))
+      this.spawnBossPortal(world.bossId);
   }
   private spawnReturnPortal() {
     if (this.worldPortal || this.dead || this.currentWorld === "green-valley") return;
@@ -828,32 +859,25 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(target.accent, 0.22).fillEllipse(0, 0, 92, 126);
     g.lineStyle(8, target.accent, 0.95).strokeEllipse(0, 0, 72, 108);
     const label = this.add.text(0, 70, "RETORNAR · GREEN VALLEY", { fontSize: "16px", color: "#163f36", fontStyle: "bold" }).setOrigin(0.5);
-    this.worldPortal = this.add.container(p.x, p.y, [g, label]).setDepth(9).setSize(100, 150).setInteractive();
-    this.worldPortal.on("pointerdown", () => this.enterWorld("green-valley"));
-    this.ui.toast("Portal de retorno apareceu.");
+    this.worldPortal = this.add.container(p.x, p.y, [g, label]).setDepth(9);
+    this.worldPortal.setData("destination", "green-valley");
+    this.ui.toast("Portal de retorno disponível: atravesse-o para voltar ao Green Valley.");
   }
   private spawnBossPortal(bossId: string) {
     if (this.bossPortal || this.dead) return;
     const p = this.validPoint(100, 180, true); if (!p) return;
     const g = this.add.graphics().fillStyle(0x713c9c, 0.28).fillEllipse(0, 0, 110, 140).lineStyle(8, 0x9d5ac7).strokeEllipse(0, 0, 86, 118);
     const t = this.add.text(0, 76, "BOSS · OPCIONAL", { fontSize: "16px", color: "#43255b", fontStyle: "bold" }).setOrigin(0.5);
-    this.bossPortal = this.add.container(p.x, p.y, [g, t]).setDepth(9).setSize(120, 160).setInteractive();
+    this.bossPortal = this.add.container(p.x, p.y, [g, t]).setDepth(9);
     this.bossDefinition = bosses.find((boss) => boss.id === bossId);
-    this.bossPortal.on("pointerdown", () => {
-      if (this.run.bossEnergy < 500) this.ui.toast(`Portal opcional: carregue 500 Boss Energy. Atual: ${Math.floor(this.run.bossEnergy)}.`);
-      else { this.run.bossEnergy -= 500; if (this.bossDefinition) this.startBoss(this.bossDefinition); }
-    });
-    const portal = this.bossPortal;
-    this.time.delayedCall(25_000, () => {
-      if (this.bossPortal !== portal) return;
-      this.bossPortal?.destroy();
-      this.bossPortal = undefined;
-      this.bossDefinition = undefined;
-      this.ui.toast(`Boss Portal expirou. BossEnergy (${Math.floor(this.run.bossEnergy)}) preservada.`);
-    });
+    this.bossPortalExpiresAt = this.run.elapsed + 25;
+    const required = Math.max(0, 500 - this.run.bossEnergy);
+    this.ui.toast(`Portal para ${this.bossDefinition?.name ?? "chefe"} apareceu. Atravesse-o com a cobrinha; requer 500 Boss Energy${required ? ` (faltam ${Math.ceil(required)})` : ""}.`);
   }
   private startBoss(definition: BossDefinition) {
     this.bossPortal?.destroy(); this.bossPortal = undefined;
+    this.bossPortalExpiresAt = 0;
+    this.bossDefinition = undefined;
     const g = this.add.graphics().fillStyle(definition.id === "king-snake" ? 0x315d3c : 0xc74b9d).fillCircle(0, 0, 55).lineStyle(7, 0xffd66f).strokeCircle(0, 0, 58);
     const eyes = this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5);
     const image = this.add.container(this.snake.x + 240, this.snake.y, [g, eyes]).setDepth(19);
