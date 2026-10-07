@@ -75,6 +75,8 @@ export class GameScene extends Phaser.Scene {
   private bossPortalExpiresAt = 0;
   private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Container };
   private bossCollisionGrace = 0;
+  private bossShieldCharge = 0;
+  private bossShieldPickup?: { x: number; y: number; life: number; image: Phaser.GameObjects.Container };
   private bossHud?: HTMLElement;
   private bossEnergyHud?: HTMLElement;
   private petSprite?: Phaser.GameObjects.Container;
@@ -104,6 +106,9 @@ export class GameScene extends Phaser.Scene {
     this.bossPortalExpiresAt = 0;
     this.boss = undefined;
     this.bossCollisionGrace = 0;
+    this.bossShieldCharge = 0;
+    this.bossShieldPickup?.image.destroy();
+    this.bossShieldPickup = undefined;
     this.bossDefinition = undefined;
     this.petSprite?.destroy();
     this.petSprite = undefined;
@@ -945,6 +950,9 @@ export class GameScene extends Phaser.Scene {
     this.bossPortal?.destroy(); this.bossPortal = undefined;
     this.bossPortalExpiresAt = 0;
     this.bossDefinition = undefined;
+    this.bossShieldCharge = 0;
+    this.bossShieldPickup?.image.destroy();
+    this.bossShieldPickup = undefined;
     const g = this.add.graphics().fillStyle(definition.id === "king-snake" ? 0x315d3c : 0xc74b9d).fillCircle(0, 0, 55).lineStyle(7, 0xffd66f).strokeCircle(0, 0, 58);
     const eyes = this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5);
     const image = this.add.container(this.snake.x + 240, this.snake.y, [g, eyes]).setDepth(19);
@@ -958,6 +966,7 @@ export class GameScene extends Phaser.Scene {
   private updateBoss(dt: number) {
     const boss = this.boss!;
     this.bossCollisionGrace = Math.max(0, this.bossCollisionGrace - dt);
+    this.bossShieldCharge = Math.max(0, this.bossShieldCharge - dt);
     boss.attack -= dt;
     const dx = this.snake.x - boss.image.x, dy = this.snake.y - boss.image.y, d = Math.hypot(dx, dy) || 1;
     boss.image.x += dx / d * boss.speed * dt;
@@ -965,8 +974,21 @@ export class GameScene extends Phaser.Scene {
     if (boss.attack <= 0) {
       boss.attack = boss.definition.attackInterval;
       if (d < 115) {
-        if (!this.powers.absorb()) this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
+        if (this.bossShieldCharge <= 0 && !this.powers.absorb()) this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
         this.bossCollisionGrace = 0.8;
+      }
+    }
+    if (this.bossShieldPickup) {
+      this.bossShieldPickup.life -= dt;
+      if (distance(this.bossShieldPickup, this.snake) < 40) {
+        this.bossShieldPickup.image.destroy();
+        this.bossShieldPickup = undefined;
+        this.bossShieldCharge = 8;
+        this.feedback(this.snake.x, this.snake.y, "ESCUDO DE ATAQUE!", 0x70cfff, true);
+        if (this.bossHud) this.bossHud.textContent = `${boss.definition.name} · ESCUDO DE ATAQUE · 8s`;
+      } else if (this.bossShieldPickup.life <= 0) {
+        this.bossShieldPickup.image.destroy();
+        this.bossShieldPickup = undefined;
       }
     }
     const collisionDx = this.snake.x - boss.image.x;
@@ -983,7 +1005,12 @@ export class GameScene extends Phaser.Scene {
       this.snake.body[0].y = this.snake.y;
       if (this.bossCollisionGrace <= 0) {
         const hadShield = this.powers.shield;
-        if (!this.powers.absorb()) {
+        if (this.bossShieldCharge > 0) {
+          this.bossCollisionGrace = 0.8;
+          this.damageBoss();
+          if (!this.boss) return;
+          this.feedback(boss.image.x, boss.image.y, "ACERTO!", 0xffd66f);
+        } else if (!this.powers.absorb()) {
           this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
           this.powers.invincible = Math.max(this.powers.invincible, 0.8);
           this.feedback(this.snake.x, this.snake.y, "CUIDADO!", 0xff5b78);
@@ -999,10 +1026,19 @@ export class GameScene extends Phaser.Scene {
       boss.phase++;
       boss.speed += 18;
       this.feedback(boss.image.x, boss.image.y, `FASE ${boss.phase + 1}`, 0xffd66f, true);
+      if (boss.definition.id === "candy-monster" && boss.phase === 1 && !this.bossShieldPickup && this.bossShieldCharge <= 0) {
+        const point = this.validPoint(55, 100) ?? { x: this.snake.x + 110, y: this.snake.y + 110 };
+        const graphics = this.add.graphics().fillStyle(0x70cfff, 0.3).fillCircle(0, 0, 24).lineStyle(4, 0x70cfff).strokeCircle(0, 0, 24);
+        const symbol = this.add.text(0, 0, "S", { fontSize: "26px", color: "#163f36", fontStyle: "bold" }).setOrigin(0.5);
+        const image = this.add.container(point.x, point.y, [graphics, symbol]).setDepth(21);
+        this.bossShieldPickup = { ...point, life: 15, image };
+        this.ui.toast("O Candy Monster está vulnerável! Pegue o escudo e acerte-o.");
+      }
     }
     if (this.bossHud) {
       const warning = d < 180 && boss.attack <= 1.2 ? " · ATAQUE IMINENTE!" : "";
-      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · BossEnergy ${Math.floor(this.run.bossEnergy)}/100 · fase ${Math.min(3, boss.phase + 1)}${warning}`;
+      const charge = this.bossShieldCharge > 0 ? ` · ESCUDO ${Math.ceil(this.bossShieldCharge)}s — BATA NO CHEFE` : "";
+      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · BossEnergy ${Math.floor(this.run.bossEnergy)}/100 · fase ${Math.min(3, boss.phase + 1)}${charge}${warning}`;
     }
   }
   private damageBoss() {
@@ -1011,6 +1047,9 @@ export class GameScene extends Phaser.Scene {
     if (this.boss.health > 0) return;
     const defeated = this.boss.definition;
     this.boss.image.destroy(); this.boss = undefined;
+    this.bossShieldPickup?.image.destroy();
+    this.bossShieldPickup = undefined;
+    this.bossShieldCharge = 0;
     this.bossHud!.hidden = true;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = false;
     const first = !save.profile.bossesDefeated.includes(defeated.id);
