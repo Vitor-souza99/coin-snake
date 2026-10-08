@@ -3,9 +3,9 @@ export const B = {
   height: 1280,
   arena: { left: 28, right: 1372, top: 28, bottom: 1472 },
   snake: {
-    speed: 180,
+    speed: 160,
     maxSpeed: 300,
-    growthSpeedStep: 2,
+    growthSpeedStep: 1,
     rotation: 4.4,
     spacing: 18,
     radius: 14,
@@ -82,6 +82,12 @@ export const B = {
     lifeGrace: 2,
     magnetDuration: 8,
     turboDuration: 5,
+    precisionDuration: 4,
+    precisionSpeed: 0.75,
+    precisionTurn: 1.3,
+    luckyStarDuration: 8,
+    ghostDuration: 3,
+    ghostClearanceGrace: 0.5,
     magnetRadius: 155,
     attraction: 380,
     turboSpeed: 1.4,
@@ -95,7 +101,7 @@ export const B = {
     scorePerLevel: 4000,
     segmentsPerLevel: 40,
     maxLevel: 8,
-    speedStep: 8,
+    speedStep: 5,
     initialCoins: 18,
     maxCoins: 30,
     initialObstacles: 8,
@@ -103,7 +109,7 @@ export const B = {
     warningSeconds: 2,
   },
   boss: { greenValleyEnergyRequired: 350, defaultEnergyRequired: 500 },
-  xp: { perRun: 25, scoreDivisor: 20, perMission: 75, perLevel: 250 },
+  xp: { perRun: 25, scoreDivisor: 20, perMission: 75, firstLevel: 175, perLevelIncrease: 75 },
   prices: [0, 500, 1000, 2000, 5000],
   spawn: { attempts: 120, edge: 34, bodyClearance: 44, headClearance: 200 },
 } as const;
@@ -112,6 +118,20 @@ export const beeCoins = [
   { id: "blue", value: 5, score: 50, weight: 21, color: 0x4cc9f0, label: "5" },
   { id: "diamond", value: 20, score: 200, weight: 6, color: 0xd9a7ff, label: "20" },
   { id: "golden", value: 50, score: 500, weight: 1, color: 0xff9c36, label: "50" },
+  { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
+] as const;
+export const fireflyCoins = [
+  { id: "normal", value: 1, score: 10, weight: 70, color: 0xffd35a, label: "1" },
+  { id: "blue", value: 5, score: 50, weight: 23, color: 0x4cc9f0, label: "5" },
+  { id: "diamond", value: 20, score: 200, weight: 6, color: 0xd9a7ff, label: "20" },
+  { id: "golden", value: 50, score: 500, weight: 1, color: 0xff9c36, label: "50" },
+  { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
+] as const;
+export const luckyStarCoins = [
+  { id: "normal", value: 1, score: 10, weight: 65, color: 0xffd35a, label: "1" },
+  { id: "blue", value: 5, score: 50, weight: 24, color: 0x4cc9f0, label: "5" },
+  { id: "diamond", value: 20, score: 200, weight: 9, color: 0xd9a7ff, label: "20" },
+  { id: "golden", value: 50, score: 500, weight: 2, color: 0xff9c36, label: "50" },
   { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
 ] as const;
 export type CoinKind = (typeof B.coins)[number];

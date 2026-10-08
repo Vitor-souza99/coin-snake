@@ -19,6 +19,12 @@ button {
   cursor: pointer;
   touch-action: manipulation;
 }
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
 button:focus-visible,
 input:focus-visible {
   outline: 3px solid #e29629;
@@ -149,6 +155,17 @@ canvas {
 .hero {
   text-align: center;
   position: relative;
+}
+.brand-menu-logo {
+  display: block;
+  width: min(100%, 310px);
+  height: clamp(205px, 30vh, 310px);
+  margin: 0 auto 12px;
+  object-fit: contain;
+  animation: brand-bob 4s ease-in-out infinite;
+}
+@keyframes brand-bob {
+  50% { transform: translateY(-5px); }
 }
 .hero h1 {
   font-size: clamp(54px, 12vw, 88px);
@@ -429,6 +446,14 @@ canvas {
   inset: 0;
   pointer-events: none;
   overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.game-ui * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .hud {
   position: absolute;
@@ -752,6 +777,10 @@ canvas {
     font-size: clamp(42px, 8vw, 82px);
     margin: 14px 0;
   }
+  .brand-menu-logo {
+    width: min(100%, 270px);
+    height: clamp(150px, 43vh, 230px);
+  }
   .mascot {
     height: 130px;
   }
@@ -802,6 +831,15 @@ canvas {
     margin-bottom: 12px;
   }
 }
+@media (max-height: 520px) and (orientation: landscape) {
+  .screen:has(.home) { padding: 12px; }
+  .home { gap: 16px; }
+  .home-actions { gap: 7px; }
+  .home-actions .card { padding: 10px; }
+  .home-actions .card .muted { margin: 6px 0; }
+  .home-actions .xp-track { margin-top: 6px; }
+  .home .footnote { display: none; }
+}
 @media (max-height: 650px) and (orientation: portrait) {
   .home {
     gap: 12px;
@@ -809,6 +847,10 @@ canvas {
   .hero h1 {
     font-size: 52px;
     margin: 12px 0;
+  }
+  .brand-menu-logo {
+    height: 175px;
+    margin-bottom: 4px;
   }
   .mascot {
     height: 120px;
@@ -831,6 +873,13 @@ canvas {
   .footnote {
     font-size: 11px;
   }
+}
+
+.reduced-motion .brand-menu-logo {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-menu-logo { animation: none !important; }
 }
 @media (max-width: 360px) {
   .screen {

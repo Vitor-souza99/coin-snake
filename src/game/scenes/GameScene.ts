@@ -9,7 +9,7 @@ import { PowerUpSystem } from "../systems/PowerUpSystem";
 import { difficulty } from "../systems/DifficultySystem";
 import { save } from "../systems/SaveSystem";
 import { creditCoins, finishRun } from "../systems/EconomySystem";
-import { reportRun } from "../systems/MissionSystem";
+import { reportRun, startMissionRun } from "../systems/MissionSystem";
 import { newRun, type RunState, type Point } from "../types/game";
 import { clamp, distance } from "../utils/math";
 import { C, text } from "../ui/Theme";
@@ -26,7 +26,7 @@ import { controls, shrinkConfig } from "../data/controls";
 import { addXP } from "../systems/EconomySystem";
 import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
-import { worldById, type WorldDefinition } from "../data/worlds";
+import { worlds, worldById, type WorldDefinition } from "../data/worlds";
 import { bosses, type BossDefinition } from "../data/bosses";
 import { BossFightSystem } from "../systems/BossFightSystem";
 import { pets } from "../data/pets";
@@ -37,6 +37,8 @@ import { getBossSkinRewards, getSkin } from "../data/skins";
 import { reconcileWorldUnlocks, traversableWorlds } from "../systems/WorldSystem";
 import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawnAllowed, candyFinalSpeed, inCandyRiver, stickySpeedMultiplier, type StickyZone } from "../data/candyWorld";
 import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, pearlCoinSpawnAllowed, bonusBubbleReward, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
+import { setImmersiveMode } from "../services/OrientationService";
+import { missionsForProfile } from "../data/missions";
 export class GameScene extends Phaser.Scene {
   snake!: Snake;
   run!: RunState;
@@ -82,6 +84,7 @@ export class GameScene extends Phaser.Scene {
   private worldPortal?: Phaser.GameObjects.Container;
   private worldPassages: Phaser.GameObjects.Container[] = [];
   private bossPortal?: Phaser.GameObjects.Container;
+  private bossIntroOpen = false;
   private bossPortalExpiresAt = 0;
   private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Container; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "SUGAR_RUSH" | "IDLE" | "TELEGRAPH_SLAM" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container };
   private bossFight = new BossFightSystem();
@@ -122,6 +125,8 @@ export class GameScene extends Phaser.Scene {
     super("Game");
   }
   create() {
+    void setImmersiveMode(true);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void setImmersiveMode(false));
     const initData = (this.scene.settings.data ?? {}) as { rushMode?: boolean; startWorld?: string };
     this.rushMode = initData.rushMode ?? false;
     reconcileWorldUnlocks(save.profile);
@@ -134,6 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.worldPortal = undefined;
     this.worldPassages = [];
     this.bossPortal = undefined;
+    this.bossIntroOpen = false;
     this.bossPortalExpiresAt = 0;
     this.boss = undefined;
     this.bossFight.destroy();
@@ -156,6 +162,8 @@ export class GameScene extends Phaser.Scene {
     this.cameraX = this.snake.x;
     this.cameraY = this.snake.y;
     this.run = newRun();
+    startMissionRun(save.profile, this.run);
+    if (save.profile.missionDate === this.run.missionDate) void save.save();
     this.run.rushMode = this.rushMode;
     this.combo = new ComboSystem();
     this.powers = new PowerUpSystem();
@@ -262,10 +270,10 @@ export class GameScene extends Phaser.Scene {
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
-      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : 0xe783d0;
+      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xff7043 : save.profile.selectedPet === "firefly" ? 0xc7ff72 : 0xe783d0;
       petGraphic.fillStyle(petColor).fillCircle(0, 0, 12);
       petGraphic.lineStyle(2, 0xffffff).strokeCircle(0, 0, 12);
-      if (save.profile.selectedPet === "bee") petGraphic.lineStyle(2, 0xffffff).lineBetween(-17, -8, -9, -3).lineBetween(9, -3, 17, -8);
+      if (["bee", "firefly"].includes(save.profile.selectedPet ?? "")) petGraphic.lineStyle(2, 0xffffff).lineBetween(-17, -8, -9, -3).lineBetween(9, -3, 17, -8);
       this.petSprite = this.add.container(this.snake.x, this.snake.y + 28, [petGraphic]).setDepth(25);
     }
     this.ui.on("#pause", () => this.requestPause());
@@ -407,7 +415,7 @@ export class GameScene extends Phaser.Scene {
       if (coin.active) continue;
       const p = this.validPoint(B.spawn.bodyClearance, 65);
       if (!p) break;
-      coin.spawn(p.x, p.y, save.profile.selectedPet === "bee");
+      coin.spawn(p.x, p.y, save.profile.selectedPet === "firefly" ? "firefly" : save.profile.selectedPet === "bee", this.powers.luckyStar > 0);
       if (this.currentWorld === "ocean" && this.inOceanRegion("deep_trench", p) && Math.random() < OW.deepTrenchRareCoinBonus) {
         const rare = [B.coins.find((kind) => kind.id === "blue")!, B.coins.find((kind) => kind.id === "diamond")!];
         const selected = rare[Math.random() < 0.8 ? 0 : 1];
@@ -673,7 +681,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.halted || this.dead) return;
     this.accumulator += Math.min(delta / 1000, 0.05);
-    while (this.accumulator >= 1 / 120 && !this.dead) {
+    while (this.accumulator >= 1 / 120 && !this.dead && !this.halted) {
       this.step(1 / 120);
       this.accumulator -= 1 / 120;
     }
@@ -728,16 +736,16 @@ export class GameScene extends Phaser.Scene {
       audio.setTurbo(this.turbo.active);
       if (this.turbo.active) haptic("power");
     }
-    const playerSpeed = d.speed * this.worldSpeedMultiplier * (this.powers.slowed > 0 ? B.hazard.slowMultiplier : 1) *
+    const playerSpeed = d.speed * this.worldSpeedMultiplier * (this.powers.slowed > 0 ? B.hazard.slowMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionSpeed : 1) *
       (this.currentWorld === "candy-world"
         ? candyFinalSpeed(1, this.turbo.active ? B.power.turboSpeed : 1, this.stickySpeed) * (inCandyRiver(this.snake, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom) ? CW.river.slowMultiplier : 1)
         : this.turbo.active ? B.power.turboSpeed : 1);
     const steeringTarget = this.steering.update(target, dt);
     if (this.currentWorld === "ocean") {
       const force = currentForceAt(this.snake, this.oceanCurrents);
-      this.snake.moveVector(dt, steeringTarget, playerSpeed, force, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1), OW.maxEffectiveSpeed);
+      this.snake.moveVector(dt, steeringTarget, playerSpeed, force, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1), OW.maxEffectiveSpeed);
     } else {
-      this.snake.move(dt, steeringTarget, playerSpeed, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1));
+      this.snake.move(dt, steeringTarget, playerSpeed, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1));
     }
     if (this.currentWorld === "candy-world") {
       const insideSticky = this.stickyZones.some((zone) => Math.hypot(this.snake.x-zone.x,this.snake.y-zone.y)<zone.radius);
@@ -755,7 +763,10 @@ export class GameScene extends Phaser.Scene {
     this.updateOcean(dt);
     const passage = this.worldPassages.find((item) => distance(this.snake, item) < 68);
     if (passage) this.enterWorld(passage.getData("destination") as string);
-    if (this.bossPortal && distance(this.snake, this.bossPortal) < 75) {
+    if (this.bossPortal && distance(this.snake, this.bossPortal) >= 100) {
+      this.bossPortal.setData("hintDismissed", false);
+    }
+    if (this.bossPortal && distance(this.snake, this.bossPortal) < 75 && !this.bossPortal.getData("hintDismissed") && !this.bossIntroOpen) {
       const requiredEnergy = this.bossEnergyRequirement(this.bossDefinition?.id);
       if (this.run.bossEnergy < requiredEnergy) {
         const energy = Math.floor(this.run.bossEnergy);
@@ -765,10 +776,38 @@ export class GameScene extends Phaser.Scene {
         }
       } else if (this.bossDefinition) {
         const definition = this.bossDefinition;
-        this.run.bossEnergy -= requiredEnergy;
-        this.startBoss(definition);
+        this.halted = true;
+        this.bossIntroOpen = true;
+        this.resetControls();
+        this.overlay = this.ui.modal(
+          `⚔️ ${definition.name}`,
+          `${definition.entryHint}\n\nA luta é opcional. Sua Boss Energy só será usada quando começar.`,
+          [{
+            label: "Começar luta",
+            run: () => {
+              if (!this.bossIntroOpen || this.boss || !this.scene.isActive()) return;
+              this.overlay?.destroy();
+              this.overlay = undefined;
+              this.bossIntroOpen = false;
+              this.resetControls();
+              this.accumulator = 0;
+              this.run.bossEnergy -= requiredEnergy;
+              this.startBoss(definition);
+              this.halted = false;
+            },
+          }, {
+            label: "Agora não",
+            run: () => {
+              if (!this.bossIntroOpen) return;
+              this.bossPortal?.setData("hintDismissed", true);
+              this.bossIntroOpen = false;
+              this.continue();
+            },
+          }],
+        );
       }
     }
+    if (this.halted) return;
     if (this.bossPortal && this.bossPortalExpiresAt > 0 && this.run.elapsed >= this.bossPortalExpiresAt) {
       this.bossPortal.destroy();
       this.bossPortal = undefined;
@@ -791,10 +830,13 @@ export class GameScene extends Phaser.Scene {
       this.snake.y < a.top + r ||
       this.snake.y > a.bottom - r
     );
-    const obstacle = this.obstacles.find(
+    const overlappingObstacle = this.obstacles.find(
       (o) => o.warning === 0 && distance(this.snake, o) < (this.currentWorld === "ocean" ? (this.oceanCorals.find((coral) => coral.x === o.x && coral.y === o.y)?.radius ?? 24) + B.snake.radius : 44),
     );
-    if (wall || obstacle || this.snake.selfCollision()) {
+    const overlappingBody = this.snake.selfCollision();
+    const ghostActive = this.powers.updateGhost(dt, overlappingBody || !!overlappingObstacle);
+    const obstacle = ghostActive ? undefined : overlappingObstacle;
+    if (wall || obstacle || (!ghostActive && overlappingBody)) {
       const hadShield = this.powers.shield;
       if (this.powers.invincible <= 0) {
         if (!this.powers.absorb()) {
@@ -849,8 +891,11 @@ export class GameScene extends Phaser.Scene {
             this.feedback(this.power.x, this.power.y, "VIDAS CHEIAS", kind.color);
           }
         } else {
-          this.powers.activate(kind.id, save.profile.selectedPet === "baby-octopus" ? 0.05 : 0);
-          this.feedback(this.power.x, this.power.y, kind.name, kind.color);
+          const pet = save.profile.selectedPet;
+          const bonus = (kind.id === "magnet" && pet === "baby-octopus") || (kind.id === "turbo" && pet === "tiny-dragon") ? 0.05 : 0;
+          this.powers.activate(kind.id, bonus);
+          const powerMessage = kind.id === "precision" ? "FREIO PRECISO!" : kind.id === "lucky-star" ? "ESTRELA DA SORTE!" : kind.id === "ghost" ? "FANTASMA!" : kind.name;
+          this.feedback(this.power.x, this.power.y, powerMessage, kind.color);
         }
         this.run.powerups++;
         if (kind.id === "magnet") this.run.magnet++;
@@ -958,7 +1003,9 @@ export class GameScene extends Phaser.Scene {
             ),
       );
       image.setAlpha(
-        this.powers.invincible > 0
+        this.powers.ghost > 0 || this.powers.ghostGrace > 0
+          ? 0.42 + Math.sin(this.run.elapsed * 18) * 0.12
+          : this.powers.invincible > 0
           ? 0.55 + Math.sin(this.run.elapsed * 20) * 0.25
           : 1,
       );
@@ -985,6 +1032,8 @@ export class GameScene extends Phaser.Scene {
       this.ring
         .lineStyle(4, 0x53bdef, 0.8)
         .strokeCircle(this.snake.x, this.snake.y, 27);
+    if (this.powers.ghost > 0 || this.powers.ghostGrace > 0)
+      this.ring.lineStyle(4, 0x8be9ff, 0.75).strokeCircle(this.snake.x, this.snake.y, 32);
     if (this.powers.magnet > 0)
       this.ring
         .lineStyle(2, 0xdc6c98, 0.3)
@@ -1030,7 +1079,12 @@ export class GameScene extends Phaser.Scene {
     audio.play("error");
     haptic("error");
     creditCoins(save.profile, this.run);
-    reportRun(save.profile, this.run);
+    const completedMissions = reportRun(save.profile, this.run);
+    void save.save();
+    for (const id of completedMissions) {
+      const mission = missionsForProfile(save.profile.dailyMissionIds).find((entry) => entry.id === id);
+      if (mission) this.ui.toast(`Missão concluída: ${mission.title} · +${mission.reward} moedas e +${B.xp.perMission} XP`);
+    }
     void save.save();
     this.renderSnake();
     this.scene.launch("GameOver", { run: this.run });
@@ -1106,6 +1160,17 @@ export class GameScene extends Phaser.Scene {
         },
       },
       {
+        label: save.profile.settings.muted ? "Ativar som" : "Desativar som",
+        run: () => {
+          this.overlay?.destroy();
+          this.overlay = undefined;
+          save.profile.settings.muted = !save.profile.settings.muted;
+          audio.sync();
+          void save.save();
+          this.showPauseModal();
+        },
+      },
+      {
         label: "Reiniciar",
         run: () => {
           this.finalize();
@@ -1124,6 +1189,7 @@ export class GameScene extends Phaser.Scene {
   private continue() {
     this.overlay?.destroy();
     this.overlay = undefined;
+    this.bossIntroOpen = false;
     this.resetControls();
     this.accumulator = 0;
     this.halted = false;
@@ -1357,7 +1423,24 @@ export class GameScene extends Phaser.Scene {
         : boss.definition.id === "candy-monster"
           ? boss.state === "ATTACK_MODE" || boss.state === "SUGAR_RUSH"
           : boss.state === "EXPOSED";
-      if (aura.active && vulnerable && aura.consumeHit(boss.definition.id)) {
+      const kingSnake = boss.definition.id === "king-snake";
+      const kingChargeContact = kingSnake && boss.state === "CHARGE";
+      if (kingChargeContact && this.bossCollisionGrace <= 0) {
+        if (aura.active) {
+          aura.consumeProtectionHit(boss.definition.id);
+          this.bossCollisionGrace = cfg.hitInvulnerability;
+          this.feedback(this.snake.x, this.snake.y, "AURA!", 0xffb52e, true);
+          audio.play("shield_break"); haptic("power");
+        } else if (this.powers.invincible <= 0) {
+          if (!this.loseLife()) {
+            this.die();
+            return;
+          }
+          this.bossCollisionGrace = cfg.hitInvulnerability;
+        }
+      } else if (kingSnake && boss.state === "STUNNED" && !aura.active) {
+        // The King Snake is harmless while stunned, but cannot be damaged without aura.
+      } else if (aura.active && vulnerable && aura.consumeHit(boss.definition.id)) {
         if (boss.definition.id === "kraken") { boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.5; }
         this.damageBoss();
         if (!this.boss) return;
@@ -1366,8 +1449,8 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: boss.image, x: boss.image.x + dx / d * 24, y: boss.image.y + dy / d * 24, duration: 130, yoyo: true, ease: "Sine.easeOut" });
         this.particles.explode(14, boss.image.x, boss.image.y);
         audio.play("power"); haptic("power");
-        if (boss.definition.id === "candy-monster" && aura.remainingHits > 0) this.bossFight.combat.activateAttackAura({ duration: cfg.auraDuration, maxHits: aura.remainingHits, source: "sugar_shield", bossId: boss.definition.id });
-      } else if (!aura.active && boss.definition.id !== "kraken" && this.bossCollisionGrace <= 0) {
+        if (boss.definition.id === "candy-monster" && aura.remainingHits > 0) this.bossFight.combat.activateAttackAura({ maxHits: aura.remainingHits, source: "sugar_shield", bossId: boss.definition.id });
+      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && this.bossCollisionGrace <= 0) {
         const hadShield = this.powers.shield;
         if (!this.powers.absorb()) {
           this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
@@ -1392,7 +1475,7 @@ export class GameScene extends Phaser.Scene {
     } else this.bossAuraGraphics?.clear();
     if (this.bossHud) {
       const ready = this.bossFight.combat.attackCharge >= 100 ? " · ATTACK READY!" : "";
-      const aura = this.bossFight.combat.active ? ` · AURA ${Math.ceil(this.bossFight.combat.remainingDuration)}s/${this.bossFight.combat.remainingHits} hits` : "";
+      const aura = this.bossFight.combat.active ? ` · AURA ∞/${this.bossFight.combat.remainingHits} hits` : "";
       this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1} · ATTACK ${Math.floor(this.bossFight.combat.attackCharge)}/100${ready}${aura}`;
     }
   }
@@ -1433,7 +1516,7 @@ export class GameScene extends Phaser.Scene {
       } else {
         const source = pickup.kind;
         this.bossFight.combat.addCharge(pickup.kind === "crown-orb" ? 100 : pickup.kind === "attack-pearl" ? 50 : 25);
-        const activated = this.bossFight.combat.activateAttackAura({ duration: boss.definition.combat.auraDuration, maxHits: pickup.kind === "sugar-shield" ? 2 : boss.definition.combat.auraMaxHits, source, bossId: boss.definition.id });
+        const activated = this.bossFight.combat.activateAttackAura({ maxHits: pickup.kind === "sugar-shield" ? 2 : boss.definition.combat.auraMaxHits, source, bossId: boss.definition.id });
         if (activated) {
           if (pickup.kind === "sugar-shield") boss.state = "ATTACK_MODE";
           audio.play("power"); haptic("power");
@@ -1470,7 +1553,7 @@ export class GameScene extends Phaser.Scene {
         for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
         audio.play("error"); haptic("power"); this.particles.explode(18, boss.image.x, boss.image.y);
         this.spawnBossPickup("crown-orb", 100, "♛", 0xffb52e);
-        boss.state = "RECOVER"; boss.stateTimer = 0.5; for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = []; }
+      }
     } else if (boss.state === "STUNNED") {
       boss.image.rotation = Math.sin(this.run.elapsed * 18) * 0.12;
       if (boss.stateTimer <= 0) {
@@ -1581,19 +1664,26 @@ export class GameScene extends Phaser.Scene {
     this.bossHud!.hidden = true;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = false;
     const first = !save.profile.bossesDefeated.includes(defeated.id);
-    const newlyUnlocked = first ? reconcileWorldUnlocks(save.profile) : [];
     if (first) {
       save.profile.bossesDefeated.push(defeated.id);
-      if (newlyUnlocked.length) this.ui.toast(`Mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}.`);
-      if (defeated.petReward) save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, defeated.petReward])];
+      const petRewards = [defeated.petReward, ...(defeated.additionalPetRewards ?? [])].filter((id): id is string => Boolean(id));
+      save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, ...petRewards])];
       const skinRewards = getBossSkinRewards(defeated.id);
       save.profile.unlockedSkins = [...new Set([...save.profile.unlockedSkins, ...skinRewards.map((skin) => skin.id)])];
       save.profile.totalCoins += defeated.rewardCoins;
       addXP(save.profile, defeated.rewardXP);
     }
+    const newlyUnlocked = first ? reconcileWorldUnlocks(save.profile) : [];
+    const nextWorld = worlds.find((world) => world.requiredBossId === defeated.id && world.isImplemented);
+    const portalGuidance = nextWorld
+      ? save.profile.worldsUnlocked.includes(nextWorld.id)
+        ? `🌀 Portal para ${nextWorld.name} liberado! Ele está na borda da arena. Leve a cobrinha até a passagem e atravesse para viajar.`
+        : `🔒 Você derrotou o chefe, mas ainda precisa alcançar o nível ${nextWorld.requiredLevel} para liberar o portal de ${nextWorld.name}. Continue jogando para ganhar XP; ao atingir o nível, a passagem aparecerá na borda da arena.`
+      : "";
     this.run.bossDefeats++;
     this.run.bossCoins += 3;
-    if (first && defeated.petReward) {
+    const petRewards = [defeated.petReward, ...(defeated.additionalPetRewards ?? [])].filter((id): id is string => Boolean(id));
+    if (first && petRewards.length) {
       awardAchievement(save.profile, "boss-hunter");
       awardAchievement(save.profile, "pet-collector");
     } else if (first) {
@@ -1601,11 +1691,9 @@ export class GameScene extends Phaser.Scene {
     }
     const rewardedSkins = first ? getBossSkinRewards(defeated.id) : [];
     const rewardLines = [
-      first && newlyUnlocked.length
-        ? `🌍 Novo mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}`
-        : "",
-      first && defeated.petReward
-        ? `🐾 ${pets.find((pet) => pet.id === defeated.petReward)?.name ?? defeated.petReward} já está disponível na loja de mascotes!`
+      portalGuidance,
+      first && petRewards.length
+        ? `🐾 ${petRewards.map((id) => pets.find((pet) => pet.id === id)?.name ?? id).join(" e ")} já está disponível na loja de mascotes!`
         : "",
       first && rewardedSkins.length
         ? `✨ Skin${rewardedSkins.length > 1 ? "s" : ""} desbloqueada${rewardedSkins.length > 1 ? "s" : ""}: ${rewardedSkins.map((skin) => skin.name).join(", ")}`
@@ -1613,6 +1701,7 @@ export class GameScene extends Phaser.Scene {
       first ? `🪙 +${defeated.rewardCoins} moedas · +${defeated.rewardXP} XP` : "",
       "+3 Boss Coins",
     ].filter(Boolean);
+    if (first && newlyUnlocked.length) this.ui.toast(`Mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}.`);
     this.halted = true;
     this.pauseKind = "pause";
     this.resetControls();
@@ -1700,7 +1789,7 @@ export class GameScene extends Phaser.Scene {
   }
   finalize() {
     if (this.run.finished) return;
-    reportRun(save.profile, this.run, true);
+    const completedMissions = reportRun(save.profile, this.run, true);
     finishRun(save.profile, this.run);
     if (!this.masteryCredited) {
       this.masteryCredited = true;
@@ -1711,6 +1800,10 @@ export class GameScene extends Phaser.Scene {
         save.profile.totalCoins += reward;
         this.ui.toast(`Domínio ${mastery} com ${save.profile.selectedSkin}: +${reward} moedas virtuais.`);
       }
+    }
+    for (const id of completedMissions) {
+      const mission = missionsForProfile(save.profile.dailyMissionIds).find((entry) => entry.id === id);
+      if (mission) this.ui.toast(`Missão concluída: ${mission.title} · +${mission.reward} moedas e +${B.xp.perMission} XP`);
     }
     awardAchievement(save.profile, "first-run");
     analytics.track("gameEnded", { score: this.run.score, coins: this.run.matchCoins });

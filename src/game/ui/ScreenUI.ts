@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { audio } from "../services/AudioService";
 import { save } from "../systems/SaveSystem";
+import { t } from "../services/LocalizationService";
 export class ScreenUI {
   readonly root: HTMLElement;
   private timers: number[] = [];
@@ -93,4 +94,4 @@ export function textureURL(scene: Phaser.Scene, id: string) {
 export const action = (id: string, label: string, extra = "") =>
   `<button id="${id}" class="action ${extra}">${label}</button>`;
 export const header = (title: string, kicker: string) =>
-  `<header class="screen-header"><div><span class="kicker">${kicker}</span><h1>${title}</h1></div>${action("back", "← Voltar", "secondary small")}</header>`;
+  `<header class="screen-header"><div><span class="kicker">${kicker}</span><h1>${title}</h1></div>${action("back", t("back"), "secondary small")}</header>`;

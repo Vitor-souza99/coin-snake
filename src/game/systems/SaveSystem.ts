@@ -1,7 +1,7 @@
 import { Preferences } from "@capacitor/preferences";
-import { B } from "../data/balance";
+import { levelForXP } from "./ExperienceSystem";
 import { getBossSkinRewards, skins } from "../data/skins";
-import { missions } from "../data/missions";
+import { dailyMissions, missions } from "../data/missions";
 import { bosses } from "../data/bosses";
 import { earnablePetIds } from "../data/pets";
 import type { PlayerProfile } from "../types/game";
@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 5,
+    saveVersion: 8,
     totalCoins: 0,
     bestScore: 0,
     selectedSkin: "classic",
@@ -35,6 +35,8 @@ export function defaults(): PlayerProfile {
       sfxVolume: 0.35,
       reducedMotion: false,
       cameraMode: "standard",
+      orientation: "auto",
+      language: "auto",
     },
     firstLaunch: true,
     tutorialCompleted: false,
@@ -52,9 +54,11 @@ export function defaults(): PlayerProfile {
       portalsUsed: 0,
     },
     missionDate: "",
+    dailyMissionIds: [],
     missions: {},
     unlockedPets: [],
     selectedPet: null,
+    rewardedShopDate: "",
     bossesDefeated: [],
     achievements: [],
     mastery: {},
@@ -65,11 +69,11 @@ export function defaults(): PlayerProfile {
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (r.saveVersion !== 1 && r.saveVersion !== 2 && r.saveVersion !== 3 && r.saveVersion !== 4 && r.saveVersion !== 5) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bestScore = num(r.bestScore);
   p.xp = num(r.xp);
-  p.playerLevel = 1 + Math.floor(p.xp / B.xp.perLevel);
+  p.playerLevel = levelForXP(p.xp);
   const valid = new Set<string>(skins.map((s) => s.id));
   p.unlockedSkins = [
     ...new Set([
@@ -110,6 +114,8 @@ export function validateSave(input: unknown): PlayerProfile {
   p.settings.leftHanded = bool(s.leftHanded, false);
   p.settings.reducedMotion = bool(s.reducedMotion, false);
   p.settings.cameraMode = s.cameraMode === "panoramic" ? "panoramic" : "standard";
+  p.settings.orientation = s.orientation === "portrait" || s.orientation === "landscape" ? s.orientation : "auto";
+  p.settings.language = s.language === "pt-BR" || s.language === "en" ? s.language : "auto";
   const volume = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v)
       ? Math.max(0, Math.min(1, v))
@@ -130,12 +136,18 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = r.saveVersion === 3 || r.saveVersion === 4 || r.saveVersion === 5;
+  const isV3 = [3, 4, 5, 6, 7].includes(r.saveVersion as number);
   const validPetIds = new Set(earnablePetIds);
-  p.unlockedPets = isV3 && Array.isArray(r.unlockedPets) ? [...new Set(r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)))] : [];
-  p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
+  const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : [];
+  p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";
   const bossIds = new Set(bosses.map((boss) => boss.id));
   p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => typeof id === "string" && bossIds.has(id)))] : [];
+  const bossWins = new Set(p.bossesDefeated);
+  p.unlockedPets = [...new Set([...savedPets, ...earnablePetIds.filter((id) => {
+    const boss = bosses.find((entry) => entry.petReward === id || entry.additionalPetRewards?.includes(id));
+    return boss ? bossWins.has(boss.id) : false;
+  })])];
+  p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
   p.unlockedSkins = [...new Set([...p.unlockedSkins, ...p.bossesDefeated.flatMap((bossId) => getBossSkinRewards(bossId).map((skin) => skin.id))])];
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
@@ -163,12 +175,30 @@ export function validateSave(input: unknown): PlayerProfile {
     /^\d{4}-\d{2}-\d{2}$/.test(r.missionDate)
       ? r.missionDate
       : "";
+  const validMissionIds = new Set(missions.map((mission) => mission.id));
+  const savedMissionIds = Array.isArray(r.dailyMissionIds)
+    ? r.dailyMissionIds.filter((id): id is string => typeof id === "string" && validMissionIds.has(id))
+    : [];
+  const uniqueSavedMissionIds = [...new Set(savedMissionIds)];
+  const hasValidDailySelection = uniqueSavedMissionIds.length === 3
+    && new Set(uniqueSavedMissionIds.map((id) => missions.find((mission) => mission.id === id)?.difficulty)).size === 3;
+  const legacyFixedSet = ["collector", "scorer", "explorer"];
+  p.dailyMissionIds = hasValidDailySelection
+    ? uniqueSavedMissionIds
+    : r.saveVersion !== 8
+      ? legacyFixedSet
+      : p.missionDate
+        ? dailyMissions(p.missionDate).map((mission) => mission.id)
+        : legacyFixedSet;
   const progress = record(r.missions);
+  const selectedSet = new Set(p.dailyMissionIds);
+  const legacySet = new Set(legacyFixedSet);
   for (const m of missions) {
     const entry = record(progress[m.id]);
+    const preserveLegacy = !hasValidDailySelection && r.saveVersion !== 8 && legacySet.has(m.id);
     p.missions[m.id] = {
-      progress: Math.min(m.target, num(entry.progress)),
-      claimed: bool(entry.claimed, false) && num(entry.progress) >= m.target,
+      progress: selectedSet.has(m.id) || preserveLegacy ? Math.min(m.target, num(entry.progress)) : 0,
+      claimed: (selectedSet.has(m.id) || preserveLegacy) && bool(entry.claimed, false) && num(entry.progress) >= m.target,
     };
   }
   return p;
@@ -192,7 +222,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>5){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>8){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

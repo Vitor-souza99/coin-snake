@@ -6,6 +6,8 @@ import {
 } from "../src/game/systems/SaveSystem";
 import {
   buySkin,
+  claimShopReward,
+  SHOP_REWARDED_COINS,
   creditCoins,
   finishRun,
 } from "../src/game/systems/EconomySystem";
@@ -13,7 +15,8 @@ import { ComboSystem } from "../src/game/systems/ComboSystem";
 import {
   ensureDay,
   reportRun,
-  claimMission,
+  startMissionRun,
+  updateMissionDay,
 } from "../src/game/systems/MissionSystem";
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
 import { difficulty } from "../src/game/systems/DifficultySystem";
@@ -21,8 +24,12 @@ import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, oceanWorldConfig } from "../src/game/data/oceanWorld";
 import { B } from "../src/game/data/balance";
+import { dailyMissions, missions } from "../src/game/data/missions";
+import { addXP } from "../src/game/systems/EconomySystem";
+import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
+import { BossCombatSystem } from "../src/game/systems/BossCombatSystem";
 import { eligiblePortalWorlds, reconcileWorldUnlocks, traversableWorlds, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
 import { worldById, worlds } from "../src/game/data/worlds";
 import { bosses } from "../src/game/data/bosses";
@@ -37,6 +44,40 @@ import {
   localDay,
 } from "../src/game/utils/math";
 describe("economy", () => {
+  it("uses the progressive XP curve and derives progress from total XP", () => {
+    expect([xpForNextLevel(1), xpForNextLevel(2), xpForNextLevel(3), xpForNextLevel(4)]).toEqual([175, 250, 325, 400]);
+    expect(totalXPForLevel(5)).toBe(1150);
+    expect(levelForXP(174)).toBe(1);
+    expect(levelForXP(175)).toBe(2);
+    expect(levelForXP(1149)).toBe(4);
+    expect(levelForXP(1150)).toBe(5);
+    expect(xpProgressForLevel(500)).toEqual({ current: 75, required: 325 });
+  });
+  it("preserves accumulated XP while advancing levels", () => {
+    const profile = defaults();
+    addXP(profile, 1149);
+    expect(profile.xp).toBe(1149);
+    expect(profile.playerLevel).toBe(4);
+    addXP(profile, 1);
+    expect(profile.xp).toBe(1150);
+    expect(profile.playerLevel).toBe(5);
+  });
+  it("buys each new coin skin once and keeps existing balances/prices unchanged", () => {
+    const profile = defaults();
+    profile.totalCoins = 16_000;
+    for (const id of ["sakura", "storm", "magma", "prism"]) expect(buySkin(profile, id)).toBe(true);
+    expect(profile.totalCoins).toBe(0);
+    expect(profile.unlockedSkins).toEqual(expect.arrayContaining(["sakura", "storm", "magma", "prism"]));
+    expect(skins.find((skin) => skin.id === "cat")?.coinPrice).toBe(500);
+  });
+  it("grants the shop rewarded-ad coins once per local day", () => {
+    const profile = defaults();
+    expect(claimShopReward(profile, "2026-10-08")).toBe(true);
+    expect(profile.totalCoins).toBe(SHOP_REWARDED_COINS);
+    expect(claimShopReward(profile, "2026-10-08")).toBe(false);
+    expect(profile.totalCoins).toBe(SHOP_REWARDED_COINS);
+    expect(claimShopReward(profile, "2026-10-09")).toBe(true);
+  });
   it("rejects insufficient funds and unknown skins", () => {
     const p = defaults();
     expect(buySkin(p, "cat")).toBe(false);
@@ -91,6 +132,59 @@ describe("economy", () => {
     expect(p.totalCoins).toBe(17);
   });
 });
+describe("boss entry hints", () => {
+  it("provides an actionable hint for every implemented boss", () => {
+    expect(bosses.length).toBeGreaterThan(0);
+    for (const boss of bosses) {
+      expect(boss.entryHint.trim().length).toBeGreaterThan(20);
+    }
+  });
+  it("keeps the first boss accessible to beginners", () => {
+    const king = bosses.find((boss) => boss.id === "king-snake")!;
+    expect(king.maxHealth).toBe(6);
+    expect(king.movementSpeed).toBe(50);
+    expect(king.combat.attackCooldown).toBe(6);
+    expect(king.combat.telegraphDuration).toBe(1.3);
+    expect(king.combat.stunDuration).toBe(3.5);
+  });
+});
+describe("boss attack aura", () => {
+  it("stays active without a time limit until its allowed hit is consumed", () => {
+    const combat = new BossCombatSystem();
+    combat.addCharge(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+
+    combat.update(60 * 60);
+    expect(combat.active).toBe(true);
+    expect(combat.consumeHit("king-snake")).toBe(true);
+    expect(combat.active).toBe(false);
+  });
+
+  it("consumes the King Snake aura as protection without applying hit cooldown", () => {
+    const combat = new BossCombatSystem();
+    combat.addCharge(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+
+    expect(combat.consumeProtectionHit("king-snake")).toBe(true);
+    expect(combat.active).toBe(false);
+    expect(combat.remainingHits).toBe(0);
+    expect(combat.hitInvulnerability).toBe(0);
+    expect(combat.consumeProtectionHit("king-snake")).toBe(false);
+  });
+
+  it("keeps hit limits and boss matching while aura has no timer", () => {
+    const combat = new BossCombatSystem();
+    combat.addCharge(100);
+    expect(combat.activateAttackAura({ maxHits: 2, source: "sugar_shield", bossId: "candy-monster" })).toBe(true);
+
+    combat.update(120);
+    expect(combat.consumeHit("king-snake")).toBe(false);
+    expect(combat.consumeHit("candy-monster")).toBe(true);
+    combat.update(0.81);
+    expect(combat.consumeHit("candy-monster")).toBe(true);
+    expect(combat.active).toBe(false);
+  });
+});
 describe("combo and balance", () => {
   it("starts slow and increases speed gradually with growth, with a firm cap", () => {
     const start = difficulty(0, 0, B.snake.initial).speed;
@@ -103,12 +197,19 @@ describe("combo and balance", () => {
     expect(grown - start).toBeLessThan(50);
     expect(capped).toBe(B.snake.maxSpeed);
   });
+  it("keeps the initial speed approachable while limiting growth and level acceleration", () => {
+    const start = difficulty(0, 0, B.snake.initial).speed;
+    const afterOneLevel = difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial).speed;
+    expect(start).toBe(160);
+    expect(afterOneLevel).toBe(165);
+    expect(difficulty(0, 0, B.snake.initial + 20).speed).toBe(180);
+  });
   it("uses the increased base speed and raises the cap through growth and levels", () => {
     const start = difficulty(0, 0, B.snake.initial);
     const levelUp = difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial);
     const grown = difficulty(0, 0, B.snake.initial + 10);
 
-    expect(start.speed).toBe(180);
+    expect(start.speed).toBe(160);
     expect(levelUp.speed).toBeGreaterThan(start.speed);
     expect(grown.speed).toBeGreaterThan(start.speed);
     expect(B.snake.maxSpeed).toBe(300);
@@ -212,10 +313,32 @@ describe("roadmap progression systems", () => {
     expect(bosses.find((boss) => boss.id === "kraken")?.petReward).toBe("baby-octopus");
     expect(pets.find((pet) => pet.id === "baby-octopus")?.rarity).toBe("EPIC");
   });
+  it("new boss pets grant their advertised power-up bonuses", () => {
+    const powers = new PowerUpSystem();
+    powers.activate("shield", 0.05);
+    expect(powers.shield).toBe(true);
+    powers.update(6.1);
+    expect(powers.shield).toBe(true);
+    powers.update(60);
+    expect(powers.shield).toBe(true);
+    expect(powers.absorb()).toBe(true);
+    expect(powers.shield).toBe(false);
+    expect(powers.invincible).toBe(B.power.shieldGrace);
+    powers.activate("turbo", 0.05);
+    expect(powers.turbo).toBeCloseTo(B.power.turboDuration * 1.05);
+    expect(bosses.map((boss) => boss.additionalPetRewards)).toEqual([["firefly"], ["snow-pup"], ["tiny-dragon"]]);
+  });
   it("save validation accepts earnable pets but never grants the premium pet", () => {
     const profile = validateSave({ saveVersion: 5, unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
     expect(profile.unlockedPets).toEqual(earnablePetIds);
     expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
+  });
+  it("migrates shop reward dates and awards new pets for prior boss victories", () => {
+    const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
+    expect(profile.saveVersion).toBe(8);
+    expect(profile.rewardedShopDate).toBe("2026-10-08");
+    expect(profile.unlockedPets).toEqual(expect.arrayContaining(["bee", "firefly"]));
+    expect(profile.unlockedPets).not.toContain("snow-pup");
   });
   it("awards known achievements once and rejects unknown IDs", () => {
     const profile = defaults(), id = achievementDefinitions[0].id;
@@ -289,7 +412,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(5);
+    expect(migrated.saveVersion).toBe(8);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.selectedSkin).toBe("cat");
     expect(migrated.premiumEntitlements).toEqual([]);
@@ -308,6 +431,7 @@ describe("save validation and I/O", () => {
     });
     expect(p.totalCoins).toBe(0);
     expect(p.playerLevel).toBe(3);
+    expect(p.xp).toBe(600);
     expect(p.selectedSkin).toBe("classic");
     expect(p.unlockedSkins).toEqual(["classic", "cat"]);
     expect(p.settings.volume).toBe(1);
@@ -317,14 +441,14 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(5);
+    expect(migrated.saveVersion).toBe(8);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(5);
+    expect(migrated.saveVersion).toBe(8);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -360,38 +484,98 @@ describe("save validation and I/O", () => {
   });
 });
 describe("missions", () => {
+  it("selects the same three varied missions for a day and a different set on another day", () => {
+    const first = dailyMissions("2026-10-08"), repeated = dailyMissions("2026-10-08"), next = dailyMissions("2026-10-09");
+    expect(first.map((mission) => mission.id)).toEqual(repeated.map((mission) => mission.id));
+    expect(new Set(first.map((mission) => mission.difficulty)).size).toBe(3);
+    expect(next.map((mission) => mission.id)).not.toEqual(first.map((mission) => mission.id));
+    expect(first).toHaveLength(3);
+  });
+  it("migrates fixed-mission saves without losing their current progress", () => {
+    const profile = validateSave({ saveVersion: 7, missionDate: "2026-10-08", missions: { collector: { progress: 70, claimed: false }, scorer: { progress: 800, claimed: false } } });
+    expect(profile.dailyMissionIds).toEqual(["collector", "scorer", "explorer"]);
+    expect(profile.missions.collector.progress).toBe(70);
+    expect(profile.missions.scorer.progress).toBe(800);
+  });
+  it("migrates legacy claimed missions without paying them twice", () => {
+    const profile = validateSave({ saveVersion: 7, missionDate: "2026-10-08", missions: { collector: { progress: 100, claimed: true } } });
+    const run = newRun();
+    startMissionRun(profile, run, "2026-10-08");
+    run.matchCoins = 150;
+    expect(reportRun(profile, run)).toEqual([]);
+    expect(profile.totalCoins).toBe(0);
+    expect(profile.xp).toBe(0);
+  });
   it("accumulates delta across revives and rewards once", () => {
-    const p = defaults(),
-      r = newRun();
+    const p = defaults(), r = newRun();
+    ensureDay(p, "2026-10-08");
+    p.dailyMissionIds = ["collector", "scorer", "explorer"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    startMissionRun(p, r, "2026-10-08");
     r.matchCoins = 60;
-    reportRun(p, r);
-    reportRun(p, r);
+    expect(reportRun(p, r)).toEqual([]);
+    expect(reportRun(p, r)).toEqual([]);
     expect(p.missions.collector.progress).toBe(60);
     r.matchCoins = 110;
-    reportRun(p, r);
-    expect(claimMission(p, "collector")).toBe(true);
-    expect(claimMission(p, "collector")).toBe(false);
+    expect(reportRun(p, r)).toEqual(["collector"]);
+    expect(reportRun(p, r)).toEqual([]);
     expect(p.totalCoins).toBe(100);
     expect(p.xp).toBe(75);
   });
   it("does not add scores across different runs", () => {
-    const p = defaults(),
-      a = newRun(),
-      b = newRun();
+    const p = defaults(), a = newRun(), b = newRun();
+    ensureDay(p, "2026-10-08");
+    p.dailyMissionIds = ["collector", "scorer", "explorer"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    startMissionRun(p, a, "2026-10-08");
+    startMissionRun(p, b, "2026-10-08");
     a.score = 1200;
     b.score = 1100;
     reportRun(p, a);
     reportRun(p, b);
     expect(p.missions.scorer.progress).toBe(1200);
-    expect(claimMission(p, "scorer")).toBe(false);
+    expect(p.totalCoins).toBe(0);
   });
-  it("resets progress and claims on local day rollover", () => {
+  it("keeps a run tied to its start day and starts fresh on the next run", () => {
     const p = defaults();
     ensureDay(p, "2026-10-05");
-    p.missions.collector = { progress: 100, claimed: true };
-    ensureDay(p, "2026-10-06");
-    expect(p.missions.collector).toEqual({ progress: 0, claimed: false });
+    p.dailyMissionIds = ["collector", "scorer", "explorer"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    const run = newRun();
+    startMissionRun(p, run, "2026-10-05");
+    run.matchCoins = 60;
+    reportRun(p, run);
+    updateMissionDay(p, "2026-10-06");
+    expect(p.missions["daily-player"]).toEqual({ progress: 0, claimed: false });
+    run.matchCoins = 100;
+    expect(reportRun(p, run)).toEqual([]);
+    expect(p.missions["daily-player"].progress).toBe(0);
+    const nextRun = newRun();
+    startMissionRun(p, nextRun, "2026-10-06");
+    expect(nextRun.missionDate).toBe("2026-10-06");
     expect(localDay(new Date(2026, 9, 6))).toBe("2026-10-06");
+  });
+  it("rejects invalid or duplicate mission IDs in a version 8 save", () => {
+    const profile = validateSave({ saveVersion: 8, missionDate: "2026-10-08", dailyMissionIds: ["collector", "collector", "hacked"], missions: { collector: { progress: 90, claimed: false } } });
+    expect(profile.dailyMissionIds).toHaveLength(3);
+    expect(profile.dailyMissionIds).not.toContain("hacked");
+    expect(profile.missions.collector.progress).toBe(90);
+    expect(missions.length).toBeGreaterThan(profile.dailyMissionIds.length);
+  });
+  it("counts finalized runs once toward daily play missions", () => {
+    const p = defaults();
+    ensureDay(p, "2026-10-08");
+    p.dailyMissionIds = ["daily-player", "explorer", "scorer"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    const firstRun = newRun();
+    startMissionRun(p, firstRun, "2026-10-08");
+    expect(reportRun(p, firstRun, true)).toEqual([]);
+    expect(reportRun(p, firstRun, true)).toEqual([]);
+    expect(p.missions["daily-player"].progress).toBe(1);
+    const secondRun = newRun();
+    startMissionRun(p, secondRun, "2026-10-08");
+    expect(reportRun(p, secondRun, true)).toEqual(["daily-player"]);
+    expect(p.totalCoins).toBe(100);
   });
 });
 describe("snake and powers", () => {
@@ -495,6 +679,39 @@ describe("snake and powers", () => {
     expect(p.magnet).toBe(3);
     p.update(4);
     expect(p.magnet).toBe(0);
+  });
+  it("activates and expires the three new timed power-ups", () => {
+    const p = new PowerUpSystem();
+    p.activate("precision");
+    p.activate("lucky-star");
+    p.activate("ghost");
+    expect([p.precision, p.luckyStar, p.ghost]).toEqual([4, 8, 3]);
+    p.update(3);
+    expect(p.ghost).toBe(0);
+    expect([p.precision, p.luckyStar, p.ghost]).toEqual([1, 5, 0]);
+    expect(p.ghostGrace).toBeLessThanOrEqual(B.power.ghostClearanceGrace);
+    p.update(1);
+    expect(p.precision).toBe(0);
+    expect(p.luckyStar).toBe(4);
+  });
+  it("keeps ghost collision immunity only until clear or the 0.5-second cap", () => {
+    const p = new PowerUpSystem();
+    p.activate("ghost");
+    p.update(3);
+    expect(p.updateGhost(1 / 120, true)).toBe(true);
+    expect(p.updateGhost(0.49, true)).toBe(true);
+    expect(p.updateGhost(0.02, true)).toBe(false);
+    p.activate("ghost");
+    p.update(3);
+    expect(p.updateGhost(1 / 120, false)).toBe(false);
+    expect(p.ghostGrace).toBe(0);
+  });
+  it("increases the relative weights of valuable coins during lucky star", () => {
+    const normal = B.coins.reduce((sum, coin) => sum + coin.weight, 0);
+    const lucky = [65, 24, 9, 2, 0.1].reduce((sum, weight) => sum + weight, 0);
+    expect(1 - 75 / normal).toBeLessThan(1 - 65 / lucky);
+    expect(1 - 75 / normal).toBeCloseTo(0.251, 2);
+    expect(1 - 65 / lucky).toBeCloseTo(0.351, 2);
   });
   it("poison slows movement temporarily and refreshes instead of stacking", () => {
     const p = new PowerUpSystem();

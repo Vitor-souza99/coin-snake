@@ -26,7 +26,7 @@ export class GameOverScene extends Phaser.Scene {
         p.missions[m.id]?.progress >= m.target && !p.missions[m.id]?.claimed,
     ).length;
     this.ui.html(
-      `<div class="result-layout"><div class="result-hero"><span class="kicker">Cada volta conta</span><h1>${r.rushMode ? "Coin Rush concluído" : "Fim de jogo"}</h1><div class="big-score">${r.score}</div><span class="pill">Pontos · recorde ${p.bestScore}</span><p class="muted">${Math.floor(r.elapsed)}s de aventura · combo x${r.maxCombo}</p></div><div class="result-details"><div class="card"><b>◉ ${r.matchCoins} moedas coletadas</b><p class="muted">+${B.xp.perRun + Math.floor(r.score / B.xp.scoreDivisor)} XP ao finalizar<br>${r.turboUses} acelerações · ${r.shrinkFruits} frutas</p><p>${ready ? ready + " missão(ões) pronta(s) para resgate" : "Progresso nas missões atualizado"}</p></div>${!r.revived && ads.isRewardedAdReady() ? action("revive", "Reviver · simulação DEV", "gold") : '<p class="footnote">' + (r.revived ? "Revive já usado nesta partida." : "Revive disponível após integrar anúncios.") + "</p>"}${action("again", "Jogar novamente")}${action("menu", "Voltar ao menu", "secondary")}<p class="footnote" id="save-status">Salvando moedas…</p></div></div>`,
+      `<div class="result-layout"><div class="result-hero"><span class="kicker">Cada volta conta</span><h1>${r.rushMode ? "Coin Rush concluído" : "Fim de jogo"}</h1><div class="big-score">${r.score}</div><span class="pill">Pontos · recorde ${p.bestScore}</span><p class="muted">${Math.floor(r.elapsed)}s de aventura · combo x${r.maxCombo}</p></div><div class="result-details"><div class="card"><b>◉ ${r.matchCoins} moedas coletadas</b><p class="muted">+${B.xp.perRun + Math.floor(r.score / B.xp.scoreDivisor)} XP ao finalizar<br>${r.turboUses} acelerações · ${r.shrinkFruits} frutas</p><p>${ready ? ready + " missão(ões) pronta(s) para resgate" : "Progresso nas missões atualizado"}</p></div>${!r.revived && ads.isRewardedAdReady() ? action("revive", "🎬 Assistir anúncio e reviver · 1 vez por partida", "gold") : '<p class="footnote">' + (r.revived ? "Revive já usado nesta partida." : "Anúncio premiado indisponível neste dispositivo.") + "</p>"}${action("again", "Jogar novamente")}${action("menu", "Voltar ao menu", "secondary")}<p class="footnote" id="save-status">Salvando moedas…</p></div></div>`,
     );
     this.ui.on("#again", () => this.leave("Game"));
     this.ui.on("#menu", () => this.leave("Menu"));
@@ -61,7 +61,7 @@ export class GameOverScene extends Phaser.Scene {
     } else {
       this.busy = false;
       this.ui.get<HTMLButtonElement>("#revive").disabled = false;
-      this.ui.toast("Simulação indisponível.");
+      this.ui.toast("Anúncio não disponível. Nenhuma vida foi concedida.");
     }
   }
 }

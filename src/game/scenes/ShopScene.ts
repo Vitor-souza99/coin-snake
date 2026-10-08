@@ -3,7 +3,9 @@ import { skins, skinRarities, skinUnlockStatus, type SkinRarity } from "../data/
 import { pets } from "../data/pets";
 import { worlds } from "../data/worlds";
 import { save } from "../systems/SaveSystem";
-import { buySkin } from "../systems/EconomySystem";
+import { buySkin, claimShopReward, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
+import { ads } from "../services/AdsService";
+import { localDay } from "../utils/math";
 import { reconcileWorldUnlocks, selectWorld, worldRequirementText, worldStatus } from "../systems/WorldSystem";
 import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
@@ -33,7 +35,8 @@ export class ShopScene extends Phaser.Scene {
           ? profile.unlockedSkins.includes(skin.id) || skinUnlockStatus(skin, profile).unlocked
           : !profile.unlockedSkins.includes(skin.id) && !skinUnlockStatus(skin, profile).unlocked)) &&
         (rarity === "ALL" || skin.rarity === rarity));
-      return `<div class="skin-filters" role="group" aria-label="Filtrar skins">
+      const rewardAvailable = profile.rewardedShopDate !== localDay();
+      return `<article class="card shop-ad-reward"><h2>🎬 Bônus diário</h2><p>Assista a um anúncio recompensado e receba ${SHOP_REWARDED_COINS} moedas. Opcional · disponível uma vez por dia.</p><button class="action" data-shop-reward ${rewardAvailable ? "" : "disabled"}>${rewardAvailable ? `ASSISTIR · +${SHOP_REWARDED_COINS} MOEDAS` : "RESGATADO HOJE"}</button></article><div class="skin-filters" role="group" aria-label="Filtrar skins">
         <button class="action small ${filter === "ALL" ? "" : "secondary"}" data-filter="ALL">TODAS</button>
         <button class="action small ${filter === "OWNED" ? "" : "secondary"}" data-filter="OWNED">MINHAS</button>
         <button class="action small ${filter === "LOCKED" ? "" : "secondary"}" data-filter="LOCKED">BLOQUEADAS</button>
@@ -91,6 +94,23 @@ export class ShopScene extends Phaser.Scene {
         render();
       }));
       if (category === "skins") {
+        ui.root.querySelector<HTMLButtonElement>("[data-shop-reward]")?.addEventListener("click", async (event) => {
+          const button = event.currentTarget as HTMLButtonElement;
+          if (profile.rewardedShopDate === localDay() || !ads.isRewardedAdReady()) {
+            ui.toast("Anúncio indisponível neste dispositivo ou já resgatado hoje.");
+            return;
+          }
+          button.disabled = true;
+          if (!await ads.showRewardedAd("shop-coins")) {
+            if (ui.root.isConnected) button.disabled = false;
+            ui.toast("Anúncio não disponível. Nenhuma moeda foi adicionada.");
+            return;
+          }
+          if (claimShopReward(profile)) {
+            await save.save(); audio.play("coin"); haptic("coin");
+            if (ui.root.isConnected) render();
+          }
+        });
         ui.root.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation(); this.preview(button.dataset.view!);
         }));

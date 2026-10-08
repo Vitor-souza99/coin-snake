@@ -9,6 +9,7 @@ import { defaults, validateSave, SaveSystem } from "../src/game/systems/SaveSyst
 import { finishRun } from "../src/game/systems/EconomySystem";
 import { newRun } from "../src/game/types/game";
 import { B } from "../src/game/data/balance";
+import { detectLanguage, resolveLanguage } from "../src/game/services/LocalizationService";
 describe("manual turbo", () => {
   it("uses the Turbo power-up speed multiplier", () => {
     expect(B.power.turboSpeed).toBe(1.4);
@@ -90,7 +91,7 @@ describe("v1 migration", () => {
       missions: { collector: { progress: 70, claimed: false } },
     };
     const p = validateSave(old);
-    expect(p.saveVersion).toBe(5);
+    expect(p.saveVersion).toBe(8);
     expect(p.totalCoins).toBe(812);
     expect(p.selectedSkin).toBe("cat");
     expect(p.xp).toBe(900);
@@ -103,16 +104,38 @@ describe("v1 migration", () => {
     const p = defaults();
     p.settings.leftHanded = true;
     p.settings.cameraMode = "panoramic";
+    p.settings.orientation = "landscape";
     p.hints.shrink = true;
     expect(
       validateSave(JSON.parse(JSON.stringify(p))).settings.leftHanded,
     ).toBe(true);
     expect(validateSave(JSON.parse(JSON.stringify(p))).settings.cameraMode).toBe("panoramic");
+    expect(validateSave(JSON.parse(JSON.stringify(p))).settings.orientation).toBe("landscape");
     expect(validateSave(p).hints.shrink).toBe(true);
   });
   it("defaults missing or invalid camera modes to standard", () => {
     expect(validateSave({ ...defaults(), settings: {} }).settings.cameraMode).toBe("standard");
     expect(validateSave({ ...defaults(), settings: { cameraMode: "invalid" } }).settings.cameraMode).toBe("standard");
+  });
+  it("defaults missing or invalid screen orientation to automatic", () => {
+    expect(validateSave({ ...defaults(), settings: {} }).settings.orientation).toBe("auto");
+    expect(validateSave({ ...defaults(), settings: { orientation: "diagonal" } }).settings.orientation).toBe("auto");
+    expect(validateSave({ ...defaults(), settings: { orientation: "portrait" } }).settings.orientation).toBe("portrait");
+  });
+  it("detects Portuguese device languages and falls back to English", () => {
+    expect(detectLanguage("pt-BR")).toBe("pt-BR");
+    expect(detectLanguage("pt-PT")).toBe("pt-BR");
+    expect(detectLanguage("en-US")).toBe("en");
+    expect(detectLanguage("es-MX")).toBe("en");
+    expect(resolveLanguage("en", "pt-BR")).toBe("en");
+    expect(resolveLanguage("auto", "pt-PT")).toBe("pt-BR");
+  });
+  it("persists language preference and migrates older saves to automatic", () => {
+    const p = defaults();
+    p.settings.language = "en";
+    expect(validateSave(JSON.parse(JSON.stringify(p))).settings.language).toBe("en");
+    expect(validateSave({ ...defaults(), saveVersion: 6 }).settings.language).toBe("auto");
+    expect(validateSave({ ...defaults(), settings: { language: "invalid" } }).settings.language).toBe("auto");
   });
   it("counts new statistics once per run", () => {
     const p = defaults(),

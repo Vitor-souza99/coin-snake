@@ -1,10 +1,12 @@
 import { B } from "../data/balance";
+import { levelForXP } from "./ExperienceSystem";
 import { skins, skinUnlockStatus } from "../data/skins";
 import type { PlayerProfile, RunState } from "../types/game";
 import { reconcileWorldUnlocks } from "./WorldSystem";
+import { localDay } from "../utils/math";
 export function addXP(p: PlayerProfile, amount: number) {
   p.xp += Math.max(0, Math.floor(amount));
-  p.playerLevel = 1 + Math.floor(p.xp / B.xp.perLevel);
+  p.playerLevel = levelForXP(p.xp);
   reconcileWorldUnlocks(p);
 }
 export function buySkin(p: PlayerProfile, id: string): boolean {
@@ -56,4 +58,13 @@ export function finishRun(p: PlayerProfile, run: RunState) {
   s.turboUses += run.turboUses;
   s.bossesDefeated += run.bossDefeats;
   s.portalsUsed += run.portalsUsed;
+}
+
+export const SHOP_REWARDED_COINS = 250;
+
+export function claimShopReward(p: PlayerProfile, today = localDay()): boolean {
+  if (p.rewardedShopDate === today) return false;
+  p.rewardedShopDate = today;
+  p.totalCoins += SHOP_REWARDED_COINS;
+  return true;
 }

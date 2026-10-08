@@ -26,6 +26,20 @@ export function generateTextures(s: Phaser.Scene) {
     }
     if (skin.id === "dino" || skin.id === "dragon")
       g.fillStyle(skin.dark).fillTriangle(6, 30, 17, 18, 17, 42);
+    if (skin.id === "sakura") {
+      g.fillStyle(skin.bodyConfig.accent).fillCircle(19, 19, 4).fillCircle(43, 39, 4);
+      g.fillStyle(0xfff4fa).fillCircle(20, 18, 2).fillCircle(44, 38, 2);
+    }
+    if (skin.id === "storm") {
+      g.lineStyle(3, skin.bodyConfig.accent).lineBetween(17, 14, 39, 27).lineBetween(39, 27, 25, 33).lineBetween(25, 33, 46, 48);
+    }
+    if (skin.id === "magma") {
+      g.lineStyle(4, skin.bodyConfig.accent).lineBetween(16, 18, 25, 25).lineBetween(25, 25, 20, 34).lineBetween(38, 14, 34, 25).lineBetween(34, 25, 47, 37);
+    }
+    if (skin.id === "prism") {
+      g.fillStyle(0xff9de2).fillTriangle(32, 14, 39, 24, 25, 24);
+      g.fillStyle(0x9c8bff).fillTriangle(32, 27, 41, 38, 23, 38);
+    }
     g.generateTexture(`${skin.id}-body`, 64, 64);
     g.clear();
     g.fillStyle(skin.dark).fillCircle(32, 34, 26);
@@ -48,6 +62,10 @@ export function generateTextures(s: Phaser.Scene) {
     }
     if (skin.id === "dino")
       g.fillStyle(skin.dark).fillTriangle(9, 13, 0, 30, 9, 48);
+    if (skin.id === "sakura") g.fillStyle(skin.bodyConfig.accent).fillCircle(19, 19, 4).fillCircle(48, 41, 4);
+    if (skin.id === "storm") g.lineStyle(4, skin.bodyConfig.accent).lineBetween(13, 20, 28, 28).lineBetween(28, 28, 21, 38).lineBetween(39, 14, 50, 23);
+    if (skin.id === "magma") g.lineStyle(4, skin.bodyConfig.accent).lineBetween(14, 17, 24, 25).lineBetween(24, 25, 20, 37).lineBetween(40, 29, 51, 40);
+    if (skin.id === "prism") g.fillStyle(0xff9de2).fillTriangle(13, 20, 24, 25, 20, 36).fillStyle(0x9c8bff).fillTriangle(40, 15, 50, 25, 43, 34);
     if (skin.headConfig.horns)
       g.fillStyle(skin.bodyConfig.accent)
         .fillTriangle(10, 20, 6, 2, 23, 13)
@@ -124,6 +142,21 @@ export function generateTextures(s: Phaser.Scene) {
     g.clear();
     g.fillStyle(power.color).fillRoundedRect(2, 2, 52, 52, 17);
     g.lineStyle(3, 0xffffff, 0.85).strokeRoundedRect(6, 6, 44, 44, 13);
+    if (power.id === "precision") {
+      g.lineStyle(5, 0xffffff).lineBetween(28, 13, 28, 37).lineBetween(18, 28, 28, 38).lineBetween(38, 28, 28, 38);
+      g.lineStyle(3, 0xffffff, 0.85).lineBetween(15, 44, 41, 44);
+    } else if (power.id === "lucky-star") {
+      g.fillStyle(0xfff7c2).fillPoints(Phaser.Geom.Polygon.GetPoints(new Phaser.Geom.Polygon(Array.from({ length: 10 }, (_, i) => {
+        const radius = i % 2 === 0 ? 20 : 9;
+        const angle = -Math.PI / 2 + i * Math.PI / 5;
+        return { x: 28 + Math.cos(angle) * radius, y: 28 + Math.sin(angle) * radius };
+      })), 1));
+      g.lineStyle(2, 0xfff7c2, 0.9).strokeCircle(28, 28, 22);
+    } else if (power.id === "ghost") {
+      g.fillStyle(0xeaffff, 0.92).fillCircle(28, 22, 13).fillRoundedRect(15, 22, 26, 18, 10);
+      g.fillStyle(0x65c8e4).fillCircle(23, 23, 2).fillCircle(33, 23, 2);
+      g.fillStyle(power.color).fillTriangle(15, 36, 22, 32, 22, 42).fillTriangle(27, 36, 34, 32, 34, 42).fillTriangle(34, 36, 41, 32, 41, 42);
+    }
     g.generateTexture(`power-${power.id}`, 56, 56);
   }
   g.clear();

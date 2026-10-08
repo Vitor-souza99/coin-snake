@@ -3,6 +3,12 @@ import type { PowerKind } from "../data/powerups";
 export class PowerUpSystem {
   magnet = 0;
   turbo = 0;
+  precision = 0;
+  luckyStar = 0;
+  ghost = 0;
+  ghostGrace = 0;
+  private ghostWasActive = false;
+  private ghostRemaining = 0;
   shield = false;
   invincible = 0;
   slowed = 0;
@@ -17,16 +23,43 @@ export class PowerUpSystem {
     this.lives--;
     return true;
   }
-  activate(kind: PowerKind, magnetBonus = 0) {
-    if (kind === "shield") this.shield = true;
-    else if (kind === "magnet") this.magnet = B.power.magnetDuration * (1 + magnetBonus);
-    else this.turbo = B.power.turboDuration;
+  activate(kind: PowerKind, durationBonus = 0) {
+    if (kind === "shield") {
+      this.shield = true;
+    } else if (kind === "magnet") this.magnet = B.power.magnetDuration * (1 + durationBonus);
+    else if (kind === "turbo") this.turbo = B.power.turboDuration * (1 + durationBonus);
+    else if (kind === "precision") this.precision = B.power.precisionDuration * (1 + durationBonus);
+    else if (kind === "lucky-star") this.luckyStar = B.power.luckyStarDuration * (1 + durationBonus);
+    else if (kind === "ghost") {
+      this.ghost = B.power.ghostDuration * (1 + durationBonus);
+      this.ghostRemaining = this.ghost;
+      this.ghostGrace = 0;
+      this.ghostWasActive = true;
+    }
   }
   update(dt: number) {
     this.magnet = Math.max(0, this.magnet - dt);
     this.turbo = Math.max(0, this.turbo - dt);
+    this.precision = Math.max(0, this.precision - dt);
+    this.luckyStar = Math.max(0, this.luckyStar - dt);
     this.invincible = Math.max(0, this.invincible - dt);
     this.slowed = Math.max(0, this.slowed - dt);
+    this.ghostRemaining = Math.max(0, this.ghostRemaining - dt);
+    this.ghost = Math.max(0, this.ghostRemaining);
+    if (this.ghostWasActive && this.ghostRemaining === 0) {
+      this.ghostWasActive = false;
+      this.ghostGrace = B.power.ghostClearanceGrace;
+    }
+  }
+  updateGhost(dt: number, overlapping: boolean): boolean {
+    if (this.ghost > 0) return true;
+    if (this.ghostGrace <= 0) return false;
+    if (!overlapping) {
+      this.ghostGrace = 0;
+      return false;
+    }
+    this.ghostGrace = Math.max(0, this.ghostGrace - dt);
+    return this.ghostGrace > 0;
   }
   applyPoison(duration = B.hazard.poisonDuration) {
     this.slowed = Math.max(this.slowed, duration);

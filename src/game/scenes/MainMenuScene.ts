@@ -1,26 +1,27 @@
 import Phaser from "phaser";
 import { save } from "../systems/SaveSystem";
-import { B } from "../data/balance";
-import { ScreenUI, action, textureURL } from "../ui/ScreenUI";
+import { xpProgressForLevel } from "../systems/ExperienceSystem";
+import { ScreenUI, action } from "../ui/ScreenUI";
 import { reconcileWorldUnlocks } from "../systems/WorldSystem";
 import { worldById } from "../data/worlds";
+import { formatNumber, t } from "../services/LocalizationService";
+import stackedLogoUrl from "../../../assets/branding/coin-snake-logo-stacked.svg";
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
     super("Menu");
   }
   create() {
     const p = save.profile,
-      ui = new ScreenUI(this);
+      ui = new ScreenUI(this),
+      xpProgress = xpProgressForLevel(p.xp);
     reconcileWorldUnlocks(p);
     this.cameras.main.setBackgroundColor("#f6f5e6");
     this.events.on("androidBackButton", this.confirmExit, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       this.events.off("androidBackButton", this.confirmExit, this),
     );
-    const body = textureURL(this, `${p.selectedSkin}-body`),
-      head = textureURL(this, `${p.selectedSkin}-head`);
     ui.html(
-      `<div class="home"><div class="hero"><span class="kicker">Pequena cobra. Grande aventura.</span><h1>COIN<br>SNAKE</h1><div class="mascot" aria-hidden="true">${[body, body, body, body, head].map((src) => `<img src="${src}" alt="">`).join("")}</div><span class="pill">● ${worldById(p.selectedWorld).name}</span></div><div class="home-actions"><div class="card"><div class="wallet"><span>◉ ${p.totalCoins.toLocaleString("pt-BR")}</span><span>Nível ${p.playerLevel}</span></div><p class="muted">Recorde <b>${p.bestScore.toLocaleString("pt-BR")}</b> · XP ${p.xp % B.xp.perLevel}/${B.xp.perLevel}</p><div class="xp-track"><i style="width:${(100 * (p.xp % B.xp.perLevel)) / B.xp.perLevel}%"></i></div></div>${action("play", "JOGAR →", "play")}${action("worlds", `Mundos · ${worldById(p.selectedWorld).name}`, "secondary")}<div class="button-row">${action("shop", "Loja", "secondary")}${action("missions", "Missões", "gold")}</div>${action("settings", "Ajustar controles, som e extras", "secondary small")}<p class="footnote">Colete. Cresça. Encontre seu ritmo.<br>Moedas exclusivamente virtuais.</p></div></div>`,
+      `<div class="home"><div class="hero"><img class="brand-menu-logo" src="${stackedLogoUrl}" alt="Coin Snake"/><span class="pill">● ${worldById(p.selectedWorld).name}</span></div><div class="home-actions"><div class="card"><div class="wallet"><span>◉ ${formatNumber(p.totalCoins)}</span><span>${t("level")} ${p.playerLevel}</span></div><p class="muted">${t("best")} <b>${formatNumber(p.bestScore)}</b> · XP ${formatNumber(xpProgress.current)}/${formatNumber(xpProgress.required)}</p><div class="xp-track"><i style="width:${(100 * xpProgress.current) / xpProgress.required}%"></i></div></div>${action("play", t("play"), "play")}${action("worlds", `${t("worlds")} · ${worldById(p.selectedWorld).name}`, "secondary")}<div class="button-row">${action("shop", t("shop"), "secondary")}${action("missions", t("missions"), "gold")}</div>${action("settings", t("settings"), "secondary small")}<p class="footnote">${t("collect")}<br>${t("virtualCoins")}</p></div></div>`,
     );
     ui.on("#play", () => this.scene.start("Game", { startWorld: p.selectedWorld }));
     ui.on("#worlds", () => this.scene.start("WorldSelect"));

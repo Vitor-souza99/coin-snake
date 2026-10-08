@@ -1,7 +1,9 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 import { save } from "../systems/SaveSystem";
 import { audio } from "../services/AudioService";
 import { ScreenUI, header } from "../ui/ScreenUI";
+import { applyOrientation } from "../services/OrientationService";
+import { resolveLanguage, setLanguage, t } from "../services/LocalizationService";
 export class SettingsScene extends Phaser.Scene {
   constructor() {
     super("Settings");
@@ -9,10 +11,16 @@ export class SettingsScene extends Phaser.Scene {
   create() {
     const ui = new ScreenUI(this),
       s = save.profile.settings;
-    ui.html(
-      `${header("Do seu jeito", "Controles e som")}<div class="settings-grid"><div class="card setting-row"><label for="left">Modo canhoto<small>Joystick à direita; turbo à esquerda.</small></label><input type="checkbox" id="left" ${s.leftHanded ? "checked" : ""}></div><div class="card setting-row"><label for="camera">Câmera<small>Panorâmica afasta a câmera para mostrar toda a arena.</small></label><select id="camera"><option value="standard" ${s.cameraMode === "standard" ? "selected" : ""}>Padrão</option><option value="panoramic" ${s.cameraMode === "panoramic" ? "selected" : ""}>Panorâmica</option></select></div><div class="card setting-row"><label for="mute">Silenciar áudio</label><input type="checkbox" id="mute" ${s.muted ? "checked" : ""}></div><div class="card setting-row"><label for="sfx">Efeitos sonoros</label><input type="range" id="sfx" min="0" max="1" step="0.05" value="${s.sfxVolume}"></div><div class="card setting-row"><label for="music">Música<small>Volume reservado para trilhas futuras.</small></label><input type="range" id="music" min="0" max="1" step="0.05" value="${s.musicVolume}"></div><div class="card setting-row"><label for="haptics">Vibração<small>Em dispositivos Android compatíveis.</small></label><input type="checkbox" id="haptics" ${s.haptics ? "checked" : ""}></div><div class="card setting-row"><label for="motion">Reduzir efeitos visuais</label><input type="checkbox" id="motion" ${s.reducedMotion ? "checked" : ""}></div><article class="card"><b>No computador</b><p class="muted">WASD ou setas para virar. Shift para turbo. Escape ou espaço para pausar. Também é possível clicar e arrastar na arena.</p><b>No celular</b><p class="muted">Arraste no canto inferior do joystick e segure Turbo com o outro dedo. Você pode girar o celular durante a partida.</p><button id="tutorial" class="action secondary">Rever dicas na próxima partida</button><h2>Extras</h2><p class="muted">Desafios e conteúdo de coleção.</p><button id="rush" class="action gold">Coin Rush · 60s</button><button id="collection" class="action secondary">Coleção de itens, pets e conquistas</button><p class="muted">A navegação panorâmica mostra a arena, sem remover suas paredes. O efeito de redução de movimento também controla partículas e flashes.</p></article><article class="card"><h2>Apagar progresso</h2><p class="muted">Remove moedas, mundos desbloqueados, skins, mascotes, missões, recordes e estatísticas deste dispositivo. Esta ação não pode ser desfeita.</p><button id="reset-save" class="action danger">Apagar todo o progresso</button></article></div>`
-    );
+    ui.html(`${header(t("settingsTitle"), t("settingsKicker"))}<div class="settings-grid"><div class="card setting-row"><label for="language">${t("language")}</label><select id="language"><option value="auto" ${s.language === "auto" ? "selected" : ""}>${t("languageAuto")}</option><option value="pt-BR" ${s.language === "pt-BR" ? "selected" : ""}>${t("languagePortuguese")}</option><option value="en" ${s.language === "en" ? "selected" : ""}>${t("languageEnglish")}</option></select></div><div class="card setting-row"><label for="left">${t("leftHanded")}<small>${t("leftHandedHelp")}</small></label><input type="checkbox" id="left" ${s.leftHanded ? "checked" : ""}></div><div class="card setting-row"><label for="camera">${t("camera")}</label><select id="camera"><option value="standard" ${s.cameraMode === "standard" ? "selected" : ""}>${t("standard")}</option><option value="panoramic" ${s.cameraMode === "panoramic" ? "selected" : ""}>${t("panoramic")}</option></select></div><div class="card setting-row"><label for="orientation">${t("orientation")}</label><select id="orientation"><option value="auto" ${s.orientation === "auto" ? "selected" : ""}>${t("automatic")}</option><option value="portrait" ${s.orientation === "portrait" ? "selected" : ""}>${t("portrait")}</option><option value="landscape" ${s.orientation === "landscape" ? "selected" : ""}>${t("landscape")}</option></select></div><div class="card setting-row"><label for="mute">${t("mute")}</label><input type="checkbox" id="mute" ${s.muted ? "checked" : ""}></div><div class="card setting-row"><label for="sfx">${t("sfx")}</label><input type="range" id="sfx" min="0" max="1" step="0.05" value="${s.sfxVolume}"></div><div class="card setting-row"><label for="music">${t("music")}<small>${t("musicHelp")}</small></label><input type="range" id="music" min="0" max="1" step="0.05" value="${s.musicVolume}"></div><div class="card setting-row"><label for="haptics">${t("haptics")}<small>${t("hapticsHelp")}</small></label><input type="checkbox" id="haptics" ${s.haptics ? "checked" : ""}></div><div class="card setting-row"><label for="motion">${t("reducedMotion")}</label><input type="checkbox" id="motion" ${s.reducedMotion ? "checked" : ""}></div><article class="card"><b>${t("computer")}</b><p class="muted">WASD / arrows</p></article><button class="action secondary" id="tutorial">${t("tutorial")}</button><button class="action secondary" id="rush">${t("rush")}</button><button class="action secondary" id="collection">${t("collection")}</button><button class="action secondary" id="reset-save">${t("reset")}</button></div>`);
     ui.on("#back", () => this.scene.start("Menu"));
+    ui.get<HTMLSelectElement>("#language").addEventListener("change", (event) => {
+      const selected = (event.target as HTMLSelectElement).value;
+      s.language = selected === "pt-BR" || selected === "en" ? selected : "auto";
+      setLanguage(resolveLanguage(s.language));
+      void save.save();
+      ui.toast(t("languageChanged"));
+      this.scene.restart();
+    });
     const bind = (id: string, apply: (input: HTMLInputElement) => void) => {
       const input = ui.get<HTMLInputElement>(id);
       input.addEventListener("change", () => {
@@ -27,6 +35,20 @@ export class SettingsScene extends Phaser.Scene {
     ui.get<HTMLSelectElement>("#camera").addEventListener("change", (event) => {
       s.cameraMode = (event.target as HTMLSelectElement).value === "panoramic" ? "panoramic" : "standard";
       void save.save();
+    });
+    ui.get<HTMLSelectElement>("#orientation").addEventListener("change", async (event) => {
+      const input = event.target as HTMLSelectElement;
+      const requested = input.value === "portrait" || input.value === "landscape" ? input.value : "auto";
+      const previous = s.orientation;
+      if (!(await applyOrientation(requested))) {
+        input.value = previous;
+        ui.toast("Este navegador não permite bloquear a orientação. Tente em tela cheia ou use o app Android.");
+        return;
+      }
+      s.orientation = requested;
+      void save.save();
+      const orientationLabel = requested === "portrait" ? "vertical" : "horizontal";
+      ui.toast(requested === "auto" ? "Rotação automática ativada." : "Tela bloqueada na orientação " + orientationLabel + ".");
     });
     bind("#mute", (i) => {
       s.muted = i.checked;
@@ -56,7 +78,7 @@ export class SettingsScene extends Phaser.Scene {
     ui.on("#reset-save", () => {
       const confirmation = ui.modal(
         "Apagar todo o progresso?",
-        "Você perderá moedas, mundos desbloqueados, itens, missões, recordes e configurações. Essa ação não pode ser desfeita.",
+        "VocÃª perderá moedas, mundos desbloqueados, itens, missões, recordes e configurações. Essa ação não pode ser desfeita.",
         [
           {
             label: "Sim, apagar tudo",
@@ -64,6 +86,7 @@ export class SettingsScene extends Phaser.Scene {
               confirmation.destroy();
               void save.reset().then(() => {
                 audio.sync();
+                setLanguage(resolveLanguage(save.profile.settings.language));
                 this.scene.start("Menu");
               });
             },

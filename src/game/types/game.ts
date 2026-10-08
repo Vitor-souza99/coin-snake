@@ -2,6 +2,7 @@ export interface Point {
   x: number;
   y: number;
 }
+export type LanguagePreference = "auto" | "pt-BR" | "en";
 export interface Settings {
   muted: boolean;
   volume: number;
@@ -11,6 +12,8 @@ export interface Settings {
   sfxVolume: number;
   reducedMotion: boolean;
   cameraMode: "standard" | "panoramic";
+  orientation: "auto" | "portrait" | "landscape";
+  language: LanguagePreference;
 }
 export interface GameStatistics {
   totalGames: number;
@@ -29,7 +32,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 5;
+  saveVersion: 8;
   totalCoins: number;
   bestScore: number;
   selectedSkin: string;
@@ -45,9 +48,11 @@ export interface PlayerProfile {
   hints: { joystick: boolean; turbo: boolean; shrink: boolean; ocean: boolean; oceanCurrent: boolean; pearl: boolean; deepTrench: boolean };
   statistics: GameStatistics;
   missionDate: string;
+  dailyMissionIds: string[];
   missions: Record<string, MissionProgress>;
   unlockedPets: string[];
   selectedPet: string | null;
+  rewardedShopDate: string;
   bossesDefeated: string[];
   achievements: string[];
   mastery: Record<string, number>;
@@ -56,6 +61,7 @@ export interface PlayerProfile {
 }
 export interface RunState {
   id: string;
+  missionDate: string;
   score: number;
   matchCoins: number;
   maxCombo: number;
@@ -69,6 +75,7 @@ export interface RunState {
   creditedCoins: number;
   finished: boolean;
   reported: { coins: number; powerups: number; golden: number; magnet: number };
+  missionFinalized: boolean;
   bossEnergy: number;
   bossCoins: number;
   portalsUsed: number;
@@ -79,6 +86,7 @@ export interface RunState {
 export function newRun(): RunState {
   return {
     id: crypto.randomUUID(),
+    missionDate: "",
     score: 0,
     matchCoins: 0,
     maxCombo: 1,
@@ -92,6 +100,7 @@ export function newRun(): RunState {
     creditedCoins: 0,
     finished: false,
     reported: { coins: 0, powerups: 0, golden: 0, magnet: 0 },
+    missionFinalized: false,
     bossEnergy: 0,
     bossCoins: 0,
     portalsUsed: 0,

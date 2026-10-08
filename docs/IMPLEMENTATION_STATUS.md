@@ -1,5 +1,18 @@
 # Status — Coin Snake roadmap implementation (7 de outubro de 2026)
 
+## Identidade visual inicial Coin Snake (8 de outubro de 2026)
+- [x] Criados masters SVG originais do símbolo Snake + Coin, wordmark horizontal/stacked e silhueta monocromática.
+- [x] Gerados PNG do símbolo e master opaco 512×512 para Play Store; script reproduzível usa Playwright já instalado.
+- [x] Android: foreground/background do adaptive icon, recursos legacy, monochrome themed icon e splashes portrait/landscape atualizados sem plugin novo.
+- [x] Criada `LogoScene` após boot com reveal curto, toque/tecla para pular, reduced motion e fallback sem asset; segue ao menu sem dependência cosmética crítica.
+- [x] Main Menu substitui heading/mascote duplicados pelo logo stacked; layout CSS contempla landscape e movimento reduzido.
+- [x] `BRANDING.md` documenta conceito, paleta, fontes, exports e Feature Graphic separada.
+- [x] `npx cap sync android` concluiu sem instalar dependências ou novos plugins; build Gradle não disponível por falta de Java/JAVA_HOME no ambiente.
+- [x] Typecheck, unit tests (74/74) e production build passam.
+- [x] Teste browser direcionado confirmou a intro/menu sem erros e botões dentro do viewport em 8 tamanhos portrait/landscape.
+- [ ] Lint global ainda falha em `src/game/services/AdsService.ts:34` (`_reason` não utilizado), em arquivo preexistente fora desta entrega; smoke test ampla chega ao Game e falha depois porque o tutorial inicial intercepta o controle pause que ela tenta acionar.
+- [ ] Build Gradle não executado: Java/JAVA_HOME não está instalado/configurado neste ambiente.
+
 ## Fase concluída nesta entrega
 - [x] Análise da base anterior, sem trocar a stack ou os sistemas de economia/missões.
 - [x] Joystick flutuante, dead zone, captura independente por dedo, suavização.

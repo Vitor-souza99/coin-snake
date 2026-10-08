@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { SettingsScene } from "./scenes/SettingsScene";
 import { CollectionScene } from "./scenes/CollectionScene";
 import { BootScene } from "./scenes/BootScene";
+import { LogoScene } from "./scenes/LogoScene";
 import { MainMenuScene } from "./scenes/MainMenuScene";
 import { GameScene } from "./scenes/GameScene";
 import { ShopScene } from "./scenes/ShopScene";
@@ -20,6 +21,7 @@ export const config: Phaser.Types.Core.GameConfig = {
   input: { activePointers: 2 },
   scene: [
     BootScene,
+    LogoScene,
     MainMenuScene,
     SettingsScene,
     CollectionScene,

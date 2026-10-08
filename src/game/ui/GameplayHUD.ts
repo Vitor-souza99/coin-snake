@@ -34,6 +34,9 @@ export class GameplayHUD {
     if (p.magnet > 0) powers.push(`ÍMÃ ${Math.ceil(p.magnet)}s`);
     if (p.shield) powers.push("ESCUDO");
     if (p.turbo > 0) powers.push(`TURBO ×2 ${Math.ceil(p.turbo)}s`);
+    if (p.precision > 0) powers.push(`FREIO PRECISO ${Math.ceil(p.precision)}s`);
+    if (p.luckyStar > 0) powers.push(`★ SORTE ${Math.ceil(p.luckyStar)}s`);
+    if (p.ghost > 0 || p.ghostGrace > 0) powers.push(`FANTASMA ${Math.ceil(p.ghost + p.ghostGrace)}s`);
     if (p.invincible > 0) powers.push("PROTEGIDO");
     if (p.slowed > 0) powers.push(`VENENO ${Math.ceil(p.slowed)}s`);
     set(

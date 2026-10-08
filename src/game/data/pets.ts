@@ -8,6 +8,7 @@ export interface PetDefinition {
   description: string;
   unlockedBy: string;
   unlockType: "BOSS" | "PREMIUM";
+  bossRewardId?: string;
   premiumProductId?: string;
 }
 
@@ -20,6 +21,7 @@ export const pets: PetDefinition[] = [
     description: "+3 pontos percentuais na chance de moedas azuis.",
     unlockedBy: "Derrote King Snake.",
     unlockType: "BOSS",
+    bossRewardId: "king-snake",
   },
   {
     id: "candy-blob",
@@ -29,6 +31,7 @@ export const pets: PetDefinition[] = [
     description: "+5% de XP ao finalizar uma partida.",
     unlockedBy: "Derrote Candy Monster.",
     unlockType: "BOSS",
+    bossRewardId: "candy-monster",
   },
   {
     id: "baby-octopus",
@@ -38,6 +41,37 @@ export const pets: PetDefinition[] = [
     description: "+5% na duração do Ímã (8,4 s em vez de 8 s).",
     unlockedBy: "Derrote Kraken.",
     unlockType: "BOSS",
+    bossRewardId: "kraken",
+  },
+  {
+    id: "firefly",
+    name: "Vaga-lume",
+    symbol: "✨",
+    rarity: "RARE",
+    description: "+5 pontos percentuais na chance de moedas azuis e +1 vida ao reviver.",
+    unlockedBy: "Derrote King Snake.",
+    unlockType: "BOSS",
+    bossRewardId: "king-snake",
+  },
+  {
+    id: "snow-pup",
+    name: "Filhote Boreal",
+    symbol: "🐺",
+    rarity: "EPIC",
+    description: "+5% na duração do Escudo.",
+    unlockedBy: "Derrote Candy Monster.",
+    unlockType: "BOSS",
+    bossRewardId: "candy-monster",
+  },
+  {
+    id: "tiny-dragon",
+    name: "Dragãozinho",
+    symbol: "🐲",
+    rarity: "EPIC",
+    description: "+5% na duração do Turbo.",
+    unlockedBy: "Derrote Kraken.",
+    unlockType: "BOSS",
+    bossRewardId: "kraken",
   },
   {
     id: "crystal-fox",
