@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 8,
+    saveVersion: 9,
     totalCoins: 0,
     bestScore: 0,
     selectedSkin: "classic",
@@ -57,6 +57,7 @@ export function defaults(): PlayerProfile {
     dailyMissionIds: [],
     missions: {},
     unlockedPets: [],
+    availablePets: [],
     selectedPet: null,
     rewardedShopDate: "",
     bossesDefeated: [],
@@ -69,7 +70,7 @@ export function defaults(): PlayerProfile {
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bestScore = num(r.bestScore);
   p.xp = num(r.xp);
@@ -136,17 +137,23 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = [3, 4, 5, 6, 7].includes(r.saveVersion as number);
+  const isV3 = [3, 4, 5, 6, 7, 8, 9].includes(r.saveVersion as number);
   const validPetIds = new Set(earnablePetIds);
   const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : [];
   p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";
   const bossIds = new Set(bosses.map((boss) => boss.id));
   p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => typeof id === "string" && bossIds.has(id)))] : [];
   const bossWins = new Set(p.bossesDefeated);
-  p.unlockedPets = [...new Set([...savedPets, ...earnablePetIds.filter((id) => {
+  const bossUnlockedPets = earnablePetIds.filter((id) => {
     const boss = bosses.find((entry) => entry.petReward === id || entry.additionalPetRewards?.includes(id));
     return boss ? bossWins.has(boss.id) : false;
-  })])];
+  });
+  p.availablePets = [...new Set([...(isV3 && Array.isArray(r.availablePets) ? r.availablePets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : []), ...bossUnlockedPets])];
+  // In v8 the firefly was automatically granted with King Snake; preserve that
+  // existing ownership when migrating rather than charging players again.
+  const ownedBossPets = bossUnlockedPets.filter((id) => id !== "firefly");
+  p.unlockedPets = [...new Set([...savedPets, ...ownedBossPets])];
+  if ((r.saveVersion as number) <= 8 && bossWins.has("king-snake")) p.unlockedPets.push("firefly");
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
   p.unlockedSkins = [...new Set([...p.unlockedSkins, ...p.bossesDefeated.flatMap((bossId) => getBossSkinRewards(bossId).map((skin) => skin.id))])];
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
@@ -185,7 +192,7 @@ export function validateSave(input: unknown): PlayerProfile {
   const legacyFixedSet = ["collector", "scorer", "explorer"];
   p.dailyMissionIds = hasValidDailySelection
     ? uniqueSavedMissionIds
-    : r.saveVersion !== 8
+    : r.saveVersion !== 8 && r.saveVersion !== 9
       ? legacyFixedSet
       : p.missionDate
         ? dailyMissions(p.missionDate).map((mission) => mission.id)
@@ -195,7 +202,7 @@ export function validateSave(input: unknown): PlayerProfile {
   const legacySet = new Set(legacyFixedSet);
   for (const m of missions) {
     const entry = record(progress[m.id]);
-    const preserveLegacy = !hasValidDailySelection && r.saveVersion !== 8 && legacySet.has(m.id);
+    const preserveLegacy = !hasValidDailySelection && r.saveVersion !== 8 && r.saveVersion !== 9 && legacySet.has(m.id);
     p.missions[m.id] = {
       progress: selectedSet.has(m.id) || preserveLegacy ? Math.min(m.target, num(entry.progress)) : 0,
       claimed: (selectedSet.has(m.id) || preserveLegacy) && bool(entry.claimed, false) && num(entry.progress) >= m.target,
@@ -222,7 +229,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>8){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>9){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

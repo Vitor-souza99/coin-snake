@@ -6,6 +6,8 @@ import {
 } from "../src/game/systems/SaveSystem";
 import {
   buySkin,
+  buyPet,
+  FIREFLY_COIN_PRICE,
   claimShopReward,
   SHOP_REWARDED_COINS,
   creditCoins,
@@ -95,6 +97,24 @@ describe("economy", () => {
     expect(buySkin(p, "bad")).toBe(false);
     expect(p.totalCoins).toBe(0);
   });
+  it("unlocks the firefly offer after King Snake and buys it for 12,000 coins", () => {
+    const profile = defaults();
+    profile.bossesDefeated.push("king-snake");
+    const unlocked = validateSave({ saveVersion: 9, bossesDefeated: ["king-snake"] });
+    expect(unlocked.availablePets).toContain("firefly");
+    expect(unlocked.unlockedPets).not.toContain("firefly");
+    expect(buyPet(unlocked, "firefly")).toBe(false);
+    expect(unlocked.totalCoins).toBe(0);
+    unlocked.totalCoins = FIREFLY_COIN_PRICE - 1;
+    expect(buyPet(unlocked, "firefly")).toBe(false);
+    unlocked.totalCoins = FIREFLY_COIN_PRICE;
+    expect(buyPet(unlocked, "firefly")).toBe(true);
+    expect(unlocked.totalCoins).toBe(0);
+    expect(unlocked.unlockedPets).toContain("firefly");
+    expect(unlocked.selectedPet).toBe("firefly");
+    expect(buyPet(unlocked, "firefly")).toBe(true);
+    expect(unlocked.totalCoins).toBe(0);
+  });
   it("keeps premium skins unpurchasable and unequippable even with abundant Coins", () => {
     const p = defaults();
     p.totalCoins = 999_999;
@@ -161,6 +181,15 @@ describe("boss entry hints", () => {
     expect(king.entryHint).toMatch(/coroa/i);
     expect(king.phases).toContain(2);
   });
+  it("configures the Candy Monster's six-hit fight and two-coin aura charge", () => {
+    const candy = bosses.find((boss) => boss.id === "candy-monster")!;
+    expect(candy.maxHealth).toBe(6);
+    expect(candy.phases).toEqual([4, 2]);
+    expect(candy.combat.attackChargePerBossCoin).toBe(25);
+    expect(candy.combat.auraMaxHits).toBe(1);
+    expect(candy.entryHint).toMatch(/Boss Coins/i);
+    expect(candy.entryHint).toMatch(/2 HP/);
+  });
 });
 describe("boss attack aura", () => {
   it("stays active without a time limit until its allowed hit is consumed", () => {
@@ -197,6 +226,20 @@ describe("boss attack aura", () => {
     combat.update(0.81);
     expect(combat.consumeHit("candy-monster")).toBe(true);
     expect(combat.active).toBe(false);
+  });
+
+  it("caps Candy Boss Coin charge at 100 and requires a fresh charge after its aura is spent", () => {
+    const combat = new BossCombatSystem();
+    expect(combat.addCharge(25)).toBe(25);
+    expect(combat.addCharge(25)).toBe(50);
+    expect(combat.addCharge(25)).toBe(75);
+    expect(combat.addCharge(25)).toBe(100);
+    expect(combat.addCharge(25)).toBe(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "candy-aura", bossId: "candy-monster" })).toBe(true);
+    expect(combat.consumeHit("candy-monster")).toBe(true);
+    expect(combat.active).toBe(false);
+    expect(combat.attackCharge).toBe(0);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "candy-aura", bossId: "candy-monster" })).toBe(false);
   });
 });
 describe("combo and balance", () => {
@@ -349,10 +392,19 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(8);
+    expect(profile.saveVersion).toBe(9);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
-    expect(profile.unlockedPets).toEqual(expect.arrayContaining(["bee", "firefly"]));
+    expect(profile.unlockedPets).toContain("bee");
+    expect(profile.availablePets).toContain("firefly");
+    expect(profile.unlockedPets).toContain("firefly");
     expect(profile.unlockedPets).not.toContain("snow-pup");
+  });
+  it("preserves an already-earned firefly from legacy saves without charging again", () => {
+    const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
+    expect(profile.saveVersion).toBe(9);
+    expect(profile.availablePets).toContain("firefly");
+    expect(profile.unlockedPets).toContain("firefly");
+    expect(profile.selectedPet).toBe("firefly");
   });
   it("awards known achievements once and rejects unknown IDs", () => {
     const profile = defaults(), id = achievementDefinitions[0].id;
@@ -426,7 +478,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(8);
+    expect(migrated.saveVersion).toBe(9);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.selectedSkin).toBe("cat");
     expect(migrated.premiumEntitlements).toEqual([]);
@@ -455,14 +507,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(8);
+    expect(migrated.saveVersion).toBe(9);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
+  it("preserves Candy World and boss progress when loading a current version save", () => {
+    const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
+    expect(profile.playerLevel).toBe(5);
+    expect(profile.bossesDefeated).toContain("king-snake");
+    expect(profile.worldsUnlocked).toContain("candy-world");
+    expect(profile.selectedWorld).toBe("candy-world");
+  });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(8);
+    expect(migrated.saveVersion).toBe(9);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });

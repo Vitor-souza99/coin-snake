@@ -90,7 +90,7 @@ export class GameScene extends Phaser.Scene {
   private bossPortalExpiresAt = 0;
   private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Container; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "SUGAR_RUSH" | "IDLE" | "TELEGRAPH_SLAM" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container };
   private bossFight = new BossFightSystem();
-  private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl"; image: Phaser.GameObjects.Container }> = [];
+  private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield"; image: Phaser.GameObjects.Container }> = [];
   private bossMarkers: Phaser.GameObjects.GameObject[] = [];
   private bossCurrent?: { x: number; y: number; direction: number; force: number; life: number; graphics: Phaser.GameObjects.Graphics };
   private bossWhirlpool?: Phaser.GameObjects.Graphics;
@@ -1260,8 +1260,10 @@ export class GameScene extends Phaser.Scene {
     this.snake.grow();
     if (coin.kind.id !== "pearl_coin") this.turbo.charge(coin.kind.id);
     if (this.boss) {
-      const charge = this.boss.definition.combat.attackChargePerBossCoin;
-      this.bossFight.combat.addCharge(coin.kind.id === "golden" || coin.kind.id === "mythic" ? charge * 2 : charge);
+      if (this.boss.definition.id !== "candy-monster") {
+        const charge = this.boss.definition.combat.attackChargePerBossCoin;
+        this.bossFight.combat.addCharge(coin.kind.id === "golden" || coin.kind.id === "mythic" ? charge * 2 : charge);
+      }
     } else {
       this.run.bossEnergy += this.portalSystem.bossEnergy(coin.kind.id);
       const bossId = worldById(this.currentWorld).bossId;
@@ -1450,12 +1452,31 @@ export class GameScene extends Phaser.Scene {
     const collisionRadius = boss.definition.id === "kraken" ? 84 : 58 + B.snake.radius;
     const canHitKraken = boss.definition.id === "kraken" && boss.state === "EXPOSED" && boss.hazard && Math.hypot(this.snake.x - boss.hazard.x, this.snake.y - boss.hazard.y) < 62;
     const contact = boss.definition.id === "kraken" ? canHitKraken : collisionDistance < collisionRadius;
-    if (contact) {
+    if (boss.definition.id === "candy-monster" && this.bossCollisionGrace <= 0) {
+      const touchingSegment = this.snake.body.slice(0, this.snake.length).some((segment) => distance(segment, boss.image) < collisionRadius);
+      if (touchingSegment) {
+        if (this.bossFight.combat.active) {
+          this.bossFight.combat.clearAura();
+          this.bossCollisionGrace = cfg.hitInvulnerability;
+          const shieldPoint = this.bossSafePoint(130);
+          this.spawnBossPickupAt("candy-shield", shieldPoint.x, shieldPoint.y, "S", 0x70cfff);
+          this.feedback(boss.image.x, boss.image.y, "ESCUDO QUEBRADO!", 0xffb52e, true);
+          audio.play("shield_break");
+        } else if (this.powers.invincible <= 0) {
+          const hadShield = this.powers.shield;
+          if (!this.powers.absorb()) {
+            if (!this.loseLife()) { this.die(); return; }
+          } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+          this.bossCollisionGrace = cfg.hitInvulnerability;
+        }
+      }
+      this.bossCollisionGrace = Math.max(0, this.bossCollisionGrace - dt);
+    } else if (contact) {
       const aura = this.bossFight.combat;
       const vulnerable = boss.definition.id === "king-snake"
         ? boss.state === "STUNNED" && aura.source === "crown-orb"
         : boss.definition.id === "candy-monster"
-          ? boss.state === "ATTACK_MODE" || boss.state === "SUGAR_RUSH"
+          ? boss.state === "ATTACK_MODE" && aura.source === "candy-aura"
           : boss.state === "EXPOSED";
       const kingSnake = boss.definition.id === "king-snake";
       const kingChargeContact = kingSnake && boss.state === "CHARGE";
@@ -1484,7 +1505,7 @@ export class GameScene extends Phaser.Scene {
         this.particles.explode(14, boss.image.x, boss.image.y);
         audio.play("power"); haptic("power");
         if (boss.definition.id === "candy-monster" && aura.remainingHits > 0) this.bossFight.combat.activateAttackAura({ maxHits: aura.remainingHits, source: "sugar_shield", bossId: boss.definition.id });
-      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && this.bossCollisionGrace <= 0) {
+      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && boss.definition.id !== "candy-monster" && this.bossCollisionGrace <= 0) {
         const hadShield = this.powers.shield;
         if (!this.powers.absorb()) {
           this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
@@ -1509,9 +1530,10 @@ export class GameScene extends Phaser.Scene {
     } else this.bossAuraGraphics?.clear();
     if (this.bossHud) {
       const kingSnake = boss.definition.id === "king-snake";
-      const ready = !kingSnake && this.bossFight.combat.attackCharge >= 100 ? " · ATTACK READY!" : "";
-      const aura = this.bossFight.combat.active ? ` · AURA ∞/${this.bossFight.combat.remainingHits} hits` : "";
-      const attackCharge = kingSnake ? "" : ` · ATTACK ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
+      const candy = boss.definition.id === "candy-monster";
+      const ready = !kingSnake && !candy && this.bossFight.combat.attackCharge >= 100 ? " · ATTACK READY!" : "";
+      const aura = this.bossFight.combat.active ? ` · ${candy ? "ESCUDO ATIVO" : `AURA ∞/${this.bossFight.combat.remainingHits} hits`}` : "";
+      const attackCharge = kingSnake ? "" : candy ? ` · BOSS COINS ${Math.floor(this.bossFight.combat.attackCharge)}%` : ` · ATTACK ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
       this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1}${attackCharge}${ready}${aura}`;
     }
   }
@@ -1527,14 +1549,18 @@ export class GameScene extends Phaser.Scene {
     }
     return { x: Phaser.Math.Clamp(this.snake.x + 220, arena.left + 80, arena.right - 80), y: Phaser.Math.Clamp(this.snake.y + 180, arena.top + 80, arena.bottom - 80) };
   }
-  private spawnBossPickup(kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl", _charge: number, symbol?: string, tint?: number) {
+  private spawnBossPickup(kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield", _charge: number, symbol?: string, tint?: number) {
     const point = this.bossSafePoint(180);
+    this.spawnBossPickupAt(kind, point.x, point.y, symbol, tint);
+  }
+  private spawnBossPickupAt(kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield", x: number, y: number, symbol?: string, tint?: number) {
+    const point = { x, y };
     const color = tint ?? (kind === "crown-orb" ? 0xffb52e : kind === "attack-pearl" ? 0x9df8ff : 0xff76d7);
     const graphic = this.add.graphics().fillStyle(color, 0.28).fillCircle(0, 0, 28).lineStyle(4, color, 0.95).strokeCircle(0, 0, 23);
-    const label = this.add.text(0, 0, symbol ?? (kind === "crown-orb" ? "♛" : kind === "sugar-shield" ? "S" : "✦"), { fontSize: "25px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
+    const label = this.add.text(0, 0, symbol ?? (kind === "crown-orb" ? "♛" : kind === "sugar-shield" || kind === "candy-shield" ? "S" : "✦"), { fontSize: "25px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
     const image = this.add.container(point.x, point.y, [graphic, label]).setDepth(24);
     this.tweens.add({ targets: image, scale: 1.16, duration: 500, yoyo: true, repeat: -1 });
-    this.bossPickups.push({ ...point, life: kind === "boss-coin" ? 24 : 14, kind, image });
+    this.bossPickups.push({ ...point, life: kind === "boss-coin" ? 24 : kind === "candy-aura" ? Number.POSITIVE_INFINITY : 14, kind, image });
   }
   private updateBossPickups(dt: number) {
     for (const pickup of [...this.bossPickups]) {
@@ -1549,6 +1575,17 @@ export class GameScene extends Phaser.Scene {
         this.run.bossCoins++;
         audio.play("coin_golden"); haptic("coin");
         this.feedback(pickup.x, pickup.y, "+25 ATTACK", 0xffd35a, true);
+        if (boss.definition.id === "candy-monster" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((item) => item.kind === "candy-aura"))
+          this.spawnBossPickup("candy-aura", 0, "✦", 0xff76d7);
+      } else if (pickup.kind === "candy-aura") {
+        this.bossFight.combat.activateAttackAura({ maxHits: 1, source: "candy-aura", bossId: boss.definition.id });
+        boss.state = "ATTACK_MODE";
+        audio.play("power"); haptic("power");
+        this.feedback(pickup.x, pickup.y, "AURA! PERSIGA O CHEFE!", 0xffa52f, true);
+      } else if (pickup.kind === "candy-shield") {
+        this.powers.activate("shield");
+        audio.play("power"); haptic("power");
+        this.feedback(pickup.x, pickup.y, "ESCUDO!", 0x70cfff, true);
       } else {
         const source = pickup.kind;
         this.bossFight.combat.addCharge(pickup.kind === "crown-orb" ? 100 : pickup.kind === "attack-pearl" ? 50 : 25);
@@ -1604,35 +1641,55 @@ export class GameScene extends Phaser.Scene {
     }
   }
   private updateCandyBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
-    if (boss.health <= 3 && boss.state !== "SUGAR_RUSH" && boss.state !== "ATTACK_MODE") {
+    if (boss.health <= 2 && boss.state !== "SUGAR_RUSH" && boss.state !== "ATTACK_MODE") {
       boss.state = "SUGAR_RUSH"; boss.speed = boss.definition.movementSpeed * 1.35;
       this.ui.toast("SUGAR RUSH!"); audio.play("power");
     }
     if (boss.state === "DROP_ATTACK") {
       if (boss.stateTimer <= 0) {
         const marker = this.bossMarkers.pop(); marker?.destroy();
-        const splat = this.add.graphics().fillStyle(0xdb4c93, 0.48).fillCircle(0, 0, 64).lineStyle(4, 0xb72b75).strokeCircle(0, 0, 64);
+        const attackRadius = boss.health <= 2 ? 94 : 64;
+        const splat = this.add.graphics().fillStyle(0xdb4c93, 0.48).fillCircle(0, 0, attackRadius).lineStyle(4, 0xb72b75).strokeCircle(0, 0, attackRadius);
         const targetX = boss.targetX, targetY = boss.targetY;
         const zone = this.add.container(targetX, targetY, [splat]).setDepth(7);
         this.tweens.add({ targets: zone, alpha: 0, delay: 4500, duration: 400, onComplete: () => { zone.destroy(); this.stickyZones = this.stickyZones.filter((item) => Math.hypot(item.x - targetX, item.y - targetY) > 100); this.renderStickyZones(); } });
-        if (Math.hypot(this.snake.x - targetX, this.snake.y - targetY) > 76 && this.stickyZones.length < 4) { this.stickyZones.push({ x: targetX, y: targetY, radius: 62 }); this.renderStickyZones(); }
+        const headHit = distance(this.snake, { x: targetX, y: targetY }) < attackRadius + B.snake.radius;
+        const bodyHit = this.snake.body.slice(1, this.snake.length).some((segment) => distance(segment, { x: targetX, y: targetY }) < attackRadius + B.snake.radius);
+        if (headHit) {
+          const hadShield = this.powers.shield;
+          const hadInvincibility = this.powers.invincible > 0;
+          if (!this.powers.absorb()) {
+            if (!this.loseLife()) { this.die(); return; }
+            this.feedback(this.snake.x, this.snake.y, `VIDA PERDIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
+          } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+          else if (hadInvincibility) this.feedback(this.snake.x, this.snake.y, "PROTEGIDO!", 0x70cfff);
+        } else if (!headHit && bodyHit) {
+          this.snake.length = Math.max(B.snake.initial, this.snake.length - Math.max(1, Math.ceil(this.snake.length * 0.2)));
+          this.feedback(targetX, targetY, "CORPO ENCURTADO!", 0xff76d7);
+        }
+        if (!headHit && !bodyHit && this.stickyZones.length < 4) { this.stickyZones.push({ x: targetX, y: targetY, radius: attackRadius - 2 }); this.renderStickyZones(); }
         boss.state = boss.health <= 3 ? "SUGAR_RUSH" : "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown;
       }
     } else if (boss.state === "ATTACK_MODE") {
       const away = { x: boss.image.x - this.snake.x, y: boss.image.y - this.snake.y }, length = Math.hypot(away.x, away.y) || 1;
       const destination = { x: Phaser.Math.Clamp(boss.image.x + away.x / length * 260, B.arena.left + 90, B.arena.right - 90), y: Phaser.Math.Clamp(boss.image.y + away.y / length * 260, B.arena.top + 90, B.arena.bottom - 90) };
       this.moveBossToward(boss, destination, boss.speed * 1.25, dt);
-      if (!this.bossFight.combat.active) { boss.state = boss.health <= 3 ? "SUGAR_RUSH" : "CHASE"; boss.stateTimer = 2; }
+      if (!this.bossFight.combat.active) {
+        boss.state = boss.health <= 2 ? "SUGAR_RUSH" : "CHASE";
+        boss.stateTimer = boss.definition.combat.attackCooldown;
+        if (boss.health <= 2) boss.speed = boss.definition.movementSpeed * 1.75;
+      }
     } else {
-      this.moveBossToward(boss, this.snake, boss.speed * (boss.state === "SUGAR_RUSH" ? 1.35 : 1), dt);
+      this.moveBossToward(boss, this.snake, boss.speed * (boss.state === "SUGAR_RUSH" ? 1.75 : 1), dt);
       if (boss.stateTimer <= 0) {
-        boss.state = "DROP_ATTACK"; boss.stateTimer = boss.definition.combat.telegraphDuration;
+        boss.state = "DROP_ATTACK"; boss.stateTimer = boss.definition.combat.telegraphDuration * (boss.health <= 2 ? 0.7 : 1);
         boss.targetX = this.snake.x; boss.targetY = this.snake.y;
-        const marker = this.add.graphics().fillStyle(0xff5e8b, 0.18).fillCircle(boss.targetX, boss.targetY, 58).lineStyle(4, 0xff5283).strokeCircle(boss.targetX, boss.targetY, 58).setDepth(8);
+        const markerRadius = boss.health <= 2 ? 94 : 58;
+        const marker = this.add.graphics().fillStyle(0xff5e8b, 0.28).fillCircle(boss.targetX, boss.targetY, markerRadius).lineStyle(6, 0xff5283).strokeCircle(boss.targetX, boss.targetY, markerRadius).setDepth(8);
         this.bossMarkers.push(marker); audio.play("error");
       }
     }
-    if (boss.phase >= 1 && !this.bossPickups.some((item) => item.kind === "sugar-shield") && !this.bossFight.combat.active) this.spawnBossPickup("sugar-shield", 0, "S", 0xff76d7);
+    if (boss.definition.id !== "candy-monster" && boss.phase >= 1 && !this.bossPickups.some((item) => item.kind === "sugar-shield") && !this.bossFight.combat.active) this.spawnBossPickup("sugar-shield", 0, "S", 0xff76d7);
   }
   private updateKrakenBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     boss.image.x = B.arena.left + (B.arena.right - B.arena.left) * 0.78;
@@ -1710,7 +1767,8 @@ export class GameScene extends Phaser.Scene {
     if (first) {
       save.profile.bossesDefeated.push(defeated.id);
       const petRewards = [defeated.petReward, ...(defeated.additionalPetRewards ?? [])].filter((id): id is string => Boolean(id));
-      save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, ...petRewards])];
+      save.profile.availablePets = [...new Set([...save.profile.availablePets, ...petRewards])];
+      save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, ...petRewards.filter((id) => id !== "firefly" || defeated.id !== "king-snake")])];
       const skinRewards = getBossSkinRewards(defeated.id);
       save.profile.unlockedSkins = [...new Set([...save.profile.unlockedSkins, ...skinRewards.map((skin) => skin.id)])];
       save.profile.totalCoins += defeated.rewardCoins;
@@ -1736,7 +1794,7 @@ export class GameScene extends Phaser.Scene {
     const rewardLines = [
       portalGuidance,
       first && petRewards.length
-        ? `🐾 ${petRewards.map((id) => pets.find((pet) => pet.id === id)?.name ?? id).join(" e ")} já está disponível na loja de mascotes!`
+        ? `🐾 ${petRewards.map((id) => id === "firefly" ? `${pets.find((pet) => pet.id === id)?.name ?? id} está disponível por 12.000 moedas` : `${pets.find((pet) => pet.id === id)?.name ?? id} já está disponível na loja`).join(" e ")}`
         : "",
       first && rewardedSkins.length
         ? `✨ Skin${rewardedSkins.length > 1 ? "s" : ""} desbloqueada${rewardedSkins.length > 1 ? "s" : ""}: ${rewardedSkins.map((skin) => skin.name).join(", ")}`

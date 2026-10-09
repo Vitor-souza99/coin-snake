@@ -32,7 +32,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 8;
+  saveVersion: 9;
   totalCoins: number;
   bestScore: number;
   selectedSkin: string;
@@ -51,6 +51,7 @@ export interface PlayerProfile {
   dailyMissionIds: string[];
   missions: Record<string, MissionProgress>;
   unlockedPets: string[];
+  availablePets: string[];
   selectedPet: string | null;
   rewardedShopDate: string;
   bossesDefeated: string[];

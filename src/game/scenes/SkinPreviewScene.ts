@@ -43,7 +43,7 @@ export class SkinPreviewScene extends Phaser.Scene {
           <p class="muted">${this.skin.description}</p>
           <p><b>Família:</b> ${this.skin.family === "dragon" ? "Dragon Collection" : this.skin.family}</p>
           <p><b>Desbloqueio:</b> ${isPremium ? "🔒 PREMIUM" : ownership.label}</p>
-          ${isPremium ? '<p class="muted">Premium — disponível futuramente. Sua aparência e efeitos podem ser visualizados, mas não equipados.</p>' : `<p class="muted">${ownership.unlocked ? "Disponível na sua coleção." : `Requisito: ${ownership.label}.`}</p>`}
+          ${isPremium ? '<p class="muted">Premium — disponível futuramente. Sua aparência e efeitos podem ser visualizados, mas não equipados.</p>' : `<p class="muted">${ownership.unlocked ? "Disponível na sua coleção." : this.skin.unlockType === "COINS" ? `Saldo atual: ${profile.totalCoins.toLocaleString("pt-BR")} moedas.` : `Requisito: ${ownership.label}.`}</p>`}
           <div class="skin-preview-actions" id="skin-preview-actions"></div>
         </article>
       </section>`);
@@ -197,8 +197,7 @@ export class SkinPreviewScene extends Phaser.Scene {
         void save.save();
         audio.play("click");
         haptic("power");
-        this.scene.stop();
-        this.scene.start("Shop");
+        this.close();
       });
       return;
     }
@@ -208,7 +207,7 @@ export class SkinPreviewScene extends Phaser.Scene {
       container.querySelector("#buy-skin")?.addEventListener("click", () => {
         if (!buySkin(p, this.skin.id)) return;
         void save.save(); audio.play("power"); haptic("power");
-        this.scene.stop(); this.scene.start("Shop");
+        this.close();
       });
       return;
     }
@@ -224,6 +223,6 @@ export class SkinPreviewScene extends Phaser.Scene {
 
   private close() {
     this.scene.stop();
-    this.scene.start("Shop");
+    this.scene.resume("Shop");
   }
 }

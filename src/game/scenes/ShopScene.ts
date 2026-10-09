@@ -3,7 +3,7 @@ import { skins, skinRarities, skinUnlockStatus, type SkinRarity } from "../data/
 import { pets } from "../data/pets";
 import { worlds } from "../data/worlds";
 import { save } from "../systems/SaveSystem";
-import { buySkin, claimShopReward, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
+import { buyPet, buySkin, claimShopReward, FIREFLY_COIN_PRICE, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
 import { ads } from "../services/AdsService";
 import { localDay } from "../utils/math";
 import { reconcileWorldUnlocks, selectWorld, worldRequirementText, worldStatus } from "../systems/WorldSystem";
@@ -20,9 +20,10 @@ export class ShopScene extends Phaser.Scene {
     const ui = new ScreenUI(this);
     const profile = save.profile;
     reconcileWorldUnlocks(profile);
-    let category: Category = "skins";
-    let filter: "ALL" | "OWNED" | "LOCKED" = "ALL";
-    let rarity: SkinRarity | "ALL" = "ALL";
+    const previous = this.scene.settings.data as { category?: Category; filter?: "ALL" | "OWNED" | "LOCKED"; rarity?: SkinRarity | "ALL"; scrollY?: number } | undefined;
+    let category: Category = previous?.category ?? "skins";
+    let filter: "ALL" | "OWNED" | "LOCKED" = previous?.filter ?? "ALL";
+    let rarity: SkinRarity | "ALL" = previous?.rarity ?? "ALL";
 
     const categoryNav = () => `<nav class="shop-categories" role="tablist" aria-label="Categorias da loja">
       ${([ ["skins", "Skins"], ["pets", "Mascotes"], ["maps", "Mapas"], ["packs", "Pacotes · futuro"] ] as [Category, string][]).map(([id, label]) =>
@@ -56,16 +57,35 @@ export class ShopScene extends Phaser.Scene {
       }).join("") || '<p class="muted">Nenhuma skin nesta seleção.</p>'}</div>`;
     };
 
-    const renderPets = () => `<p class="muted">Mascotes conquistados podem ser equipados aqui. Os bônus são informativos e não há compra premium disponível.</p>
-      <div class="collection-grid">${pets.map((pet) => {
+    const renderPets = () => {
+      const ownedCount = pets.filter((pet) => profile.unlockedPets.includes(pet.id)).length;
+      const fireflyAvailable = profile.availablePets.includes("firefly") && !profile.unlockedPets.includes("firefly");
+      return `<section class="pet-shop-intro" aria-label="Resumo dos mascotes">
+        <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes para desbloquear mascotes. O Vaga-lume fica disponível após vencer King Snake.</p></div>
+        <div class="pet-wallet"><span>🪙 SALDO</span><strong>${profile.totalCoins.toLocaleString("pt-BR")}</strong><small>moedas</small></div>
+      </section>
+      ${fireflyAvailable ? `<aside class="pet-feature-banner"><span aria-hidden="true">✨</span><div><strong>Vaga-lume disponível!</strong><p>Adquira o mascote por ${FIREFLY_COIN_PRICE.toLocaleString("pt-BR")} moedas.</p></div><span class="pet-banner-balance">${profile.totalCoins >= FIREFLY_COIN_PRICE ? "Você já pode comprar" : `Faltam ${(FIREFLY_COIN_PRICE - profile.totalCoins).toLocaleString("pt-BR")} moedas`}</span></aside>` : ""}
+      <div class="pet-collection-grid">${pets.map((pet) => {
         const unlocked = profile.unlockedPets.includes(pet.id);
+        const available = profile.availablePets.includes(pet.id);
         const selected = profile.selectedPet === pet.id;
         const premium = pet.unlockType === "PREMIUM";
+        const firefly = pet.id === "firefly";
+        const stateClass = selected ? "pet-equipped" : unlocked ? "pet-owned" : firefly && available ? "pet-available" : "pet-locked";
+        const stateLabel = selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : firefly && available ? "À VENDA" : "BLOQUEADO";
         const action = unlocked
           ? `<button class="action ${selected ? "secondary" : ""}" data-equip-pet="${pet.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADO" : "EQUIPAR"}</button>`
-          : `<button class="action secondary" disabled>${premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
-        return `<article class="card rarity-card ${pet.rarity === "PREMIUM" ? "rarity-mythic" : ""}"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="skin-rarity">${pet.rarity}</span><h2>${pet.name}</h2><p>${pet.description}</p><p class="muted">${unlocked ? "Desbloqueado" : pet.unlockedBy}</p>${action}</article>`;
+          : firefly && available
+            ? `<button class="action" data-buy-pet="${pet.id}" ${profile.totalCoins < FIREFLY_COIN_PRICE ? "disabled" : ""}>COMPRAR · ${FIREFLY_COIN_PRICE.toLocaleString("pt-BR")} MOEDAS</button>`
+            : `<button class="action secondary" disabled>${premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
+        const detail = unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : firefly && available ? "Desbloqueado pela vitória contra King Snake." : pet.unlockedBy;
+        return `<article class="card rarity-card pet-card ${stateClass} ${pet.rarity === "PREMIUM" ? "rarity-mythic" : ""}">
+          <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
+          <span class="skin-rarity">${pet.rarity}</span><h2>${pet.name}</h2><p class="pet-description">${pet.description}</p>
+          <p class="pet-unlock-detail">${detail}</p><div class="pet-card-action">${action}</div>
+        </article>`;
       }).join("")}</div>`;
+    };
 
     const renderMaps = () => `<p class="muted">Mapas são desbloqueados pela progressão. Itens premium aparecem como prévias; compras ainda não estão disponíveis.</p>
       <div class="collection-grid">${worlds.map((world) => {
@@ -87,6 +107,10 @@ export class ShopScene extends Phaser.Scene {
       const title: Record<Category, string> = { skins: "Loja", pets: "Loja", maps: "Loja", packs: "Loja" };
       const content = category === "skins" ? renderSkins() : category === "pets" ? renderPets() : category === "maps" ? renderMaps() : renderPacks();
       ui.html(`${header(title[category], `SALDO · ${profile.totalCoins.toLocaleString("pt-BR")} MOEDAS`)}${categoryNav()}<section class="shop-content" role="tabpanel">${content}</section>`);
+      if (previous?.scrollY !== undefined) {
+        window.scrollTo(0, previous.scrollY);
+        previous.scrollY = undefined;
+      }
       ui.on("#back", () => this.scene.start("Menu"));
       ui.root.querySelectorAll<HTMLButtonElement>("[data-category]").forEach((button) => button.addEventListener("click", () => {
         category = button.dataset.category as Category;
@@ -131,6 +155,14 @@ export class ShopScene extends Phaser.Scene {
         });
       }
       if (category === "pets") {
+        ui.root.querySelectorAll<HTMLButtonElement>("[data-buy-pet]").forEach((button) => button.addEventListener("click", () => {
+          const id = button.dataset.buyPet;
+          if (!id || !buyPet(profile, id)) {
+            ui.toast("Moedas insuficientes ou mascote ainda bloqueado.");
+            return;
+          }
+          void save.save().then(render); audio.play("coin"); haptic("coin");
+        }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-equip-pet]").forEach((button) => button.addEventListener("click", () => {
           const id = button.dataset.equipPet;
           if (!id || !profile.unlockedPets.includes(id)) return;
@@ -154,6 +186,7 @@ export class ShopScene extends Phaser.Scene {
   private preview(id: string) {
     audio.play("click");
     haptic("coin");
-    this.scene.start("SkinPreview", { skinId: id });
+    this.scene.pause();
+    this.scene.launch("SkinPreview", { skinId: id });
   }
 }

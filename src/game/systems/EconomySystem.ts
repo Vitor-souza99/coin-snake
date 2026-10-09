@@ -1,6 +1,7 @@
 import { B } from "../data/balance";
 import { levelForXP } from "./ExperienceSystem";
 import { skins, skinUnlockStatus } from "../data/skins";
+import { pets } from "../data/pets";
 import type { PlayerProfile, RunState } from "../types/game";
 import { reconcileWorldUnlocks } from "./WorldSystem";
 import { localDay } from "../utils/math";
@@ -28,6 +29,18 @@ export function buySkin(p: PlayerProfile, id: string): boolean {
     p.unlockedSkins.push(id);
   }
   p.selectedSkin = id;
+  return true;
+}
+export const FIREFLY_COIN_PRICE = 12_000;
+
+export function buyPet(p: PlayerProfile, id: string): boolean {
+  const pet = pets.find((entry) => entry.id === id);
+  if (!pet || !p.availablePets.includes(id)) return false;
+  if (p.unlockedPets.includes(id)) return true;
+  if (id !== "firefly" || p.totalCoins < FIREFLY_COIN_PRICE) return false;
+  p.totalCoins -= FIREFLY_COIN_PRICE;
+  p.unlockedPets.push(id);
+  p.selectedPet = id;
   return true;
 }
 // Credit only the delta at each death: a revive cannot pay the same coins twice.
