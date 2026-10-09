@@ -209,9 +209,28 @@ export class SkinPreviewScene extends Phaser.Scene {
       const canAfford = p.totalCoins >= (this.skin.coinPrice ?? Number.MAX_SAFE_INTEGER);
       container.innerHTML = `<button class="action" id="buy-skin" ${canAfford ? "" : "disabled"}>COMPRAR — ${this.skin.coinPrice?.toLocaleString("pt-BR")} COINS</button>`;
       container.querySelector("#buy-skin")?.addEventListener("click", () => {
-        if (!buySkin(p, this.skin.id)) return;
-        void save.save(); audio.play("power"); haptic("power");
-        this.close();
+        if (!canAfford || this.skin.coinPrice === null) return;
+        const confirmation = this.ui.modal(
+          "Confirmar compra",
+          `Tem certeza que deseja comprar ${this.skin.name} por ${this.skin.coinPrice.toLocaleString("pt-BR")} moedas?\nSeu saldo atual: ${p.totalCoins.toLocaleString("pt-BR")} moedas.`,
+          [
+            { label: "CONFIRMAR COMPRA", run: () => {
+              if (p.totalCoins < this.skin.coinPrice! || !buySkin(p, this.skin.id)) {
+                confirmation.destroy();
+                this.ui.toast("Compra não realizada. Confira seu saldo e a disponibilidade da skin.");
+                return;
+              }
+              void save.save().then(() => {
+                confirmation.destroy();
+                this.close();
+                const shop = this.scene.get("Shop") as import("./ShopScene").ShopScene;
+                shop.showPurchaseSuccess(this.skin.name);
+              });
+            } },
+            { label: "CANCELAR", run: () => confirmation.destroy() },
+          ],
+        );
+        audio.play("click");
       });
       return;
     }

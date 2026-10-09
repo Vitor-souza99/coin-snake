@@ -31,17 +31,18 @@ export function buySkin(p: PlayerProfile, id: string): boolean {
   p.selectedSkin = id;
   return true;
 }
-export const FIREFLY_COIN_PRICE = 12_000;
-
 export function buyPet(p: PlayerProfile, id: string): boolean {
   const pet = pets.find((entry) => entry.id === id);
-  if (!pet || !p.availablePets.includes(id)) return false;
+  if (!pet || pet.unlockType !== "BOSS" || !p.availablePets.includes(id)) return false;
   if (p.unlockedPets.includes(id)) return true;
-  if (id !== "firefly" || p.totalCoins < FIREFLY_COIN_PRICE) return false;
-  p.totalCoins -= FIREFLY_COIN_PRICE;
+  if (!pet.coinPrice || p.bossCoinBalance < pet.coinPrice) return false;
+  p.bossCoinBalance -= pet.coinPrice;
   p.unlockedPets.push(id);
   p.selectedPet = id;
   return true;
+}
+export function creditBossCoins(p: PlayerProfile, amount: number) {
+  p.bossCoinBalance += Math.max(0, Math.floor(amount));
 }
 // Credit only the delta at each death: a revive cannot pay the same coins twice.
 export function creditCoins(p: PlayerProfile, run: RunState) {
@@ -54,9 +55,9 @@ export function finishRun(p: PlayerProfile, run: RunState) {
   if (run.finished) return;
   creditCoins(p, run);
   run.finished = true;
-  addXP(p, B.xp.perRun + Math.floor(run.score / B.xp.scoreDivisor));
-  if (p.selectedPet === "candy-blob")
-    addXP(p, Math.ceil((B.xp.perRun + Math.floor(run.score / B.xp.scoreDivisor)) * 0.05));
+  const runXP = B.xp.perRun + Math.floor(run.score / B.xp.scoreDivisor);
+  const xpBonus = p.selectedPet === "candy-blob" ? 0.05 : p.selectedPet === "celestial-serpent" ? 0.1 : 0;
+  addXP(p, runXP + (xpBonus > 0 ? Math.ceil(runXP * xpBonus) : 0));
   const s = p.statistics;
   s.totalGames++;
   s.totalCoinsCollected += run.matchCoins;

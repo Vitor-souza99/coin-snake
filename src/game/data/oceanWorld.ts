@@ -83,3 +83,17 @@ export function bonusBubbleReward(random: number): { coins: number; turbo: numbe
 export function deepTrenchCoinChance(baseChance: number, inDeepTrench: boolean): number {
   return Math.min(1, baseChance + (inDeepTrench ? oceanWorldConfig.deepTrenchRareCoinBonus : 0));
 }
+
+/** Keeps a point inside the Kraken arena and reports whether it crossed the rim. */
+export function containKrakenArenaPoint(point: Point, center: Point, radius: number, clearance: number): Point | null {
+  const dx = point.x - center.x, dy = point.y - center.y;
+  const distance = Math.hypot(dx, dy), limit = Math.max(0, radius - clearance);
+  if (distance <= limit) return null;
+  const scale = limit / (distance || 1);
+  return { x: center.x + dx * scale, y: center.y + dy * scale };
+}
+
+/** Prevents portals or other objects from spawning within the Kraken arena and its clearance margin. */
+export function isOutsideKrakenArena(point: Point, center: Point, radius: number, clearance = 0): boolean {
+  return Math.hypot(point.x - center.x, point.y - center.y) >= radius + clearance;
+}

@@ -602,8 +602,8 @@ canvas {
 .pause-button {
   margin-left: auto;
   pointer-events: auto;
-  width: 42px;
-  min-height: 42px;
+  width: 46px;
+  min-height: 46px;
   padding: 8px;
   border-radius: 50%;
   background: #ffffeea6;
@@ -634,10 +634,17 @@ canvas {
   position: absolute;
   top: 126px;
   left: 18px;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
+  padding: 7px 10px;
+  border: 1px solid #ffd66f;
+  border-radius: 10px;
+  background: #171326e8;
+  box-shadow: 0 3px 12px #09071380, inset 0 0 0 1px #ffffff12;
+  color: #fff4c2;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.1px;
+  line-height: 1.2;
+  text-shadow: 0 1px 3px #000;
 }
 .world-tag {
   position: absolute;
@@ -707,7 +714,7 @@ canvas {
   width: 106px;
   height: 80px;
   border: 2px solid #ffe9a5;
-  background: #ffda78e8;
+  background: #ffda78d9;
   border-radius: 28px;
   color: #614d1e;
   font-weight: 900;
@@ -798,6 +805,17 @@ canvas {
   font-size: 14px;
   pointer-events: none;
   z-index: 60;
+}
+.shop-purchase-success {
+  background: linear-gradient(135deg, #21684f, #9c7625);
+  border: 2px solid #ffe18a;
+  box-shadow: 0 8px 30px #16362b55;
+  animation: purchase-success-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+@keyframes purchase-success-pop {
+  0% { opacity: 0; scale: 0.78; }
+  72% { opacity: 1; scale: 1.06; }
+  100% { opacity: 1; scale: 1; }
 }
 .result-layout {
   max-width: 850px;

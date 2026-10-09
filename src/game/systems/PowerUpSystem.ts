@@ -12,7 +12,10 @@ export class PowerUpSystem {
   shield = false;
   invincible = 0;
   slowed = 0;
-  lives = B.power.initialLives;
+  lives: number = B.power.initialLives;
+  constructor(initialLives: number = B.power.initialLives) {
+    this.lives = Math.min(B.power.maxLives, Math.max(0, initialLives));
+  }
   gainLife(): boolean {
     if (this.lives >= B.power.maxLives) return false;
     this.lives++;
@@ -60,6 +63,17 @@ export class PowerUpSystem {
     }
     this.ghostGrace = Math.max(0, this.ghostGrace - dt);
     return this.ghostGrace > 0;
+  }
+  get ghostActive(): boolean {
+    return this.ghost > 0;
+  }
+  blocksAttack(): boolean {
+    if (this.ghostActive) return true;
+    if (this.invincible > 0) return true;
+    if (!this.shield) return false;
+    this.shield = false;
+    this.invincible = B.power.shieldGrace;
+    return true;
   }
   applyPoison(duration = B.hazard.poisonDuration) {
     this.slowed = Math.max(this.slowed, duration);

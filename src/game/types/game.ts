@@ -33,8 +33,9 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 9;
+  saveVersion: 10;
   totalCoins: number;
+  bossCoinBalance: number;
   bestScore: number;
   selectedSkin: string;
   unlockedSkins: string[];

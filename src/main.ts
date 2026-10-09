@@ -3,6 +3,7 @@ import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { config } from "./game/config";
 import { GameScene } from "./game/scenes/GameScene";
+import { setImmersiveMode } from "./game/services/OrientationService";
 import "./styles/global.css";
 const game = new Phaser.Game(config);
 // The single safe-area wrapper can resize independently of the window.
@@ -10,7 +11,11 @@ const stage=document.querySelector('#stage')!;
 const resizeObserver=new ResizeObserver(()=>game.scale.refresh());
 resizeObserver.observe(stage);
 if (Capacitor.isNativePlatform()) {
+  // Keep Android's status and navigation bars hidden throughout the app,
+  // not only while the gameplay scene is active.
+  void setImmersiveMode(true);
   void App.addListener("appStateChange", ({ isActive }) => {
+    if (isActive) void setImmersiveMode(true);
     if (!isActive) {
       const scene = game.scene.getScene("Game");
       if (scene instanceof GameScene) scene.requestPause();
@@ -50,5 +55,6 @@ if (import.meta.hot)
   import.meta.hot.dispose(() => {
     resizeObserver.disconnect();
     game.destroy(true);
+    void setImmersiveMode(false);
     void App.removeAllListeners();
   });

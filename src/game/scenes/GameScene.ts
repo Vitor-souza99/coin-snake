@@ -6,9 +6,9 @@ import { Obstacle } from "../entities/Obstacle";
 import { PowerUp } from "../entities/PowerUp";
 import { ComboSystem } from "../systems/ComboSystem";
 import { PowerUpSystem } from "../systems/PowerUpSystem";
-import { difficulty } from "../systems/DifficultySystem";
+import { bossAttackTiming, bossMovementSpeed, difficulty } from "../systems/DifficultySystem";
 import { save } from "../systems/SaveSystem";
-import { creditCoins, finishRun } from "../systems/EconomySystem";
+import { creditCoins, creditBossCoins, finishRun } from "../systems/EconomySystem";
 import { reportRun, startMissionRun } from "../systems/MissionSystem";
 import { newRun, type RunState, type Point } from "../types/game";
 import { clamp, distance } from "../utils/math";
@@ -36,8 +36,8 @@ import { analytics } from "../services/AnalyticsService";
 import { getBossSkinRewards, getSkin } from "../data/skins";
 import { reconcileWorldUnlocks, rememberWorld, traversableWorlds } from "../systems/WorldSystem";
 import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawnAllowed, candyFinalSpeed, inCandyRiver, stickySpeedMultiplier, type StickyZone } from "../data/candyWorld";
-import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, pearlCoinSpawnAllowed, bonusBubbleReward, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
-import { applyWorldOrientation, setImmersiveMode } from "../services/OrientationService";
+import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, isOutsideKrakenArena, pearlCoinSpawnAllowed, bonusBubbleReward, containKrakenArenaPoint, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
+import { applyWorldOrientation } from "../services/OrientationService";
 import { missionsForProfile } from "../data/missions";
 export class GameScene extends Phaser.Scene {
   snake!: Snake;
@@ -88,16 +88,15 @@ export class GameScene extends Phaser.Scene {
   private bossPortal?: Phaser.GameObjects.Container;
   private bossIntroOpen = false;
   private bossPortalExpiresAt = 0;
-  private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Container; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "SUGAR_RUSH" | "IDLE" | "TELEGRAPH_SLAM" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container };
+  private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "SUGAR_RUSH" | "IDLE" | "TELEGRAPH_SLAM" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[] };
   private bossFight = new BossFightSystem();
-  private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield"; image: Phaser.GameObjects.Container }> = [];
+  private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield"; image: Phaser.GameObjects.Container }> = [];
   private bossMarkers: Phaser.GameObjects.GameObject[] = [];
   private bossCurrent?: { x: number; y: number; direction: number; force: number; life: number; graphics: Phaser.GameObjects.Graphics };
   private bossWhirlpool?: Phaser.GameObjects.Graphics;
   private bossCoinsTimer = 2;
   private bossAuraGraphics?: Phaser.GameObjects.Graphics;
   private bossCollisionGrace = 0;
-  private candyBossShieldActive = true;
   private candyBossEscapeTimer = 0;
   private bossHud?: HTMLElement;
   private bossEnergyHud?: HTMLElement;
@@ -124,6 +123,10 @@ export class GameScene extends Phaser.Scene {
   private currentZoneId?: string;
   private deepTrenchActive = false;
   private clam?: { x: number; y: number; state: "CLOSED" | "OPENING" | "OPEN" | "EMPTY"; image: Phaser.GameObjects.Container; timer: number; coin?: Coin };
+  private krakenBarrier?: Phaser.GameObjects.Container;
+  private krakenBarrierCooldown = 0;
+  private krakenReturnAngle?: number;
+  private krakenReturnTimer = 0;
   private masteryCredited = false;
   constructor() {
     super("Game");
@@ -133,8 +136,6 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       audio.setGameplayActive(this, false),
     );
-    void setImmersiveMode(true);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void setImmersiveMode(false));
     const initData = (this.scene.settings.data ?? {}) as { rushMode?: boolean; startWorld?: string };
     this.rushMode = initData.rushMode ?? false;
     reconcileWorldUnlocks(save.profile);
@@ -151,6 +152,15 @@ export class GameScene extends Phaser.Scene {
     this.worldTransitioning = false;
     this.passageCooldown = 0;
     this.bossPortal = undefined;
+    this.krakenBarrier?.destroy();
+    this.krakenBarrier = undefined;
+    this.krakenBarrierCooldown = 0;
+    this.krakenReturnAngle = undefined;
+    this.krakenReturnTimer = 0;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.krakenBarrier?.destroy();
+      this.krakenBarrier = undefined;
+    });
     this.bossIntroOpen = false;
     this.bossPortalExpiresAt = 0;
     this.boss = undefined;
@@ -178,7 +188,7 @@ export class GameScene extends Phaser.Scene {
     if (save.profile.missionDate === this.run.missionDate) void save.save();
     this.run.rushMode = this.rushMode;
     this.combo = new ComboSystem();
-    this.powers = new PowerUpSystem();
+    this.powers = new PowerUpSystem(B.power.initialLives + (save.profile.selectedPet === "phoenix" ? 1 : 0));
     this.coins = [];
     this.obstacles = [];
     this.stickyZones = [];
@@ -282,7 +292,7 @@ export class GameScene extends Phaser.Scene {
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
-      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xff7043 : save.profile.selectedPet === "firefly" ? 0xc7ff72 : 0xe783d0;
+      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xff7043 : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0xb875ed : 0xe783d0;
       petGraphic.fillStyle(petColor).fillCircle(0, 0, 12);
       petGraphic.lineStyle(2, 0xffffff).strokeCircle(0, 0, 12);
       if (["bee", "firefly"].includes(save.profile.selectedPet ?? "")) petGraphic.lineStyle(2, 0xffffff).lineBetween(-17, -8, -9, -3).lineBetween(9, -3, 17, -8);
@@ -388,6 +398,7 @@ export class GameScene extends Phaser.Scene {
     clearance: number,
     headClearance: number,
     nearby = false,
+    excludedCircle?: { center: Point; radius: number; clearance: number },
   ): Point | null {
     const a = B.arena;
     for (let n = 0; n < B.spawn.attempts; n++) {
@@ -413,7 +424,8 @@ export class GameScene extends Phaser.Scene {
         this.coins.some((c) => c.active && distance(p, c) < 60) ||
         (this.power && distance(p, this.power) < 75) ||
         (this.fruit?.active && distance(p, this.fruit) < 75) ||
-        (this.boss && distance(p, this.boss.image) < 120)
+        (this.boss && distance(p, this.boss.image) < 120) ||
+        (excludedCircle && !isOutsideKrakenArena(p, excludedCircle.center, excludedCircle.radius, excludedCircle.clearance))
       )
         continue;
       return p;
@@ -427,7 +439,7 @@ export class GameScene extends Phaser.Scene {
       if (coin.active) continue;
       const p = this.validPoint(B.spawn.bodyClearance, 65);
       if (!p) break;
-      coin.spawn(p.x, p.y, save.profile.selectedPet === "firefly" ? "firefly" : save.profile.selectedPet === "bee", this.powers.luckyStar > 0, this.currentWorld === "candy-world");
+      coin.spawn(p.x, p.y, ["firefly", "bee"].includes(save.profile.selectedPet ?? "") ? "firefly" : false, this.powers.luckyStar > 0, this.currentWorld === "candy-world");
       if (this.currentWorld === "ocean" && this.inOceanRegion("deep_trench", p) && Math.random() < OW.deepTrenchRareCoinBonus) {
         const rare = [B.coins.find((kind) => kind.id === "blue")!, B.coins.find((kind) => kind.id === "diamond")!];
         const selected = rare[Math.random() < 0.8 ? 0 : 1];
@@ -737,6 +749,8 @@ export class GameScene extends Phaser.Scene {
         this.aim = null;
       }
     }
+    this.krakenReturnTimer = Math.max(0, this.krakenReturnTimer - dt);
+    if (this.krakenReturnTimer > 0 && this.krakenReturnAngle !== undefined) target = this.krakenReturnAngle;
     const wasTurbo = this.turbo.active;
     this.turbo.update(
       dt,
@@ -760,6 +774,8 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.snake.move(dt, steeringTarget, playerSpeed, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1));
     }
+    this.krakenBarrierCooldown = Math.max(0, this.krakenBarrierCooldown - dt);
+    this.containSnakeInKrakenArena();
     if (this.currentWorld === "candy-world") {
       const insideSticky = this.stickyZones.some((zone) => Math.hypot(this.snake.x-zone.x,this.snake.y-zone.y)<zone.radius);
       const wasSticky = this.stickySpeed < 0.99;
@@ -911,7 +927,7 @@ export class GameScene extends Phaser.Scene {
           }
         } else {
           const pet = save.profile.selectedPet;
-          const bonus = (kind.id === "magnet" && pet === "baby-octopus") || (kind.id === "turbo" && pet === "tiny-dragon") ? 0.05 : 0;
+          const bonus = (kind.id === "magnet" && pet === "baby-octopus") || (kind.id === "turbo" && pet === "tiny-dragon") ? 0.05 : kind.id === "ghost" && pet === "tidal-turtle" ? 0.1 : 0;
           this.powers.activate(kind.id, bonus);
           const powerMessage = kind.id === "precision" ? "FREIO PRECISO!" : kind.id === "lucky-star" ? "ESTRELA DA SORTE!" : kind.id === "ghost" ? "FANTASMA!" : kind.name;
           this.feedback(this.power.x, this.power.y, powerMessage, kind.color);
@@ -1339,6 +1355,8 @@ export class GameScene extends Phaser.Scene {
     for (const passage of this.worldPassages) passage.destroy();
     this.worldPassages = [];
     this.bossPortal?.destroy(); this.bossPortal = undefined;
+    this.krakenBarrier?.destroy(); this.krakenBarrier = undefined;
+    this.krakenReturnAngle = undefined; this.krakenReturnTimer = 0;
     this.bossDefinition = undefined;
     this.bossPortalExpiresAt = 0;
     this.currentWorld = world.id;
@@ -1398,7 +1416,14 @@ export class GameScene extends Phaser.Scene {
   private spawnBossPortal(bossId: string) {
     if (this.bossPortal || this.dead) return;
     const arenaRegion = bossId === "kraken" ? oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena") : undefined;
-    const p = arenaRegion ? { x: arenaRegion.x, y: arenaRegion.y } : this.validPoint(100, 180, true); if (!p) return;
+    const p = bossId === "kraken"
+      ? this.validPoint(100, 180, true, {
+          center: arenaRegion!,
+          radius: Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * OW.krakenArena.radius,
+          clearance: 90,
+        })
+      : this.validPoint(100, 180, true);
+    if (!p) return;
     const g = this.add.graphics().fillStyle(0x713c9c, 0.28).fillEllipse(0, 0, 110, 140).lineStyle(8, 0x9d5ac7).strokeEllipse(0, 0, 86, 118);
     const t = this.add.text(0, 76, "BOSS · OPCIONAL", { fontSize: "16px", color: "#43255b", fontStyle: "bold" }).setOrigin(0.5);
     this.bossPortal = this.add.container(p.x, p.y, [g, t]).setDepth(9);
@@ -1421,22 +1446,158 @@ export class GameScene extends Phaser.Scene {
     for (const passage of this.worldPassages) passage.setVisible(false);
     this.bossFight.start();
     this.bossCollisionGrace = 0;
-    this.candyBossShieldActive = definition.id === "candy-monster";
     this.candyBossEscapeTimer = 0;
-    const g = this.add.graphics().fillStyle(definition.id === "king-snake" ? 0x315d3c : 0xc74b9d).fillCircle(0, 0, 55).lineStyle(7, 0xffd66f).strokeCircle(0, 0, 58);
-    const eyes = this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5);
-    const image = this.add.container(this.snake.x + 240, this.snake.y, [g, eyes]).setDepth(19);
+    const initialX = this.snake.x + 240, initialY = this.snake.y;
+    const isKingSnake = definition.id === "king-snake";
+    const isCandyBee = definition.id === "candy-monster";
+    const isKraken = definition.id === "kraken";
+    if (isKraken) this.createKrakenBarrier();
+    const image = isKraken
+      ? this.createKraken(initialX, initialY)
+      : isKingSnake
+      ? this.add.image(initialX, initialY, "king-snake-head").setScale(1.05).setDepth(19)
+      : isCandyBee
+        ? this.createCandyBee(initialX, initialY)
+      : this.add.container(initialX, initialY, [
+          this.add.graphics().fillStyle(0xc74b9d).fillCircle(0, 0, 55).lineStyle(7, 0xffd66f).strokeCircle(0, 0, 58),
+          this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5),
+        ]).setDepth(19);
+    const bodySegments = isKingSnake
+      ? Array.from({ length: 4 }, (_, index) => this.add.image(initialX - 30 * (index + 1), initialY, "king-snake-body").setScale(0.86 - index * 0.07).setDepth(18))
+      : [];
+    const trail = Array.from({ length: 33 }, (_, index) => ({ x: initialX - index * 12, y: initialY }));
     const initialState = definition.id === "kraken" ? "IDLE" : "CHASE";
-    this.boss = { definition, health: definition.maxHealth, phase: 0, attack: definition.combat.attackCooldown, speed: definition.movementSpeed, image, state: initialState, stateTimer: definition.combat.attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0 };
+    const preference = save.profile.settings.speedPreference;
+    const attackCooldown = bossAttackTiming(definition.combat.attackCooldown, preference, 1.5);
+    const boss = this.boss = { definition, health: definition.maxHealth, phase: 0, attack: attackCooldown, speed: bossMovementSpeed(definition.movementSpeed, preference), image, bodySegments, trail, visualAngle: 0, lastVisualX: initialX, lastVisualY: initialY, state: initialState, stateTimer: attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0, krakenTentacles: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("tentacles") as Phaser.GameObjects.Graphics[] : undefined };
     this.bossHud!.hidden = false;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = true;
-    this.bossHud!.textContent = `${definition.name} · ${this.boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" ? "" : " · ATTACK 0/100"}`;
+    this.bossHud!.textContent = `${definition.name} · ${boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" ? "" : " · ATTACK 0/100"}`;
     this.bossFight.active = true;
     this.bossCoinsTimer = 2;
     this.ui.toast(definition.id === "king-snake"
       ? "Boss fight! Desvie da investida e pegue a coroa quando o King Snake ficar atordoado."
       : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
-    image.setSize(definition.id === "kraken" ? 210 : 120, definition.id === "kraken" ? 210 : 120);
+    if (!isKingSnake && !isCandyBee && !isKraken) image.setSize(210, 210);
+  }
+  private createKrakenBarrier() {
+    this.krakenBarrier?.destroy();
+    const arena = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena")!;
+    const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * OW.krakenArena.radius;
+    const water = this.add.graphics().fillStyle(0x22c5d5, 0.09).fillCircle(0, 0, radius - 18)
+      .lineStyle(18, 0x42d5df, 0.12).strokeCircle(0, 0, radius - 28);
+    const rim = this.add.graphics()
+      .lineStyle(25, 0x163f55, 0.88).strokeCircle(0, 0, radius)
+      .lineStyle(15, 0x39879a, 0.96).strokeCircle(0, 0, radius)
+      .lineStyle(4, 0x9be8df, 0.82).strokeCircle(0, 0, radius - 9);
+    for (let index = 0; index < 24; index++) {
+      const angle = index * Math.PI * 2 / 24;
+      const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
+      const size = index % 3 === 0 ? 17 : 12;
+      rim.fillStyle(index % 2 ? 0x547f79 : 0x39778a, 0.96)
+        .fillRoundedRect(x - size / 2, y - size / 1.5, size, size * 1.5, 5)
+        .fillStyle(index % 2 ? 0xff937f : 0xffc284, 0.9)
+        .fillCircle(x, y + size * 0.35, 4);
+    }
+    this.krakenBarrier = this.add.container(arena.x, arena.y, [water, rim]).setDepth(4);
+    this.tweens.add({ targets: water, alpha: 0.5, duration: 850, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: rim, alpha: 0.78, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+  }
+  private containSnakeInKrakenArena() {
+    if (!this.boss || this.boss.definition.id !== "kraken" || !this.krakenBarrier) return;
+    const center = this.krakenBarrier;
+    const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * OW.krakenArena.radius;
+    const contained = containKrakenArenaPoint(this.snake, center, radius, B.snake.radius + 8);
+    if (!contained) return;
+    const dx = this.snake.x - center.x, dy = this.snake.y - center.y;
+    this.snake.x = contained.x;
+    this.snake.y = contained.y;
+    const returnAngle = Math.atan2(dy, dx) + Math.PI;
+    this.snake.x = contained.x;
+    this.snake.y = contained.y;
+    this.snake.angle = returnAngle;
+    this.snake.body[0].x = contained.x;
+    this.snake.body[0].y = contained.y;
+    this.snake.moveVector(0, returnAngle, 0, { x: 0, y: 0 });
+    this.krakenReturnAngle = returnAngle;
+    this.krakenReturnTimer = 0.45;
+    this.steering.reset(this.snake.angle);
+    this.aim = null;
+    if (this.krakenBarrierCooldown <= 0) {
+      this.krakenBarrierCooldown = 0.65;
+      this.feedback(this.snake.x, this.snake.y, "CORRENTE DO KRAKEN!", 0x73e8ed);
+      this.cameras.main.shake(120, 0.0015);
+      audio.play("current_flow");
+      haptic("coin");
+    }
+  }
+  private createKraken(x: number, y: number) {
+    const kraken = this.add.container(x, y).setDepth(19);
+    const tentacles: Phaser.GameObjects.Graphics[] = [];
+    for (let index = 0; index < 8; index++) {
+      const angle = -Math.PI / 2 + index * Math.PI / 4;
+      const length = index % 2 === 0 ? 158 : 132;
+      const bend = index % 2 === 0 ? 38 : -34;
+      const graphics = this.add.graphics();
+      graphics.lineStyle(24, 0x102e45, 0.95).beginPath().moveTo(0, 18);
+      graphics.lineTo(Math.cos(angle) * 56 + Math.cos(angle + Math.PI / 2) * bend * 0.45, Math.sin(angle) * 56 + Math.sin(angle + Math.PI / 2) * bend * 0.45);
+      graphics.lineTo(Math.cos(angle) * length * 0.72 + Math.cos(angle + Math.PI / 2) * bend, Math.sin(angle) * length * 0.72 + Math.sin(angle + Math.PI / 2) * bend);
+      graphics.lineStyle(16, 0x327b91, 1).beginPath().moveTo(0, 18);
+      graphics.lineTo(Math.cos(angle) * 56 + Math.cos(angle + Math.PI / 2) * bend * 0.45, Math.sin(angle) * 56 + Math.sin(angle + Math.PI / 2) * bend * 0.45);
+      graphics.lineTo(Math.cos(angle) * length * 0.72 + Math.cos(angle + Math.PI / 2) * bend, Math.sin(angle) * length * 0.72 + Math.sin(angle + Math.PI / 2) * bend);
+      graphics.lineStyle(4, 0x8fe0dc, 0.9);
+      for (let sucker = 0; sucker < 5; sucker++) {
+        const progress = 0.28 + sucker * 0.12;
+        const sx = Math.cos(angle) * length * progress + Math.cos(angle + Math.PI / 2) * bend * progress;
+        const sy = Math.sin(angle) * length * progress + Math.sin(angle + Math.PI / 2) * bend * progress;
+        graphics.strokeCircle(sx, sy, 5 - sucker * 0.35);
+      }
+      graphics.setPosition(0, 18).setDepth(0);
+      tentacles.push(graphics);
+      kraken.add(graphics);
+    }
+    const mantle = this.add.graphics();
+    mantle.fillStyle(0x102e45, 1).fillEllipse(0, -18, 110, 120);
+    mantle.fillStyle(0x397f94, 1).fillEllipse(0, -25, 94, 108);
+    mantle.fillStyle(0x79b9b4, 0.5).fillEllipse(-20, -53, 30, 18);
+    const face = this.add.graphics();
+    face.fillStyle(0xffd98a, 1).fillEllipse(-23, -4, 23, 30).fillEllipse(23, -4, 23, 30);
+    face.fillStyle(0x17263c, 1).fillCircle(-23, -5, 8).fillCircle(23, -5, 8);
+    face.fillStyle(0xffffff, 1).fillCircle(-25, -8, 2.5).fillCircle(21, -8, 2.5);
+    face.fillStyle(0x16364b, 1).fillTriangle(-13, 31, 13, 31, 0, 48);
+    kraken.add([mantle, face]);
+    kraken.setData("tentacles", tentacles);
+    return kraken;
+  }
+  private createCandyBee(x: number, y: number) {
+    const outline = 0x633a32;
+    const bee = this.add.container(x, y).setDepth(19);
+    const wings = this.add.graphics();
+    wings.fillStyle(0xffffff, 0.8).lineStyle(4, 0x9dcbd0, 0.9);
+    wings.fillEllipse(-27, -47, 36, 54).strokeEllipse(-27, -47, 36, 54);
+    wings.fillEllipse(23, -48, 36, 54).strokeEllipse(23, -48, 36, 54);
+    wings.fillStyle(0xffffff, 0.36).fillEllipse(-31, -56, 9, 21).fillEllipse(19, -57, 9, 21);
+    const body = this.add.graphics();
+    body.fillStyle(outline).fillEllipse(0, 4, 106, 96);
+    body.fillStyle(0xffc83d).fillEllipse(0, 0, 96, 88);
+    body.fillStyle(0x59372f).fillRoundedRect(-33, -41, 19, 81, 9);
+    body.fillStyle(0x59372f).fillRoundedRect(14, -41, 19, 81, 9);
+    body.fillStyle(0xffe991, 0.8).fillEllipse(-24, -26, 23, 10);
+    body.fillStyle(outline).fillEllipse(0, 38, 16, 19);
+    const face = this.add.graphics();
+    face.fillStyle(0xffa18e, 0.85).fillEllipse(-29, 17, 17, 10).fillEllipse(29, 17, 17, 10);
+    face.fillStyle(outline).fillEllipse(-18, 0, 8, 15).fillEllipse(18, 0, 8, 15);
+    face.fillStyle(0xffffff).fillCircle(-19, -3, 2.5).fillCircle(17, -3, 2.5);
+    face.lineStyle(3, outline, 1).beginPath().arc(0, 13, 11, 0.25, Math.PI - 0.25, false).strokePath();
+    const antenna = this.add.graphics();
+    antenna.lineStyle(4, outline, 1).lineBetween(-13, -42, -20, -57).lineBetween(13, -42, 20, -57);
+    antenna.fillStyle(0xff83ab).fillCircle(-21, -59, 6).fillCircle(21, -59, 6);
+    bee.add([wings, body, face, antenna]);
+    bee.setSize(120, 120);
+    if (!save.profile.settings.reducedMotion) {
+      this.tweens.add({ targets: wings, scaleY: 0.62, duration: 130, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    return bee;
   }
   private updateBoss(dt: number) {
     const boss = this.boss!;
@@ -1448,6 +1609,8 @@ export class GameScene extends Phaser.Scene {
     else if (boss.definition.id === "candy-monster") this.updateCandyBehavior(boss, dt);
     else this.updateKrakenBehavior(boss, dt);
     if (!this.boss) return;
+    if (boss.definition.id === "king-snake") this.updateKingSnakeVisual(boss, dt);
+    else if (boss.definition.id === "kraken") this.updateKrakenVisual(boss);
 
     if (boss.definition.id !== "king-snake") {
       this.bossCoinsTimer -= dt;
@@ -1474,21 +1637,15 @@ export class GameScene extends Phaser.Scene {
           this.candyBossEscapeTimer = 2;
           boss.state = "ATTACK_MODE";
           boss.stateTimer = 2;
-          if (this.candyBossShieldActive) {
-            this.candyBossShieldActive = false;
-            this.feedback(boss.image.x, boss.image.y, "ESCUDO QUEBRADO! FUJA!", 0xffb52e, true);
-            audio.play("shield_break");
-          } else {
-            this.damageBoss();
-            if (!this.boss) return;
-            this.feedback(boss.image.x, boss.image.y, "−1 HP · FUJA!", 0xffb344, true);
-            this.particles.explode(14, boss.image.x, boss.image.y);
-            audio.play("power"); haptic("power");
-          }
+          this.damageBoss();
+          if (!this.boss) return;
+          this.feedback(boss.image.x, boss.image.y, "−1 HP · FUJA!", 0xffb344, true);
+          this.particles.explode(14, boss.image.x, boss.image.y);
+          audio.play("power"); haptic("power");
           this.tweens.killTweensOf(boss.image);
           this.tweens.add({ targets: boss.image, alpha: 0.25, duration: 200, yoyo: true, repeat: 4 });
           this.tweens.add({ targets: boss.image, x: boss.image.x + (dx / d) * 160, y: boss.image.y + (dy / d) * 160, duration: 350, ease: "Sine.easeOut" });
-        } else if (!aura.active && touchingHead && (boss.state === "CHASE" || boss.state === "SUGAR_RUSH") && this.powers.invincible <= 0) {
+        } else if (!aura.active && touchingHead && (boss.state === "CHASE" || boss.state === "SUGAR_RUSH") && this.powers.invincible <= 0 && !this.powers.ghostActive) {
           const hadShield = this.powers.shield;
           if (!this.powers.absorb()) {
             if (!this.loseLife()) { this.die(); return; }
@@ -1507,7 +1664,9 @@ export class GameScene extends Phaser.Scene {
       const kingSnake = boss.definition.id === "king-snake";
       const kingChargeContact = kingSnake && boss.state === "CHARGE";
       if (kingChargeContact && this.bossCollisionGrace <= 0) {
-        if (aura.active) {
+        if (this.powers.ghostActive) {
+          this.bossCollisionGrace = cfg.hitInvulnerability;
+        } else if (aura.active) {
           aura.consumeProtectionHit(boss.definition.id);
           this.bossCollisionGrace = cfg.hitInvulnerability;
           this.feedback(this.snake.x, this.snake.y, "AURA!", 0xffb52e, true);
@@ -1530,8 +1689,7 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: boss.image, x: boss.image.x + dx / d * 24, y: boss.image.y + dy / d * 24, duration: 130, yoyo: true, ease: "Sine.easeOut" });
         this.particles.explode(14, boss.image.x, boss.image.y);
         audio.play("power"); haptic("power");
-        if (boss.definition.id === "candy-monster" && aura.remainingHits > 0) this.bossFight.combat.activateAttackAura({ maxHits: aura.remainingHits, source: "sugar_shield", bossId: boss.definition.id });
-      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && boss.definition.id !== "candy-monster" && this.bossCollisionGrace <= 0) {
+      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && boss.definition.id !== "candy-monster" && this.bossCollisionGrace <= 0 && !this.powers.ghostActive) {
         const hadShield = this.powers.shield;
         if (!this.powers.absorb()) {
           this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
@@ -1575,18 +1733,27 @@ export class GameScene extends Phaser.Scene {
     }
     return { x: Phaser.Math.Clamp(this.snake.x + 220, arena.left + 80, arena.right - 80), y: Phaser.Math.Clamp(this.snake.y + 180, arena.top + 80, arena.bottom - 80) };
   }
-  private spawnBossPickup(kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield", _charge: number, symbol?: string, tint?: number) {
+  private spawnBossPickup(kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield", _charge: number, symbol?: string, tint?: number) {
     const point = this.bossSafePoint(180);
     this.spawnBossPickupAt(kind, point.x, point.y, symbol, tint);
   }
-  private spawnBossPickupAt(kind: "boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield", x: number, y: number, symbol?: string, tint?: number) {
+  private spawnBossPickupAt(kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield", x: number, y: number, symbol?: string, tint?: number) {
     const point = { x, y };
     const color = tint ?? (kind === "crown-orb" ? 0xffb52e : kind === "attack-pearl" ? 0x9df8ff : 0xff76d7);
     const graphic = this.add.graphics().fillStyle(color, 0.28).fillCircle(0, 0, 28).lineStyle(4, color, 0.95).strokeCircle(0, 0, 23);
     const label = this.add.text(0, 0, symbol ?? (kind === "crown-orb" ? "♛" : kind === "sugar-shield" || kind === "candy-shield" ? "S" : "✦"), { fontSize: "25px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
     const image = this.add.container(point.x, point.y, [graphic, label]).setDepth(24);
     this.tweens.add({ targets: image, scale: 1.16, duration: 500, yoyo: true, repeat: -1 });
-    this.bossPickups.push({ ...point, life: kind === "boss-coin" ? 24 : kind === "candy-aura" ? Number.POSITIVE_INFINITY : 14, kind, image });
+    this.bossPickups.push({ ...point, life: kind === "boss-coin" || kind === "loot-boss-coin" ? Number.POSITIVE_INFINITY : kind === "candy-aura" ? Number.POSITIVE_INFINITY : 14, kind, image });
+  }
+  private dropBossCoins(amount: number, x: number, y: number) {
+    for (let index = 0; index < amount; index++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 35 + Math.sqrt(Math.random()) * 145;
+      const dropX = Phaser.Math.Clamp(x + Math.cos(angle) * radius, B.arena.left + 40, B.arena.right - 40);
+      const dropY = Phaser.Math.Clamp(y + Math.sin(angle) * radius, B.arena.top + 40, B.arena.bottom - 40);
+      this.spawnBossPickupAt("loot-boss-coin", dropX, dropY, "◆", 0xffd35a);
+    }
   }
   private updateBossPickups(dt: number) {
     for (const pickup of [...this.bossPickups]) {
@@ -1595,15 +1762,21 @@ export class GameScene extends Phaser.Scene {
       if (distance(pickup, this.snake) >= 39) continue;
       pickup.image.destroy(); this.bossPickups.splice(this.bossPickups.indexOf(pickup), 1);
       const boss = this.boss;
-      if (!boss) return;
-      if (pickup.kind === "boss-coin") {
-        this.bossFight.combat.addCharge(boss.definition.combat.attackChargePerBossCoin);
-        this.run.bossCoins++;
+      if (pickup.kind === "loot-boss-coin" || pickup.kind === "boss-coin") {
+        if (boss) {
+          this.bossFight.combat.addCharge(boss.definition.combat.attackChargePerBossCoin);
+          this.run.bossCoins++;
+        }
+        creditBossCoins(save.profile, 1);
         audio.play("coin_golden"); haptic("coin");
-        this.feedback(pickup.x, pickup.y, "+25 ATTACK", 0xffd35a, true);
-        if (boss.definition.id === "candy-monster" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((item) => item.kind === "candy-aura"))
+        this.feedback(pickup.x, pickup.y, boss ? "+1 BOSS COIN · AURA" : "+1 BOSS COIN", 0xffd35a, true);
+        void save.save();
+        if (boss?.definition.id === "candy-monster" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((item) => item.kind === "candy-aura"))
           this.spawnBossPickup("candy-aura", 0, "✦", 0xff76d7);
-      } else if (pickup.kind === "candy-aura") {
+        continue;
+      }
+      if (!boss) return;
+      if (pickup.kind === "candy-aura") {
         this.bossFight.combat.activateAttackAura({ maxHits: 1, source: "candy-aura", bossId: boss.definition.id });
         boss.state = "ATTACK_MODE";
         audio.play("power"); haptic("power");
@@ -1617,7 +1790,7 @@ export class GameScene extends Phaser.Scene {
         this.bossFight.combat.addCharge(pickup.kind === "crown-orb" ? 100 : pickup.kind === "attack-pearl" ? 50 : 25);
         const activated = this.bossFight.combat.activateAttackAura({ maxHits: pickup.kind === "sugar-shield" ? 2 : boss.definition.combat.auraMaxHits, source, bossId: boss.definition.id });
         if (activated) {
-          if (pickup.kind === "sugar-shield") boss.state = "ATTACK_MODE";
+          if (pickup.kind === "sugar-shield" && boss.definition.id !== "candy-monster") boss.state = "ATTACK_MODE";
           audio.play("power"); haptic("power");
           this.feedback(pickup.x, pickup.y, pickup.kind === "sugar-shield" ? "ATTACK MODE!" : "ATTACK AURA!", 0xffa52f, true);
         }
@@ -1629,13 +1802,52 @@ export class GameScene extends Phaser.Scene {
     const step = Math.min(length, speed * dt);
     boss.image.x += dx / length * step; boss.image.y += dy / length * step;
   }
+  private updateKingSnakeVisual(boss: NonNullable<GameScene["boss"]>, dt: number) {
+    const dx = boss.image.x - boss.lastVisualX, dy = boss.image.y - boss.lastVisualY;
+    if (Math.hypot(dx, dy) >= 8) {
+      boss.trail.unshift({ x: boss.image.x, y: boss.image.y });
+      boss.trail.length = Math.min(boss.trail.length, 33);
+      boss.lastVisualX = boss.image.x;
+      boss.lastVisualY = boss.image.y;
+    }
+    if (Math.hypot(dx, dy) > 0.01) {
+      const targetAngle = Math.atan2(dy, dx);
+      boss.visualAngle = Phaser.Math.Angle.RotateTo(boss.visualAngle, targetAngle, 7 * dt);
+    }
+    const stunnedWobble = boss.state === "STUNNED" ? Math.sin(this.run.elapsed * 18) * 0.12 : 0;
+    boss.image.rotation = boss.visualAngle + stunnedWobble;
+    for (let index = 0; index < boss.bodySegments.length; index++) {
+      const trailIndex = (index + 1) * 6;
+      const point = boss.trail[Math.min(trailIndex, boss.trail.length - 1)];
+      const next = boss.trail[Math.max(0, trailIndex - 1)];
+      const segment = boss.bodySegments[index];
+      segment.setPosition(point.x, point.y);
+      segment.rotation = Math.atan2(next.y - point.y, next.x - point.x);
+    }
+  }
+  private updateKrakenVisual(boss: NonNullable<GameScene["boss"]>) {
+    if (!(boss.image instanceof Phaser.GameObjects.Container) || !boss.krakenTentacles) return;
+    const phaseScale = 1 + boss.phase * 0.055;
+    const telegraph = boss.state === "TELEGRAPH_SLAM" ? 1 + Math.sin(this.run.elapsed * 18) * 0.08 : 1;
+    boss.image.setScale(phaseScale * telegraph);
+    boss.image.rotation = Math.sin(this.run.elapsed * 1.6) * 0.025;
+    boss.krakenTentacles.forEach((tentacle, index) => {
+      tentacle.rotation = Math.sin(this.run.elapsed * 2.3 + index * 0.9) * 0.11;
+      tentacle.y = 18 + Math.sin(this.run.elapsed * 2.8 + index) * 5;
+    });
+    if (boss.state === "TELEGRAPH_SLAM" && boss.hazard) {
+      boss.hazard.setAlpha(0.62 + Math.sin(this.run.elapsed * 16) * 0.25);
+    }
+  }
   private updateKingBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const arena = B.arena;
+    const preference = save.profile.settings.speedPreference;
+    const telegraph = (duration: number, minimum = 0.45) => bossAttackTiming(duration, preference, minimum);
     const furious = boss.health <= 2;
     if (boss.state === "CHASE") {
       this.moveBossToward(boss, this.snake, boss.speed * (furious ? 1.28 : boss.phase === 0 ? 1 : 1.12), dt);
       if (boss.stateTimer <= 0) {
-        boss.state = "PREPARE_CHARGE"; boss.stateTimer = Math.max(furious ? 0.65 : 0.8, boss.definition.combat.telegraphDuration - boss.phase * (furious ? 0.16 : 0.08));
+        boss.state = "PREPARE_CHARGE"; boss.stateTimer = telegraph(Math.max(furious ? 0.65 : 0.8, boss.definition.combat.telegraphDuration - boss.phase * (furious ? 0.16 : 0.08)));
         boss.chargeX = this.snake.x - boss.image.x; boss.chargeY = this.snake.y - boss.image.y;
         const length = Math.hypot(boss.chargeX, boss.chargeY) || 1; boss.chargeX /= length; boss.chargeY /= length;
         const marker = this.add.graphics().lineStyle(8, 0xff544e, 0.62).lineBetween(boss.image.x, boss.image.y, boss.image.x + boss.chargeX * 440, boss.image.y + boss.chargeY * 440).setDepth(8);
@@ -1655,39 +1867,35 @@ export class GameScene extends Phaser.Scene {
         this.spawnBossPickup("crown-orb", 100, "♛", 0xffb52e);
       }
     } else if (boss.state === "STUNNED") {
-      boss.image.rotation = Math.sin(this.run.elapsed * 18) * 0.12;
       if (boss.stateTimer <= 0) {
-        boss.image.rotation = 0;
         if (boss.doubleCharge > 0) { boss.doubleCharge--; boss.state = "RECOVER"; boss.stateTimer = 0.7; }
-        else { boss.state = "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown * (furious ? 0.7 : 1); }
+        else { boss.state = "CHASE"; boss.stateTimer = telegraph(boss.definition.combat.attackCooldown * (furious ? 0.7 : 1), 1.5); }
       }
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
       if (furious && boss.doubleCharge === 0 && boss.attack < 0) { boss.state = "PREPARE_CHARGE"; boss.stateTimer = 0.65; boss.doubleCharge = 2; }
-      else { boss.state = "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown * (furious ? 0.7 : 1); }
+      else { boss.state = "CHASE"; boss.stateTimer = telegraph(boss.definition.combat.attackCooldown * (furious ? 0.7 : 1), 1.5); }
     }
   }
   private updateCandyBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
+    const preference = save.profile.settings.speedPreference;
+    const attackCooldown = bossAttackTiming(boss.definition.combat.attackCooldown * (boss.phase === 0 ? 1 : boss.phase === 1 ? 0.88 : 0.76), preference, 1.5);
     if (this.candyBossEscapeTimer > 0) {
       const away = { x: boss.image.x - this.snake.x, y: boss.image.y - this.snake.y }, length = Math.hypot(away.x, away.y) || 1;
       const destination = { x: Phaser.Math.Clamp(boss.image.x + away.x / length * 260, B.arena.left + 90, B.arena.right - 90), y: Phaser.Math.Clamp(boss.image.y + away.y / length * 260, B.arena.top + 90, B.arena.bottom - 90) };
       this.moveBossToward(boss, destination, boss.speed * 1.5, dt);
       return;
     }
-    if (boss.health <= 2 && boss.state !== "SUGAR_RUSH" && boss.state !== "ATTACK_MODE") {
-      boss.state = "SUGAR_RUSH"; boss.speed = boss.definition.movementSpeed * 1.1;
-      this.ui.toast("SUGAR RUSH!"); audio.play("power");
-    }
     if (boss.state === "DROP_ATTACK") {
       if (boss.stateTimer <= 0) {
         const marker = this.bossMarkers.pop(); marker?.destroy();
-        const attackRadius = boss.health <= 2 ? 94 : 64;
+        const attackRadius = 64;
         const splat = this.add.graphics().fillStyle(0xdb4c93, 0.48).fillCircle(0, 0, attackRadius).lineStyle(4, 0xb72b75).strokeCircle(0, 0, attackRadius);
         const targetX = boss.targetX, targetY = boss.targetY;
         const zone = this.add.container(targetX, targetY, [splat]).setDepth(7);
         this.tweens.add({ targets: zone, alpha: 0, delay: 4500, duration: 400, onComplete: () => { zone.destroy(); this.stickyZones = this.stickyZones.filter((item) => Math.hypot(item.x - targetX, item.y - targetY) > 100); this.renderStickyZones(); } });
         const headHit = distance(this.snake, { x: targetX, y: targetY }) < attackRadius + B.snake.radius;
           const bodyHit = this.snake.body.slice(1, this.snake.length).some((segment) => distance(segment, { x: targetX, y: targetY }) < attackRadius + B.snake.radius);
-        if (headHit) {
+        if (headHit && !this.powers.ghostActive) {
           const hadShield = this.powers.shield;
           const hadInvincibility = this.powers.invincible > 0;
           if (!this.powers.absorb()) {
@@ -1695,7 +1903,7 @@ export class GameScene extends Phaser.Scene {
             this.feedback(this.snake.x, this.snake.y, `VIDA PERDIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
           } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
           else if (hadInvincibility) this.feedback(this.snake.x, this.snake.y, "PROTEGIDO!", 0x70cfff);
-        } else if (!headHit && bodyHit) {
+        } else if (!headHit && bodyHit && !this.powers.ghostActive) {
           if (this.powers.shield || this.powers.invincible > 0) {
             const hadShield = this.powers.shield;
             const hadInvincibility = this.powers.invincible > 0;
@@ -1710,23 +1918,22 @@ export class GameScene extends Phaser.Scene {
           }
         }
         if (!headHit && !bodyHit && this.stickyZones.length < 4) { this.stickyZones.push({ x: targetX, y: targetY, radius: attackRadius - 2 }); this.renderStickyZones(); }
-        boss.state = boss.health <= 3 ? "SUGAR_RUSH" : "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown;
+        boss.state = "CHASE"; boss.stateTimer = attackCooldown;
       }
     } else if (boss.state === "ATTACK_MODE") {
       const away = { x: boss.image.x - this.snake.x, y: boss.image.y - this.snake.y }, length = Math.hypot(away.x, away.y) || 1;
       const destination = { x: Phaser.Math.Clamp(boss.image.x + away.x / length * 260, B.arena.left + 90, B.arena.right - 90), y: Phaser.Math.Clamp(boss.image.y + away.y / length * 260, B.arena.top + 90, B.arena.bottom - 90) };
       this.moveBossToward(boss, destination, boss.speed * 1.25, dt);
       if (!this.bossFight.combat.active) {
-        boss.state = boss.health <= 2 ? "SUGAR_RUSH" : "CHASE";
-        boss.stateTimer = boss.definition.combat.attackCooldown;
-        if (boss.health <= 2) boss.speed = boss.definition.movementSpeed * 1.75;
+        boss.state = "CHASE";
+        boss.stateTimer = attackCooldown;
       }
     } else {
-      this.moveBossToward(boss, this.snake, boss.speed * (boss.state === "SUGAR_RUSH" ? 1.1 : 1), dt);
+      this.moveBossToward(boss, this.snake, boss.speed, dt);
       if (boss.stateTimer <= 0) {
-        boss.state = "DROP_ATTACK"; boss.stateTimer = boss.definition.combat.telegraphDuration;
+        boss.state = "DROP_ATTACK"; boss.stateTimer = bossAttackTiming(boss.definition.combat.telegraphDuration * (boss.phase === 0 ? 1 : boss.phase === 1 ? 0.92 : 0.84), preference, 0.45);
         boss.targetX = this.snake.x; boss.targetY = this.snake.y;
-        const markerRadius = boss.health <= 2 ? 94 : 58;
+        const markerRadius = 58;
         const marker = this.add.graphics().fillStyle(0xff5e8b, 0.28).fillCircle(boss.targetX, boss.targetY, markerRadius).lineStyle(6, 0xff5283).strokeCircle(boss.targetX, boss.targetY, markerRadius).setDepth(8);
         this.bossMarkers.push(marker); audio.play("error");
       }
@@ -1735,6 +1942,7 @@ export class GameScene extends Phaser.Scene {
     if (boss.definition.id === "candy-monster" && boss.phase >= 1 && !this.powers.shield && !this.bossPickups.some((item) => item.kind === "candy-shield") && Math.random() < dt * 0.08) this.spawnBossPickup("candy-shield", 0, "S", 0x70cfff);
   }
   private updateKrakenBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
+    const preference = save.profile.settings.speedPreference;
     boss.image.x = B.arena.left + (B.arena.right - B.arena.left) * 0.78;
     boss.image.y = B.arena.top + (B.arena.bottom - B.arena.top) * 0.74;
     if (boss.phase >= 1 && !this.bossCurrent) {
@@ -1753,23 +1961,32 @@ export class GameScene extends Phaser.Scene {
       if (current.life <= 0) { current.graphics.destroy(); this.bossCurrent = undefined; }
     }
     if (boss.state === "IDLE" && boss.stateTimer <= 0) {
-      boss.state = "TELEGRAPH_SLAM"; boss.stateTimer = boss.definition.combat.telegraphDuration;
+      boss.state = "TELEGRAPH_SLAM"; boss.stateTimer = bossAttackTiming(boss.definition.combat.telegraphDuration, preference, 0.7);
       const target = this.bossSafePoint(120); boss.targetX = target.x; boss.targetY = target.y;
       const marker = this.add.graphics().lineStyle(8, 0x53d7e5, 0.85).strokeCircle(target.x, target.y, 66).lineStyle(4, 0xc6fbff, 0.8).strokeCircle(target.x, target.y, 92).setDepth(8);
       this.bossMarkers.push(marker); audio.play("error"); haptic("coin"); this.feedback(target.x, target.y, "TENTACLE!", 0x60dfeb, true);
     } else if (boss.state === "TELEGRAPH_SLAM" && boss.stateTimer <= 0) {
       for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
       const hit = Math.hypot(this.snake.x - boss.targetX, this.snake.y - boss.targetY) < 90;
-      if (hit && !this.powers.absorb()) { this.snake.length = Math.max(B.snake.initial, this.snake.length - 1); this.powers.invincible = Math.max(this.powers.invincible, 0.8); }
-      const tentacleGraphic = this.add.graphics().fillStyle(0x586e93, 0.5).fillRoundedRect(-22, -122, 44, 244, 22).lineStyle(6, 0xc4e7ec).strokeRoundedRect(-22, -122, 44, 244, 22);
+      const attackHit = hit && !this.powers.blocksAttack();
+      if (attackHit) { this.snake.length = Math.max(B.snake.initial, this.snake.length - 1); this.powers.invincible = Math.max(this.powers.invincible, 0.8); }
+      const tentacleGraphic = this.add.graphics();
+      const startX = boss.image.x - boss.targetX;
+      const startY = boss.image.y - boss.targetY;
+      const bendX = startX * 0.48;
+      const bendY = startY * 0.48 - 36;
+      tentacleGraphic.lineStyle(34, 0x102e45, 0.96).beginPath().moveTo(startX, startY).lineTo(bendX, bendY).lineTo(0, 0);
+      tentacleGraphic.lineStyle(23, 0x397f94, 1).beginPath().moveTo(startX, startY).lineTo(bendX, bendY).lineTo(0, 0);
+      tentacleGraphic.lineStyle(5, 0xa8faff, 0.95).strokeCircle(0, 0, 22).strokeCircle(bendX * 0.48, bendY * 0.48, 7).strokeCircle(bendX * 0.72, bendY * 0.72, 6);
       boss.hazard = this.add.container(boss.targetX, boss.targetY, [tentacleGraphic]).setDepth(10);
-      boss.state = hit ? "RECOVER" : "EXPOSED"; boss.stateTimer = hit ? 1.2 : 2.8;
-      if (!hit) { this.spawnBossPickup("attack-pearl", 50, "●", 0xa8faff); audio.play("pearl_coin"); }
+      boss.state = attackHit ? "RECOVER" : "EXPOSED"; boss.stateTimer = attackHit ? 1.2 : 2.8;
+      if (!attackHit) { this.spawnBossPickup("attack-pearl", 50, "●", 0xa8faff); audio.play("pearl_coin"); }
       else { audio.play("current_flow"); }
     } else if (boss.state === "EXPOSED" && boss.stateTimer <= 0) {
       boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.2;
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
-      boss.state = "IDLE"; boss.stateTimer = Math.max(2, boss.definition.combat.attackCooldown - boss.phase * 0.45);
+      boss.hazard?.destroy(); boss.hazard = undefined;
+      boss.state = "IDLE"; boss.stateTimer = bossAttackTiming(Math.max(2, boss.definition.combat.attackCooldown - boss.phase * 0.45), preference, 1.5);
     }
   }
   private damageBoss() {
@@ -1777,12 +1994,15 @@ export class GameScene extends Phaser.Scene {
     this.boss.health--;
     if (this.boss.health > 0) {
       const thresholds = this.boss.definition.phases;
-      const nextPhase = thresholds.findIndex((threshold) => this.boss!.health <= threshold);
+      const nextPhase = this.boss.definition.id === "candy-monster"
+        ? this.boss.health <= 2 ? 2 : this.boss.health <= 5 ? 1 : 0
+        : thresholds.findIndex((threshold) => this.boss!.health <= threshold);
       if (nextPhase > this.boss.phase) {
         this.boss.phase = nextPhase;
         this.boss.state = this.boss.definition.id === "kraken" ? "RECOVER" : "CHASE";
         this.boss.stateTimer = 1.2;
-        this.boss.speed = this.boss.definition.id === "candy-monster" && this.boss.health <= 2 ? this.boss.definition.movementSpeed * 0.8 : this.boss.definition.movementSpeed * (1 + nextPhase * 0.12);
+        const phaseSpeed = this.boss.definition.id === "candy-monster" ? this.boss.definition.movementSpeed : this.boss.definition.movementSpeed * (1 + nextPhase * 0.12);
+        this.boss.speed = bossMovementSpeed(phaseSpeed, save.profile.settings.speedPreference);
         this.feedback(this.boss.image.x, this.boss.image.y, `FASE ${nextPhase + 1}`, 0xffd66f, true);
         if (this.boss.definition.id === "king-snake" && this.boss.health <= 2) {
           this.tweens.add({ targets: this.boss.image, alpha: 0.45, scale: 1.12, duration: 140, yoyo: true, repeat: 2 });
@@ -1791,28 +2011,44 @@ export class GameScene extends Phaser.Scene {
           audio.play("power"); haptic("power");
         }
         if (this.boss.definition.id === "king-snake") this.spawnBossPickup("crown-orb", 100, "♛", 0xffb52e);
-        if (this.boss.definition.id === "candy-monster" && nextPhase === 1) this.spawnBossPickup("sugar-shield", 0, "S", 0xff76d7);
         if (this.boss.definition.id === "kraken") { this.bossCurrent = undefined; this.bossWhirlpool?.clear(); }
       }
       return;
     }
     const defeated = this.boss.definition;
+    const defeatedX = this.boss.image.x, defeatedY = this.boss.image.y;
+    this.particles.explode(30, defeatedX, defeatedY);
+    for (const segment of this.boss.bodySegments) segment.destroy();
     this.boss.image.destroy(); this.boss = undefined;
+    this.krakenBarrier?.destroy(); this.krakenBarrier = undefined;
+    this.krakenBarrierCooldown = 0;
+    this.krakenReturnAngle = undefined;
+    this.krakenReturnTimer = 0;
     this.bossFight.finish();
     for (const passage of this.worldPassages) passage.setVisible(true);
-    for (const pickup of this.bossPickups) pickup.image.destroy(); this.bossPickups = [];
+    for (const pickup of this.bossPickups) {
+      if (pickup.kind === "boss-coin") {
+        pickup.kind = "loot-boss-coin";
+        pickup.image.setDepth(24);
+        continue;
+      }
+      pickup.image.destroy();
+    }
+    this.bossPickups = this.bossPickups.filter((pickup) => pickup.kind === "loot-boss-coin");
     for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
     this.bossCurrent?.graphics.destroy(); this.bossCurrent = undefined;
     this.bossWhirlpool?.destroy(); this.bossWhirlpool = undefined;
     this.bossAuraGraphics?.destroy(); this.bossAuraGraphics = undefined;
     this.bossHud!.hidden = true;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = false;
+    this.dropBossCoins(defeated.bossCoinDrop, defeatedX, defeatedY);
     const first = !save.profile.bossesDefeated.includes(defeated.id);
     if (first) {
       save.profile.bossesDefeated.push(defeated.id);
-      const petRewards = [defeated.petReward, ...(defeated.additionalPetRewards ?? [])].filter((id): id is string => Boolean(id));
+      const petRewards = [...new Set([defeated.petReward, ...(defeated.additionalPetRewards ?? []), ...pets.filter((pet) => pet.bossRewardId === defeated.id && pet.requiredBossIds?.every((bossId) => save.profile.bossesDefeated.includes(bossId))).map((pet) => pet.id)].filter((id): id is string => Boolean(id)))];
       save.profile.availablePets = [...new Set([...save.profile.availablePets, ...petRewards])];
-      save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, ...petRewards.filter((id) => id !== "firefly" || defeated.id !== "king-snake")])];
+      const freePetRewards = petRewards.filter((id) => pets.find((pet) => pet.id === id)?.unlockType === "BOSS" && !pets.find((pet) => pet.id === id)?.coinPrice);
+      save.profile.unlockedPets = [...new Set([...save.profile.unlockedPets, ...freePetRewards])];
       const skinRewards = getBossSkinRewards(defeated.id);
       save.profile.unlockedSkins = [...new Set([...save.profile.unlockedSkins, ...skinRewards.map((skin) => skin.id)])];
       save.profile.totalCoins += defeated.rewardCoins;
@@ -1826,8 +2062,7 @@ export class GameScene extends Phaser.Scene {
         : `🔒 Você derrotou o chefe, mas ainda precisa alcançar o nível ${nextWorld.requiredLevel} para liberar o portal de ${nextWorld.name}. Continue jogando para ganhar XP; ao atingir o nível, a passagem aparecerá na borda da arena.`
       : "";
     this.run.bossDefeats++;
-    this.run.bossCoins += 3;
-    const petRewards = [defeated.petReward, ...(defeated.additionalPetRewards ?? [])].filter((id): id is string => Boolean(id));
+    const petRewards = [...new Set([defeated.petReward, ...(defeated.additionalPetRewards ?? []), ...pets.filter((pet) => pet.bossRewardId === defeated.id && pet.requiredBossIds?.every((bossId) => save.profile.bossesDefeated.includes(bossId))).map((pet) => pet.id)].filter((id): id is string => Boolean(id)))];
     if (first && petRewards.length) {
       awardAchievement(save.profile, "boss-hunter");
       awardAchievement(save.profile, "pet-collector");
@@ -1838,23 +2073,29 @@ export class GameScene extends Phaser.Scene {
     const rewardLines = [
       portalGuidance,
       first && petRewards.length
-        ? `🐾 ${petRewards.map((id) => id === "firefly" ? `${pets.find((pet) => pet.id === id)?.name ?? id} está disponível por 12.000 moedas` : `${pets.find((pet) => pet.id === id)?.name ?? id} já está disponível na loja`).join(" e ")}`
+        ? `🐾 ${petRewards.map((id) => {
+            const pet = pets.find((entry) => entry.id === id);
+            if (!pet) return id;
+            return pet.coinPrice ? `${pet.name} disponível por ${pet.coinPrice} Boss Coins` : `${pet.name} liberado grátis`;
+          }).join(" e ")}`
         : "",
       first && rewardedSkins.length
         ? `✨ Skin${rewardedSkins.length > 1 ? "s" : ""} desbloqueada${rewardedSkins.length > 1 ? "s" : ""}: ${rewardedSkins.map((skin) => skin.name).join(", ")}`
         : "",
       first ? `🪙 +${defeated.rewardCoins} moedas · +${defeated.rewardXP} XP` : "",
-      "+3 Boss Coins",
+      `◆ ${defeated.bossCoinDrop} Boss Coins caíram no chão`,
     ].filter(Boolean);
     if (first && newlyUnlocked.length) this.ui.toast(`Mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}.`);
-    this.halted = true;
-    this.pauseKind = "pause";
-    this.resetControls();
-    this.overlay = this.ui.modal(
-      first ? `🏆 ${defeated.name} derrotado!` : `🎉 ${defeated.name} derrotado!`,
-      `Parabéns, vitória incrível!${rewardLines.length ? `\n\n${rewardLines.join("\n")}` : ""}`,
-      [{ label: "OK · Continuar", run: () => this.continue() }],
-    );
+    if (first) {
+      this.halted = true;
+      this.pauseKind = "pause";
+      this.resetControls();
+      this.overlay = this.ui.modal(
+        `🏆 ${defeated.name} derrotado!`,
+        `Parabéns, vitória incrível!${rewardLines.length ? `\n\n${rewardLines.join("\n")}` : ""}`,
+        [{ label: "OK · Continuar", run: () => this.continue() }],
+      );
+    }
     analytics.track("bossDefeated", { boss: defeated.id });
     void save.save();
   }

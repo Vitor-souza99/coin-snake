@@ -3,7 +3,7 @@ import { skins, skinRarities, skinUnlockStatus, type SkinRarity } from "../data/
 import { pets } from "../data/pets";
 import { worlds } from "../data/worlds";
 import { save } from "../systems/SaveSystem";
-import { buyPet, buySkin, claimShopReward, FIREFLY_COIN_PRICE, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
+import { buyPet, buySkin, claimShopReward, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
 import { ads } from "../services/AdsService";
 import { localDay } from "../utils/math";
 import { reconcileWorldUnlocks, selectWorld, worldRequirementText, worldStatus } from "../systems/WorldSystem";
@@ -15,6 +15,16 @@ type Category = "skins" | "pets" | "maps" | "packs";
 
 export class ShopScene extends Phaser.Scene {
   private ui!: ScreenUI;
+  private skinScrollY = 0;
+  private captureSkinScroll() {
+    this.skinScrollY = this.ui.root.scrollTop;
+  }
+  private restoreSkinScroll() {
+    const scrollY = this.skinScrollY;
+    requestAnimationFrame(() => {
+      if (this.ui?.root.isConnected) this.ui.root.scrollTop = scrollY;
+    });
+  }
   constructor() { super("Shop"); }
 
   create() {
@@ -25,6 +35,36 @@ export class ShopScene extends Phaser.Scene {
     let category: Category = previous?.category ?? "skins";
     let filter: "ALL" | "OWNED" | "LOCKED" = previous?.filter ?? "ALL";
     let rarity: SkinRarity | "ALL" = previous?.rarity ?? "ALL";
+
+    const confirmPurchase = (name: string, price: number, purchase: () => boolean, currency = "moedas", balance: () => number = () => profile.totalCoins) => {
+      const confirmation = ui.modal(
+        "Confirmar compra",
+        `Tem certeza que deseja comprar ${name} por ${price.toLocaleString("pt-BR")} ${currency}?\nSeu saldo atual: ${balance().toLocaleString("pt-BR")} ${currency}.`,
+        [
+          { label: "CONFIRMAR COMPRA", run: () => {
+            this.captureSkinScroll();
+            if (balance() < price || !purchase()) {
+              confirmation.destroy();
+              this.restoreSkinScroll();
+              ui.toast("Compra não realizada. Confira seu saldo e a disponibilidade do item.");
+              return;
+            }
+            void save.save().then(() => {
+              confirmation.destroy();
+              render();
+              this.restoreSkinScroll();
+              this.showPurchaseSuccess(name);
+            });
+          } },
+          { label: "CANCELAR", run: () => {
+            this.captureSkinScroll();
+            confirmation.destroy();
+            this.restoreSkinScroll();
+          } },
+        ],
+      );
+      audio.play("click");
+    };
 
     const categoryNav = () => `<nav class="shop-categories" role="tablist" aria-label="Categorias da loja">
       ${([ ["skins", "Skins"], ["pets", "Mascotes"], ["maps", "Mapas"], ["packs", "Pacotes · futuro"] ] as [Category, string][]).map(([id, label]) =>
@@ -55,7 +95,10 @@ export class ShopScene extends Phaser.Scene {
         const premium = skin.unlockType === "PREMIUM";
         const price = skin.unlockType === "COINS" ? `${skin.coinPrice?.toLocaleString("pt-BR")} moedas` : status.label;
         const equip = !premium && (owned || status.unlocked)
-          ? `<button id="skin-${skin.id}" class="action small ${selected ? "secondary" : ""}" data-equip-skin="${skin.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADA" : "EQUIPAR"}</button>` : "";
+          ? `<button id="skin-${skin.id}" class="action small ${selected ? "secondary" : ""}" data-equip-skin="${skin.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADA" : "EQUIPAR"}</button>`
+          : !premium && skin.unlockType === "COINS" && skin.coinPrice !== null
+            ? `<button class="action small" data-buy-skin="${skin.id}" ${profile.totalCoins < skin.coinPrice ? "disabled" : ""}>COMPRAR</button>`
+            : "";
         return `<article class="card skin-card rarity-card rarity-${skin.rarity.toLowerCase()}" data-skin="${skin.id}" tabindex="0" role="button" aria-label="Visualizar ${skin.name}, ${skin.rarity}">
           <img src="${textureURL(this, `${skin.id}-preview-head`)}" alt="Preview de ${skin.name}">
           <div class="details"><h2>${skin.name}</h2><span class="skin-rarity rarity-${skin.rarity.toLowerCase()}">${skin.rarity}</span><p>${premium ? "🔒 PREMIUM · INDISPONÍVEL" : owned ? selected ? "✓ EQUIPADA" : "✓ DESBLOQUEADA" : price}</p>
@@ -65,26 +108,24 @@ export class ShopScene extends Phaser.Scene {
 
     const renderPets = () => {
       const ownedCount = pets.filter((pet) => profile.unlockedPets.includes(pet.id)).length;
-      const fireflyAvailable = profile.availablePets.includes("firefly") && !profile.unlockedPets.includes("firefly");
       return `<section class="pet-shop-intro" aria-label="Resumo dos mascotes">
-        <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes para desbloquear mascotes. O Vaga-lume fica disponível após vencer King Snake.</p></div>
-        <div class="pet-wallet"><span>🪙 SALDO</span><strong>${profile.totalCoins.toLocaleString("pt-BR")}</strong><small>moedas</small></div>
+        <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes para liberar mascotes e colete Boss Coins que eles deixam cair para comprar novos companheiros.</p></div>
+        <div class="pet-wallet"><span>◆ SALDO</span><strong>${profile.bossCoinBalance.toLocaleString("pt-BR")}</strong><small>Boss Coins</small></div>
       </section>
-      ${fireflyAvailable ? `<aside class="pet-feature-banner"><span aria-hidden="true">✨</span><div><strong>Vaga-lume disponível!</strong><p>Adquira o mascote por ${FIREFLY_COIN_PRICE.toLocaleString("pt-BR")} moedas.</p></div><span class="pet-banner-balance">${profile.totalCoins >= FIREFLY_COIN_PRICE ? "Você já pode comprar" : `Faltam ${(FIREFLY_COIN_PRICE - profile.totalCoins).toLocaleString("pt-BR")} moedas`}</span></aside>` : ""}
       <div class="pet-collection-grid">${pets.map((pet) => {
         const unlocked = profile.unlockedPets.includes(pet.id);
         const available = profile.availablePets.includes(pet.id);
         const selected = profile.selectedPet === pet.id;
         const premium = pet.unlockType === "PREMIUM";
-        const firefly = pet.id === "firefly";
-        const stateClass = selected ? "pet-equipped" : unlocked ? "pet-owned" : firefly && available ? "pet-available" : "pet-locked";
-        const stateLabel = selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : firefly && available ? "À VENDA" : "BLOQUEADO";
+        const purchasable = available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
+        const stateClass = selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
+        const stateLabel = selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
         const action = unlocked
           ? `<button class="action ${selected ? "secondary" : ""}" data-equip-pet="${pet.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADO" : "EQUIPAR"}</button>`
-          : firefly && available
-            ? `<button class="action" data-buy-pet="${pet.id}" ${profile.totalCoins < FIREFLY_COIN_PRICE ? "disabled" : ""}>COMPRAR · ${FIREFLY_COIN_PRICE.toLocaleString("pt-BR")} MOEDAS</button>`
+          : purchasable
+            ? `<button class="action" data-buy-pet="${pet.id}" ${profile.bossCoinBalance < pet.coinPrice! ? "disabled" : ""}>COMPRAR · ${pet.coinPrice} BOSS COINS</button>`
             : `<button class="action secondary" disabled>${premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
-        const detail = unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : firefly && available ? "Desbloqueado pela vitória contra King Snake." : pet.unlockedBy;
+        const detail = unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : purchasable ? pet.unlockedBy : pet.unlockedBy;
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
         return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
           <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
@@ -114,9 +155,9 @@ export class ShopScene extends Phaser.Scene {
       const title: Record<Category, string> = { skins: "Loja", pets: "Loja", maps: "Loja", packs: "Loja" };
       const content = category === "skins" ? renderSkins() : category === "pets" ? renderPets() : category === "maps" ? renderMaps() : renderPacks();
       ui.html(`${header(title[category], `SALDO · ${profile.totalCoins.toLocaleString("pt-BR")} MOEDAS`)}${categoryNav()}<section class="shop-content" role="tabpanel">${content}</section>`);
-      if (previous?.scrollY !== undefined) {
-        window.scrollTo(0, previous.scrollY);
-        previous.scrollY = undefined;
+      const restoreScroll = category === "skins" ? this.skinScrollY : previous?.scrollY;
+      if (restoreScroll !== undefined) {
+        ui.root.scrollTop = restoreScroll;
       }
       ui.on("#back", () => this.scene.start("Menu"));
       ui.root.querySelectorAll<HTMLButtonElement>("[data-category]").forEach((button) => button.addEventListener("click", () => {
@@ -145,8 +186,16 @@ export class ShopScene extends Phaser.Scene {
         ui.root.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation(); this.preview(button.dataset.view!);
         }));
+        ui.root.querySelectorAll<HTMLButtonElement>("[data-buy-skin]").forEach((button) => button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          this.captureSkinScroll();
+          const skin = skins.find((entry) => entry.id === button.dataset.buySkin);
+          if (!skin || skin.unlockType !== "COINS" || skin.coinPrice === null || profile.unlockedSkins.includes(skin.id)) return;
+          confirmPurchase(skin.name, skin.coinPrice, () => buySkin(profile, skin.id));
+        }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-equip-skin]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation();
+          this.captureSkinScroll();
           if (!buySkin(profile, button.dataset.equipSkin!)) return;
           void save.save(); audio.play("click"); haptic("power"); render();
         }));
@@ -164,11 +213,14 @@ export class ShopScene extends Phaser.Scene {
       if (category === "pets") {
         ui.root.querySelectorAll<HTMLButtonElement>("[data-buy-pet]").forEach((button) => button.addEventListener("click", () => {
           const id = button.dataset.buyPet;
-          if (!id || !buyPet(profile, id)) {
-            ui.toast("Moedas insuficientes ou mascote ainda bloqueado.");
+          const pet = pets.find((entry) => entry.id === id);
+          if (!id || !pet || !profile.availablePets.includes(id) || profile.unlockedPets.includes(id)) {
+            ui.toast("Este mascote não está disponível para compra.");
             return;
           }
-          void save.save().then(render); audio.play("coin"); haptic("coin");
+          const price = pet.coinPrice;
+          if (!price) return;
+          confirmPurchase(pet.name, price, () => buyPet(profile, id), "Boss Coins", () => profile.bossCoinBalance);
         }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-equip-pet]").forEach((button) => button.addEventListener("click", () => {
           const id = button.dataset.equipPet;
@@ -191,6 +243,7 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private preview(id: string) {
+    this.captureSkinScroll();
     audio.play("click");
     haptic("coin");
     this.ui.root.hidden = true;
@@ -200,5 +253,11 @@ export class ShopScene extends Phaser.Scene {
 
   showShop() {
     if (this.ui?.root.isConnected) this.ui.root.hidden = false;
+  }
+
+  showPurchaseSuccess(name: string) {
+    this.ui.toast(`🎉 ${name} comprado com sucesso!`, "shop-purchase-success");
+    audio.play("purchase_success");
+    haptic("golden");
   }
 }

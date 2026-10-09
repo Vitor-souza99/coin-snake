@@ -30,10 +30,11 @@ export class ScreenUI {
       action();
     });
   }
-  toast(message: string) {
+  toast(message: string, className = "") {
     this.root.querySelector(".toast")?.remove();
     const t = document.createElement("div");
     t.className = "toast";
+    if (className) t.classList.add(...className.split(/\s+/).filter(Boolean));
     t.textContent = message;
     t.setAttribute("role", "status");
     this.root.append(t);
@@ -79,7 +80,7 @@ export class ScreenUI {
       }
     });
     this.root.append(layer);
-    layer.querySelector("button")?.focus();
+    layer.querySelector("button")?.focus({ preventScroll: true });
     return { destroy: () => layer.remove() };
   }
   destroy() {

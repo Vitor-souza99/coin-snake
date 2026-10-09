@@ -14,6 +14,7 @@ type Sound =
   | "clam_open"
   | "current_flow"
   | "coin_mythic"
+  | "purchase_success"
   | "combo"
   | "turbo_start"
   | "turbo_end"
@@ -63,6 +64,7 @@ class AudioService {
       clam_open: 720,
       current_flow: 390,
       coin_mythic: 1976,
+      purchase_success: 1318,
       combo: 1174,
       turbo_start: 180,
       turbo_end: 130,
@@ -75,7 +77,7 @@ class AudioService {
     g.connect(c.destination);
     const pitch =
       tones[kind] *
-      (kind.startsWith("coin")
+      (kind.startsWith("coin") || kind === "purchase_success"
         ? (0.97 + Math.random() * 0.06) * (1 + (combo - 1) * 0.035)
         : 1);
     o.type = kind === "shrink" ? "sine" : "triangle";

@@ -7,6 +7,26 @@ export const speedPreferenceMultipliers: Record<SpeedPreference, number> = {
   high: 1.15,
   "very-high": 1.3,
 };
+
+export interface BossDifficultyProfile {
+  movementMultiplier: number;
+  timingMultiplier: number;
+}
+
+/** Match boss pressure to the chosen player speed while keeping reaction windows bounded. */
+export function bossDifficultyProfile(speedPreference: SpeedPreference = "medium"): BossDifficultyProfile {
+  const movementMultiplier = Math.max(0.85, Math.min(1.2, speedPreferenceMultipliers[speedPreference]));
+  return { movementMultiplier, timingMultiplier: 1 / movementMultiplier };
+}
+
+export function bossMovementSpeed(baseSpeed: number, speedPreference: SpeedPreference = "medium"): number {
+  return baseSpeed * bossDifficultyProfile(speedPreference).movementMultiplier;
+}
+
+export function bossAttackTiming(baseDuration: number, speedPreference: SpeedPreference = "medium", minimum = 0): number {
+  return Math.max(minimum, baseDuration * bossDifficultyProfile(speedPreference).timingMultiplier);
+}
+
 export function difficulty(seconds: number, score: number, length: number, speedPreference: SpeedPreference = "medium") {
   const d = B.difficulty;
   const level = Math.min(

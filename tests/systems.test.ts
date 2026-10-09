@@ -7,7 +7,7 @@ import {
 import {
   buySkin,
   buyPet,
-  FIREFLY_COIN_PRICE,
+  creditBossCoins,
   claimShopReward,
   SHOP_REWARDED_COINS,
   creditCoins,
@@ -21,10 +21,10 @@ import {
   updateMissionDay,
 } from "../src/game/systems/MissionSystem";
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
-import { difficulty, speedPreferenceMultipliers } from "../src/game/systems/DifficultySystem";
+import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, difficulty, speedPreferenceMultipliers } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
-import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, oceanWorldConfig } from "../src/game/data/oceanWorld";
+import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { addXP } from "../src/game/systems/EconomySystem";
@@ -97,23 +97,42 @@ describe("economy", () => {
     expect(buySkin(p, "bad")).toBe(false);
     expect(p.totalCoins).toBe(0);
   });
-  it("unlocks the firefly offer after King Snake and buys it for 12,000 coins", () => {
+  it("unlocks the firefly offer after King Snake and buys it with 50 Boss Coins", () => {
     const profile = defaults();
     profile.bossesDefeated.push("king-snake");
-    const unlocked = validateSave({ saveVersion: 9, bossesDefeated: ["king-snake"] });
+    const unlocked = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake"] });
     expect(unlocked.availablePets).toContain("firefly");
     expect(unlocked.unlockedPets).not.toContain("firefly");
     expect(buyPet(unlocked, "firefly")).toBe(false);
-    expect(unlocked.totalCoins).toBe(0);
-    unlocked.totalCoins = FIREFLY_COIN_PRICE - 1;
+    expect(unlocked.bossCoinBalance).toBe(0);
+    unlocked.bossCoinBalance = 49;
     expect(buyPet(unlocked, "firefly")).toBe(false);
-    unlocked.totalCoins = FIREFLY_COIN_PRICE;
+    unlocked.bossCoinBalance = 50;
     expect(buyPet(unlocked, "firefly")).toBe(true);
-    expect(unlocked.totalCoins).toBe(0);
-    expect(unlocked.unlockedPets).toContain("firefly");
+    expect(unlocked.bossCoinBalance).toBe(0);
     expect(unlocked.selectedPet).toBe("firefly");
     expect(buyPet(unlocked, "firefly")).toBe(true);
-    expect(unlocked.totalCoins).toBe(0);
+    expect(unlocked.bossCoinBalance).toBe(0);
+  });
+  it("buys Candy Blob for 50 Boss Coins and credits boss coin drops persistently", () => {
+    const profile = validateSave({ saveVersion: 10, bossesDefeated: ["candy-monster"] });
+    expect(profile.availablePets).toContain("candy-blob");
+    expect(profile.unlockedPets).toContain("bee");
+    expect(profile.unlockedPets).not.toContain("candy-blob");
+    creditBossCoins(profile, 40);
+    expect(profile.bossCoinBalance).toBe(40);
+    expect(buyPet(profile, "candy-blob")).toBe(false);
+    creditBossCoins(profile, 10);
+    expect(buyPet(profile, "candy-blob")).toBe(true);
+    expect(profile.bossCoinBalance).toBe(0);
+  });
+  it("uses combat Boss Coins for both aura charge and the persistent shop balance", () => {
+    const profile = defaults();
+    const combat = new BossCombatSystem();
+    combat.addCharge(bosses[0].combat.attackChargePerBossCoin);
+    creditBossCoins(profile, 1);
+    expect(combat.attackCharge).toBe(25);
+    expect(profile.bossCoinBalance).toBe(1);
   });
   it("keeps premium skins unpurchasable and unequippable even with abundant Coins", () => {
     const p = defaults();
@@ -162,6 +181,13 @@ describe("economy", () => {
     expect(p.xp).toBe(37);
     expect(p.totalCoins).toBe(17);
   });
+  it("applies the celestial serpent's ten-percent run XP bonus", () => {
+    const p = defaults(), r = newRun();
+    p.selectedPet = "celestial-serpent";
+    r.score = 200;
+    finishRun(p, r);
+    expect(p.xp).toBe(39);
+  });
 });
 describe("boss entry hints", () => {
   it("provides an actionable hint for every implemented boss", () => {
@@ -181,14 +207,15 @@ describe("boss entry hints", () => {
     expect(king.entryHint).toMatch(/coroa/i);
     expect(king.phases).toContain(2);
   });
-  it("configures the Candy Monster's six-hit fight and two-coin aura charge", () => {
+  it("configures the Candy Monster's eight-hit fight and two-coin aura charge", () => {
     const candy = bosses.find((boss) => boss.id === "candy-monster")!;
-    expect(candy.maxHealth).toBe(6);
-    expect(candy.phases).toEqual([4, 2]);
+    expect(candy.maxHealth).toBe(8);
+    expect(candy.phases).toEqual([5, 2]);
     expect(candy.combat.attackChargePerBossCoin).toBe(25);
     expect(candy.combat.auraMaxHits).toBe(1);
     expect(candy.entryHint).toMatch(/Boss Coins/i);
-    expect(candy.entryHint).toMatch(/2 HP/);
+    expect(candy.entryHint).toMatch(/cada batida.*1 HP/i);
+    expect(candy.entryHint).toMatch(/gradualmente/i);
   });
 });
 describe("boss attack aura", () => {
@@ -270,6 +297,14 @@ describe("combo and balance", () => {
     expect(difficulty(0, 0, B.snake.initial, "very-high").speed).toBeCloseTo(start.speed * 1.3);
     expect(difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial, "low").speed).toBeGreaterThan(difficulty(0, 0, B.snake.initial, "low").speed);
     expect(difficulty(100_000, 1_000_000, B.snake.max, "very-high").speed).toBe(B.snake.maxSpeed * 1.3);
+  });
+  it("scales boss movement and attack pacing to speed preference with safe reaction floors", () => {
+    expect(bossDifficultyProfile("low")).toEqual({ movementMultiplier: 0.85, timingMultiplier: 1 / 0.85 });
+    expect(bossDifficultyProfile("medium")).toEqual({ movementMultiplier: 1, timingMultiplier: 1 });
+    expect(bossMovementSpeed(100, "very-high")).toBe(120);
+    expect(bossAttackTiming(4, "low")).toBeCloseTo(4 / 0.85);
+    expect(bossAttackTiming(0.9, "very-high", 0.7)).toBe(0.75);
+    expect(bossAttackTiming(1, "low", 1.5)).toBe(1.5);
   });
   it("uses the increased base speed and raises the cap through growth and levels", () => {
     const start = difficulty(0, 0, B.snake.initial);
@@ -416,28 +451,55 @@ describe("roadmap progression systems", () => {
     expect(powers.invincible).toBe(B.power.shieldGrace);
     powers.activate("turbo", 0.05);
     expect(powers.turbo).toBeCloseTo(B.power.turboDuration * 1.05);
-    expect(bosses.map((boss) => boss.additionalPetRewards)).toEqual([["firefly"], ["snow-pup"], ["tiny-dragon"]]);
+    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 35]);
+    expect(bosses.find((boss) => boss.id === "king-snake")?.petReward).toBe("tiny-dragon");
+    expect(bosses.find((boss) => boss.id === "candy-monster")?.petReward).toBe("bee");
+    expect(bosses.find((boss) => boss.id === "candy-monster")?.additionalPetRewards).toEqual(["candy-blob", "snow-pup"]);
+    expect(pets.find((pet) => pet.id === "tidal-turtle")?.rarity).toBe("EPIC");
+    expect(pets.find((pet) => pet.id === "phoenix")?.rarity).toBe("LEGENDARY");
+    expect(pets.find((pet) => pet.id === "celestial-serpent")?.rarity).toBe("MYTHIC");
+    expect(new PowerUpSystem(B.power.initialLives + 1).lives).toBe(3);
+    powers.activate("ghost", 0.1);
+    expect(powers.ghost).toBeCloseTo(B.power.ghostDuration * 1.1);
+  });
+  it("unlocks the new Kraken offers and gates the Mythic pet behind every boss", () => {
+    const kraken = validateSave({ saveVersion: 10, bossesDefeated: ["kraken"] });
+    expect(kraken.availablePets).toContain("tidal-turtle");
+    expect(kraken.availablePets).toContain("phoenix");
+    expect(kraken.availablePets).not.toContain("celestial-serpent");
+    const allBosses = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake", "candy-monster", "kraken"] });
+    expect(allBosses.availablePets).toContain("celestial-serpent");
+    expect(allBosses.unlockedPets).not.toContain("phoenix");
+    expect(allBosses.unlockedPets).not.toContain("celestial-serpent");
+    expect(buyPet(allBosses, "crystal-fox")).toBe(false);
   });
   it("save validation accepts earnable pets but never grants the premium pet", () => {
-    const profile = validateSave({ saveVersion: 5, unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
+    const profile = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake", "candy-monster", "kraken"], unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
     expect(profile.unlockedPets).toEqual(earnablePetIds);
     expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(9);
+    expect(profile.saveVersion).toBe(10);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
-    expect(profile.unlockedPets).toContain("bee");
+    expect(profile.unlockedPets).toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.unlockedPets).not.toContain("snow-pup");
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(9);
+    expect(profile.saveVersion).toBe(10);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
+  });
+  it("keeps a previously purchased firefly from a v10 save without granting it to other v10 saves", () => {
+    const owned = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake"], unlockedPets: ["firefly"], selectedPet: "firefly" });
+    const notOwned = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake"] });
+    expect(owned.unlockedPets).toContain("firefly");
+    expect(owned.selectedPet).toBe("firefly");
+    expect(notOwned.unlockedPets).not.toContain("firefly");
   });
   it("awards known achievements once and rejects unknown IDs", () => {
     const profile = defaults(), id = achievementDefinitions[0].id;
@@ -511,7 +573,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(9);
+    expect(migrated.saveVersion).toBe(10);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.selectedSkin).toBe("cat");
     expect(migrated.premiumEntitlements).toEqual([]);
@@ -540,7 +602,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(9);
+    expect(migrated.saveVersion).toBe(10);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
@@ -554,7 +616,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(9);
+    expect(migrated.saveVersion).toBe(10);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -685,6 +747,18 @@ describe("missions", () => {
   });
 });
 describe("snake and powers", () => {
+  it("contains a Kraken arena boundary crossing while leaving interior movement untouched", () => {
+    const center = { x: 500, y: 600 };
+    expect(containKrakenArenaPoint({ x: 500, y: 650 }, center, 100, 14)).toBeNull();
+    expect(containKrakenArenaPoint({ x: 500, y: 710 }, center, 100, 14)).toEqual({ x: 500, y: 686 });
+  });
+  it("keeps Kraken boss portals outside the arena with clearance", () => {
+    const arena = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena")!;
+    const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * oceanWorldConfig.krakenArena.radius;
+    expect(isOutsideKrakenArena(arena, arena, radius, 90)).toBe(false);
+    expect(isOutsideKrakenArena({ x: arena.x + radius + 91, y: arena.y }, arena, radius, 90)).toBe(true);
+    expect(isOutsideKrakenArena({ x: arena.x + radius + 89, y: arena.y }, arena, radius, 90)).toBe(false);
+  });
   it("applies regional Ocean currents additively while preserving player input and clamping Turbo speed", () => {
     const spawn = { x: 700, y: 750 };
     const zones = oceanCurrentZones(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom, spawn);
@@ -762,6 +836,25 @@ describe("snake and powers", () => {
     p.update(2);
     expect(p.absorb()).toBe(false);
   });
+  it("lets Kraken attacks be blocked by ghost, shield, or active invincibility", () => {
+    const ghost = new PowerUpSystem();
+    ghost.activate("ghost");
+    expect(ghost.blocksAttack()).toBe(true);
+    expect(ghost.ghostActive).toBe(true);
+
+    const shield = new PowerUpSystem();
+    shield.activate("shield");
+    expect(shield.blocksAttack()).toBe(true);
+    expect(shield.shield).toBe(false);
+    expect(shield.invincible).toBe(B.power.shieldGrace);
+
+    const invincible = new PowerUpSystem();
+    invincible.invincible = 0.5;
+    expect(invincible.blocksAttack()).toBe(true);
+    expect(invincible.invincible).toBe(0.5);
+
+    expect(new PowerUpSystem().blocksAttack()).toBe(false);
+  });
   it("starts with two lives, caps rare pickups, and consumes lives", () => {
     const p = new PowerUpSystem();
     expect(p.lives).toBe(2);
@@ -799,6 +892,15 @@ describe("snake and powers", () => {
     p.update(1);
     expect(p.precision).toBe(0);
     expect(p.luckyStar).toBe(4);
+  });
+  it("exposes ghost protection only while the power-up itself is active", () => {
+    const p = new PowerUpSystem();
+    expect(p.ghostActive).toBe(false);
+    p.activate("ghost");
+    expect(p.ghostActive).toBe(true);
+    p.update(3);
+    expect(p.ghostActive).toBe(false);
+    expect(p.ghostGrace).toBeGreaterThan(0);
   });
   it("keeps ghost collision immunity only until clear or the 0.5-second cap", () => {
     const p = new PowerUpSystem();

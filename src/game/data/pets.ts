@@ -1,4 +1,4 @@
-export type PetRarity = "COMMON" | "RARE" | "EPIC" | "PREMIUM";
+export type PetRarity = "COMMON" | "RARE" | "EPIC" | "LEGENDARY" | "MYTHIC" | "PREMIUM";
 
 export interface PetDefinition {
   id: string;
@@ -9,6 +9,8 @@ export interface PetDefinition {
   unlockedBy: string;
   unlockType: "BOSS" | "PREMIUM";
   bossRewardId?: string;
+  requiredBossIds?: string[];
+  coinPrice?: number;
   premiumProductId?: string;
 }
 
@@ -19,9 +21,9 @@ export const pets: PetDefinition[] = [
     symbol: "🐝",
     rarity: "RARE",
     description: "+3 pontos percentuais na chance de moedas azuis.",
-    unlockedBy: "Derrote King Snake.",
+    unlockedBy: "Derrote Candy Monster.",
     unlockType: "BOSS",
-    bossRewardId: "king-snake",
+    bossRewardId: "candy-monster",
   },
   {
     id: "candy-blob",
@@ -29,9 +31,10 @@ export const pets: PetDefinition[] = [
     symbol: "🍬",
     rarity: "EPIC",
     description: "+5% de XP ao finalizar uma partida.",
-    unlockedBy: "Derrote Candy Monster.",
+    unlockedBy: "Derrote Candy Monster e adquira por 50 Boss Coins.",
     unlockType: "BOSS",
     bossRewardId: "candy-monster",
+    coinPrice: 50,
   },
   {
     id: "baby-octopus",
@@ -48,10 +51,11 @@ export const pets: PetDefinition[] = [
     name: "Vaga-lume",
     symbol: "✨",
     rarity: "RARE",
-    description: "+5 pontos percentuais na chance de moedas azuis e +1 vida ao reviver.",
-    unlockedBy: "Derrote King Snake.",
+    description: "+5 pontos percentuais na chance de moedas azuis.",
+    unlockedBy: "Derrote King Snake e adquira por 50 Boss Coins.",
     unlockType: "BOSS",
     bossRewardId: "king-snake",
+    coinPrice: 50,
   },
   {
     id: "snow-pup",
@@ -69,9 +73,43 @@ export const pets: PetDefinition[] = [
     symbol: "🐲",
     rarity: "EPIC",
     description: "+5% na duração do Turbo.",
-    unlockedBy: "Derrote Kraken.",
+    unlockedBy: "Derrote King Snake.",
+    unlockType: "BOSS",
+    bossRewardId: "king-snake",
+  },
+  {
+    id: "tidal-turtle",
+    name: "Tartaruga das Marés",
+    symbol: "🐢",
+    rarity: "EPIC",
+    description: "+10% na duração do Fantasma (3,3 s em vez de 3 s).",
+    unlockedBy: "Derrote Kraken e adquira por 75 Boss Coins.",
     unlockType: "BOSS",
     bossRewardId: "kraken",
+    coinPrice: 75,
+  },
+  {
+    id: "phoenix",
+    name: "Fênix Solar",
+    symbol: "🔥",
+    rarity: "LEGENDARY",
+    description: "+1 vida inicial em cada partida.",
+    unlockedBy: "Derrote Kraken e adquira por 125 Boss Coins.",
+    unlockType: "BOSS",
+    bossRewardId: "kraken",
+    coinPrice: 125,
+  },
+  {
+    id: "celestial-serpent",
+    name: "Serpente Celestial",
+    symbol: "🐉",
+    rarity: "MYTHIC",
+    description: "+10% de XP ao finalizar uma partida.",
+    unlockedBy: "Derrote os três chefes e adquira por 200 Boss Coins.",
+    unlockType: "BOSS",
+    bossRewardId: "kraken",
+    coinPrice: 200,
+    requiredBossIds: ["king-snake", "candy-monster", "kraken"],
   },
   {
     id: "crystal-fox",
