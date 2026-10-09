@@ -44,6 +44,17 @@ import {
   localDay,
 } from "../src/game/utils/math";
 describe("economy", () => {
+  it("resets the snake at a portal with the destination heading and aligned body trail", () => {
+    const snake = new Snake();
+    snake.length = 6;
+    snake.reset(120, 240, 0);
+    expect(snake.x).toBe(120);
+    expect(snake.y).toBe(240);
+    expect(snake.angle).toBe(0);
+    expect(snake.body[0]).toEqual({ x: 120, y: 240 });
+    expect(snake.body[1].x).toBeLessThan(snake.body[0].x);
+    expect(snake.body.slice(0, snake.length).every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))).toBe(true);
+  });
   it("uses the progressive XP curve and derives progress from total XP", () => {
     expect([xpForNextLevel(1), xpForNextLevel(2), xpForNextLevel(3), xpForNextLevel(4)]).toEqual([175, 250, 325, 400]);
     expect(totalXPForLevel(5)).toBe(1150);
@@ -146,6 +157,9 @@ describe("boss entry hints", () => {
     expect(king.combat.attackCooldown).toBe(6);
     expect(king.combat.telegraphDuration).toBe(1.3);
     expect(king.combat.stunDuration).toBe(3.5);
+    expect(king.entryHint).not.toMatch(/Boss Coins/i);
+    expect(king.entryHint).toMatch(/coroa/i);
+    expect(king.phases).toContain(2);
   });
 });
 describe("boss attack aura", () => {

@@ -68,6 +68,11 @@ export class SettingsScene extends Phaser.Scene {
     bind("#music", (i) => {
       s.musicVolume = Number(i.value);
     });
+    ui.get<HTMLInputElement>("#music").addEventListener("input", (event) => {
+      s.musicVolume = Number((event.target as HTMLInputElement).value);
+      audio.sync();
+      void save.save();
+    });
     ui.on("#tutorial", () => {
       save.profile.hints = { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false };
       void save.save();

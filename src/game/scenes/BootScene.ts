@@ -6,6 +6,7 @@ import { ensureDay } from "../systems/MissionSystem";
 import { applyOrientation } from "../services/OrientationService";
 import { ads } from "../services/AdsService";
 import { resolveLanguage, setLanguage } from "../services/LocalizationService";
+import { audio } from "../services/AudioService";
 import brandSymbolUrl from "../../../assets/branding/coin-snake-symbol.png";
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -19,6 +20,7 @@ export class BootScene extends Phaser.Scene {
   }
   private async boot() {
     await save.load();
+    audio.setMusic(`${import.meta.env.BASE_URL}assets/audio/coin-snake-theme.wav`);
     setLanguage(resolveLanguage(save.profile.settings.language));
     void ads.requestConsent();
     await applyOrientation(save.profile.settings.orientation);

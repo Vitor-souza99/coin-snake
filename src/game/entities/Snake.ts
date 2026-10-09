@@ -22,16 +22,17 @@ export class Snake {
   constructor() {
     this.reset();
   }
-  reset(x = 360, y = 690) {
+  reset(x = 360, y = 690, angle = -Math.PI / 2) {
     this.x = x;
     this.y = y;
-    this.angle = -Math.PI / 2;
+    this.angle = angle;
     this.cursor = 0;
     this.residual = 0;
+    const dx = Math.cos(angle), dy = Math.sin(angle);
     for (let i = 0; i < this.capacity; i++) {
       const index = (this.capacity - i) % this.capacity;
-      this.trail[index].x = this.x;
-      this.trail[index].y = this.y + i * B.snake.trailStep;
+      this.trail[index].x = this.x - dx * i * B.snake.trailStep;
+      this.trail[index].y = this.y - dy * i * B.snake.trailStep;
     }
     this.placeBody();
   }

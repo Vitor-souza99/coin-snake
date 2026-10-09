@@ -22,15 +22,26 @@ type Sound =
 class AudioService {
   private context?: AudioContext;
   private music?: HTMLAudioElement;
+  private musicUnlocked = false;
+  private gameplayScenes = 0;
+  private readonly activeGameplayScenes = new WeakSet<object>();
   private loop?: { osc: OscillatorNode; gain: GainNode };
   private voices = 0;
+  constructor() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.music?.pause();
+      else this.syncMusic();
+    });
+  }
   unlock() {
+    this.musicUnlocked = true;
     try {
       if (!this.context) this.context = new AudioContext();
       void this.context.resume().catch(() => undefined);
     } catch {
       /* Audio is optional on unsupported WebViews. */
     }
+    this.syncMusic();
   }
   play(kind: Sound, combo = 1) {
     if (save.profile.settings.muted || this.voices >= 12) return;
@@ -123,14 +134,33 @@ class AudioService {
     };
     this.sync();
   }
+  setGameplayActive(scene: object, active: boolean) {
+    if (active && !this.activeGameplayScenes.has(scene)) {
+      this.activeGameplayScenes.add(scene);
+      this.gameplayScenes++;
+    } else if (!active && this.activeGameplayScenes.has(scene)) {
+      this.activeGameplayScenes.delete(scene);
+      this.gameplayScenes--;
+    }
+    this.syncMusic();
+  }
   sync() {
     if (this.loop) {
       if (save.profile.settings.muted) this.setTurbo(false);
       else this.loop.gain.gain.value = save.profile.settings.sfxVolume * 0.025;
     }
+    this.syncMusic();
+  }
+  private syncMusic() {
     if (!this.music) return;
     this.music.volume = save.profile.settings.musicVolume;
-    if (save.profile.settings.muted) this.music.pause();
+    if (
+      save.profile.settings.muted ||
+      !this.musicUnlocked ||
+      this.gameplayScenes > 0 ||
+      document.hidden
+    )
+      this.music.pause();
     else void this.music.play().catch(() => undefined);
   }
 }

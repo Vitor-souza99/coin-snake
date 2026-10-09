@@ -81,6 +81,8 @@ export class GameScene extends Phaser.Scene {
   private dead = false;
   private overlay?: { destroy: () => void };
   private currentWorld = "green-valley";
+  private worldTransitioning = false;
+  private passageCooldown = 0;
   private worldPortal?: Phaser.GameObjects.Container;
   private worldPassages: Phaser.GameObjects.Container[] = [];
   private bossPortal?: Phaser.GameObjects.Container;
@@ -125,6 +127,10 @@ export class GameScene extends Phaser.Scene {
     super("Game");
   }
   create() {
+    audio.setGameplayActive(this, true);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      audio.setGameplayActive(this, false),
+    );
     void setImmersiveMode(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void setImmersiveMode(false));
     const initData = (this.scene.settings.data ?? {}) as { rushMode?: boolean; startWorld?: string };
@@ -138,6 +144,8 @@ export class GameScene extends Phaser.Scene {
     this.masteryCredited = false;
     this.worldPortal = undefined;
     this.worldPassages = [];
+    this.worldTransitioning = false;
+    this.passageCooldown = 0;
     this.bossPortal = undefined;
     this.bossIntroOpen = false;
     this.bossPortalExpiresAt = 0;
@@ -693,6 +701,7 @@ export class GameScene extends Phaser.Scene {
     this.updateCamera(Math.min(delta / 1000, 0.05));
   }
   private step(dt: number) {
+    this.passageCooldown = Math.max(0, this.passageCooldown - dt);
     this.run.elapsed += dt;
     if (this.rushMode) {
       this.run.rushRemaining -= dt;
@@ -762,7 +771,13 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateOcean(dt);
     const passage = this.worldPassages.find((item) => distance(this.snake, item) < 68);
-    if (passage) this.enterWorld(passage.getData("destination") as string);
+    if (passage && !this.worldTransitioning && this.passageCooldown <= 0) {
+      const arena = B.arena;
+      const sourceSide = passage.x <= (arena.left + arena.right) / 2 ? "left" : "right";
+      const direction = sourceSide === "left" ? Math.PI : 0;
+      this.enterWorld(passage.getData("destination") as string, sourceSide, passage.y, direction);
+      return;
+    }
     if (this.bossPortal && distance(this.snake, this.bossPortal) >= 100) {
       this.bossPortal.setData("hintDismissed", false);
     }
@@ -1283,30 +1298,36 @@ export class GameScene extends Phaser.Scene {
     return this.worldPassages.some((passage) => Math.hypot(this.snake.x - passage.x, this.snake.y - passage.y) < r + 14);
   }
   private drawWorldPassageMarkers(graphics: Phaser.GameObjects.Graphics) {
-    const a = B.arena, targets = this.availablePassageWorlds();
-    targets.forEach((world, index) => {
-      const y = a.top + (a.bottom - a.top) * ((index + 1) / (targets.length + 1));
-      const edgeX = index % 2 === 0 ? a.left : a.right;
-      graphics.fillStyle(world.accent, 0.95).fillRoundedRect(edgeX - 7, y - 28, 15, 56, 6);
+    this.worldPassages.forEach((passage) => {
+      const world = worldById(passage.getData("destination") as string);
+      graphics.fillStyle(world.accent, 0.95).fillRoundedRect(passage.x - 7, passage.y - 28, 15, 56, 6);
     });
   }
-  private refreshWorldPassages() {
+  private refreshWorldPassages(exits?: { side: "left" | "right"; y: number }) {
     const targets = this.availablePassageWorlds();
     const current = this.worldPassages.map((item) => item.getData("destination") as string).join(",");
-    if (current === targets.map((world) => world.id).join(",")) return;
+    if (!exits && current === targets.map((world) => world.id).join(",")) return;
     for (const passage of this.worldPassages) passage.destroy();
     this.worldPassages = targets.map((world, index) => {
       const a = B.arena;
-      const x = index % 2 === 0 ? a.left : a.right;
-      const y = a.top + (a.bottom - a.top) * ((index + 1) / (targets.length + 1));
+      const defaultSide = index % 2 === 0 ? "left" : "right";
+      const side = exits && index === 0 ? exits.side : defaultSide;
+      const x = side === "left" ? a.left : a.right;
+      const defaultY = a.top + (a.bottom - a.top) * ((index + 1) / (targets.length + 1));
+      const y = exits && index === 0
+        ? Phaser.Math.Clamp(exits.y, a.top + 100, a.bottom - 100)
+        : defaultY;
       const g = this.add.graphics().fillStyle(world.accent, 0.2).fillEllipse(0, 0, 82, 82).lineStyle(5, world.accent, 0.95).strokeEllipse(0, 0, 64, 64);
       const label = this.add.text(0, 50, `ENTRAR · ${world.name}`, { fontSize: "15px", color: "#163f36", fontStyle: "bold" }).setOrigin(0.5);
       const passage = this.add.container(x, y, [g, label]).setDepth(9);
       passage.setData("destination", world.id);
+      passage.setData("side", side);
       return passage;
     });
   }
-  private enterWorld(id: string) {
+  private enterWorld(id: string, sourceSide: "left" | "right", sourceY: number, direction: number) {
+    if (this.worldTransitioning) return;
+    this.worldTransitioning = true;
     const world = worldById(id);
     this.worldPortal?.destroy(); this.worldPortal = undefined;
     for (const passage of this.worldPassages) passage.destroy();
@@ -1315,6 +1336,15 @@ export class GameScene extends Phaser.Scene {
     this.bossDefinition = undefined;
     this.bossPortalExpiresAt = 0;
     this.currentWorld = world.id;
+    const arena = B.arena;
+    const entrySide = sourceSide === "left" ? "right" : "left";
+    const entryX = entrySide === "left" ? arena.left + 48 : arena.right - 48;
+    const entryY = Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
+    this.snake.reset(entryX, entryY, direction);
+    this.steering.reset(direction);
+    this.resetControls();
+    this.cameraX = entryX;
+    this.cameraY = entryY;
     for (const decoration of this.oceanDecorations) this.tweens.killTweensOf(decoration);
     for (const object of [...this.oceanObjects, ...this.oceanDecorations]) object.destroy();
     this.oceanObjects = []; this.oceanDecorations = []; this.oceanCurrents = []; this.oceanCorals = []; this.bubbleObjects = []; this.currentGraphics = undefined; this.clam = undefined;
@@ -1333,10 +1363,6 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(world.background);
     if(world.id==="candy-world") this.buildCandyWorld(this.add.graphics().setDepth(1));
     if(world.id==="ocean") {
-      const lagoon = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)[0];
-      this.snake.reset(lagoon.x, lagoon.y);
-      this.steering.reset(this.snake.angle);
-      this.cameraX = lagoon.x; this.cameraY = lagoon.y;
       this.buildOceanWorld(this.add.graphics().setDepth(1));
       this.spawnOceanCorals();
       this.pearlTimer = OW.pearlCooldown;
@@ -1353,7 +1379,11 @@ export class GameScene extends Phaser.Scene {
     if (world.hazard === "sticky") this.ui.toast("Sticky zones reduzem sua velocidade por instantes.");
     if (world.hazard === "current" && save.profile.hints.ocean) this.ui.toast("Correntes oceânicas empurram sua Snake. Navegue com cuidado.");
     if (world.id === "ocean" && !save.profile.hints.ocean) { save.profile.hints.ocean = true; void save.save(); this.ui.toast("OCEAN WORLD · Currents can push your Snake!"); }
-    this.refreshWorldPassages();
+    this.refreshWorldPassages({ side: entrySide, y: entryY });
+    this.updateCamera(0, true);
+    this.renderSnake();
+    this.passageCooldown = 0.75;
+    this.worldTransitioning = false;
     if (world.bossId && bosses.some((boss) => boss.id === world.bossId))
       this.spawnBossPortal(world.bossId);
   }
@@ -1387,10 +1417,12 @@ export class GameScene extends Phaser.Scene {
     this.boss = { definition, health: definition.maxHealth, phase: 0, attack: definition.combat.attackCooldown, speed: definition.movementSpeed, image, state: initialState, stateTimer: definition.combat.attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0 };
     this.bossHud!.hidden = false;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = true;
-    this.bossHud!.textContent = `${definition.name} · ${this.boss.health}/${definition.maxHealth} HP · ATTACK 0/100`;
+    this.bossHud!.textContent = `${definition.name} · ${this.boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" ? "" : " · ATTACK 0/100"}`;
     this.bossFight.active = true;
     this.bossCoinsTimer = 2;
-    this.ui.toast("Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
+    this.ui.toast(definition.id === "king-snake"
+      ? "Boss fight! Desvie da investida e pegue a coroa quando o King Snake ficar atordoado."
+      : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
     image.setSize(definition.id === "kraken" ? 210 : 120, definition.id === "kraken" ? 210 : 120);
   }
   private updateBoss(dt: number) {
@@ -1403,10 +1435,12 @@ export class GameScene extends Phaser.Scene {
     else this.updateKrakenBehavior(boss, dt);
     if (!this.boss) return;
 
-    this.bossCoinsTimer -= dt;
-    if (this.bossCoinsTimer <= 0 && this.bossPickups.filter((pickup) => pickup.kind === "boss-coin").length < 3) {
-      this.bossCoinsTimer = 5;
-      this.spawnBossPickup("boss-coin", 25, "◆", 0xffd35a);
+    if (boss.definition.id !== "king-snake") {
+      this.bossCoinsTimer -= dt;
+      if (this.bossCoinsTimer <= 0 && this.bossPickups.filter((pickup) => pickup.kind === "boss-coin").length < 3) {
+        this.bossCoinsTimer = 5;
+        this.spawnBossPickup("boss-coin", 25, "◆", 0xffd35a);
+      }
     }
     this.updateBossPickups(dt);
 
@@ -1474,9 +1508,11 @@ export class GameScene extends Phaser.Scene {
       }
     } else this.bossAuraGraphics?.clear();
     if (this.bossHud) {
-      const ready = this.bossFight.combat.attackCharge >= 100 ? " · ATTACK READY!" : "";
+      const kingSnake = boss.definition.id === "king-snake";
+      const ready = !kingSnake && this.bossFight.combat.attackCharge >= 100 ? " · ATTACK READY!" : "";
       const aura = this.bossFight.combat.active ? ` · AURA ∞/${this.bossFight.combat.remainingHits} hits` : "";
-      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1} · ATTACK ${Math.floor(this.bossFight.combat.attackCharge)}/100${ready}${aura}`;
+      const attackCharge = kingSnake ? "" : ` · ATTACK ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
+      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1}${attackCharge}${ready}${aura}`;
     }
   }
   private bossSafePoint(minDistance = 180) {
@@ -1532,24 +1568,25 @@ export class GameScene extends Phaser.Scene {
   }
   private updateKingBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const arena = B.arena;
+    const furious = boss.health <= 2;
     if (boss.state === "CHASE") {
-      this.moveBossToward(boss, this.snake, boss.speed * (boss.phase === 0 ? 1 : 1.12), dt);
+      this.moveBossToward(boss, this.snake, boss.speed * (furious ? 1.28 : boss.phase === 0 ? 1 : 1.12), dt);
       if (boss.stateTimer <= 0) {
-        boss.state = "PREPARE_CHARGE"; boss.stateTimer = Math.max(0.8, boss.definition.combat.telegraphDuration - boss.phase * 0.08);
+        boss.state = "PREPARE_CHARGE"; boss.stateTimer = Math.max(furious ? 0.65 : 0.8, boss.definition.combat.telegraphDuration - boss.phase * (furious ? 0.16 : 0.08));
         boss.chargeX = this.snake.x - boss.image.x; boss.chargeY = this.snake.y - boss.image.y;
         const length = Math.hypot(boss.chargeX, boss.chargeY) || 1; boss.chargeX /= length; boss.chargeY /= length;
         const marker = this.add.graphics().lineStyle(8, 0xff544e, 0.62).lineBetween(boss.image.x, boss.image.y, boss.image.x + boss.chargeX * 440, boss.image.y + boss.chargeY * 440).setDepth(8);
         this.bossMarkers.push(marker);
-        audio.play("error"); haptic("coin"); this.feedback(boss.image.x, boss.image.y, "ROYAL CHARGE!", 0xffd66f, true);
+        audio.play("error"); haptic("coin"); this.feedback(boss.image.x, boss.image.y, furious ? "FURIOUS ROYAL CHARGE!" : "ROYAL CHARGE!", furious ? 0xff554e : 0xffd66f, true);
       }
     } else if (boss.state === "PREPARE_CHARGE") {
       if (boss.stateTimer <= 0) { boss.state = "CHARGE"; boss.stateTimer = 1.25; audio.play("power"); }
     } else if (boss.state === "CHARGE") {
-      const speed = boss.speed * 5;
+      const speed = boss.speed * (furious ? 5.8 : 5);
       boss.image.x += boss.chargeX * speed * dt; boss.image.y += boss.chargeY * speed * dt;
       if (boss.image.x < arena.left + 70 || boss.image.x > arena.right - 70 || boss.image.y < arena.top + 70 || boss.image.y > arena.bottom - 70) {
         boss.image.x = Phaser.Math.Clamp(boss.image.x, arena.left + 70, arena.right - 70); boss.image.y = Phaser.Math.Clamp(boss.image.y, arena.top + 70, arena.bottom - 70);
-        boss.state = "STUNNED"; boss.stateTimer = boss.definition.combat.stunDuration; boss.doubleCharge = boss.phase === 2 && boss.doubleCharge === 0 ? 1 : 0;
+        boss.state = "STUNNED"; boss.stateTimer = boss.definition.combat.stunDuration; boss.doubleCharge = furious && boss.doubleCharge === 0 ? 1 : 0;
         for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
         audio.play("error"); haptic("power"); this.particles.explode(18, boss.image.x, boss.image.y);
         this.spawnBossPickup("crown-orb", 100, "♛", 0xffb52e);
@@ -1559,11 +1596,11 @@ export class GameScene extends Phaser.Scene {
       if (boss.stateTimer <= 0) {
         boss.image.rotation = 0;
         if (boss.doubleCharge > 0) { boss.doubleCharge--; boss.state = "RECOVER"; boss.stateTimer = 0.7; }
-        else { boss.state = "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown; }
+        else { boss.state = "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown * (furious ? 0.7 : 1); }
       }
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
-      if (boss.phase === 2 && boss.doubleCharge === 0 && boss.attack < 0) { boss.state = "PREPARE_CHARGE"; boss.stateTimer = 0.8; boss.doubleCharge = 2; }
-      else { boss.state = "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown; }
+      if (furious && boss.doubleCharge === 0 && boss.attack < 0) { boss.state = "PREPARE_CHARGE"; boss.stateTimer = 0.65; boss.doubleCharge = 2; }
+      else { boss.state = "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown * (furious ? 0.7 : 1); }
     }
   }
   private updateCandyBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
@@ -1647,6 +1684,12 @@ export class GameScene extends Phaser.Scene {
         this.boss.stateTimer = 1.2;
         this.boss.speed = this.boss.definition.movementSpeed * (this.boss.definition.id === "candy-monster" && this.boss.health <= 3 ? 1.35 : 1 + nextPhase * 0.12);
         this.feedback(this.boss.image.x, this.boss.image.y, `FASE ${nextPhase + 1}`, 0xffd66f, true);
+        if (this.boss.definition.id === "king-snake" && this.boss.health <= 2) {
+          this.tweens.add({ targets: this.boss.image, alpha: 0.45, scale: 1.12, duration: 140, yoyo: true, repeat: 2 });
+          this.ui.toast("KING SNAKE FURIOSO! Agora ele investe mais rápido e em sequência!");
+          this.feedback(this.boss.image.x, this.boss.image.y, "FURIOSO!", 0xff554e, true);
+          audio.play("power"); haptic("power");
+        }
         if (this.boss.definition.id === "king-snake") this.spawnBossPickup("crown-orb", 100, "♛", 0xffb52e);
         if (this.boss.definition.id === "candy-monster" && nextPhase === 1) this.spawnBossPickup("sugar-shield", 0, "S", 0xff76d7);
         if (this.boss.definition.id === "kraken") { this.bossCurrent = undefined; this.bossWhirlpool?.clear(); }
