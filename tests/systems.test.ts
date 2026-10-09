@@ -25,7 +25,7 @@ import { difficulty } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, oceanWorldConfig } from "../src/game/data/oceanWorld";
-import { B } from "../src/game/data/balance";
+import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { addXP } from "../src/game/systems/EconomySystem";
 import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
@@ -291,6 +291,19 @@ describe("combo and balance", () => {
     expect(weighted(B.coins, () => 0.93).value).toBe(20);
     expect(weighted(B.coins, () => 0.999).value).toBe(50);
     expect(weighted(B.coins, () => 0.9995).value).toBe(100);
+  });
+  it("makes higher-value common coins more likely only with Candy World weights", () => {
+    const candyCoins = candyWorldCoinWeights(B.coins);
+    expect(weighted(candyCoins, () => 0).value).toBe(1);
+    expect(weighted(candyCoins, () => 0.35).value).toBe(5);
+    expect(weighted(candyCoins, () => 0.8).value).toBe(20);
+    expect(weighted(B.coins, () => 0).value).toBe(1);
+    expect(candyCoins.reduce((sum, coin) => sum + coin.weight, 0)).toBeGreaterThan(0);
+  });
+  it("requires 400 Boss Energy for Candy and preserves the other boss thresholds", () => {
+    expect(B.boss.candyWorldEnergyRequired).toBe(400);
+    expect(B.boss.greenValleyEnergyRequired).toBe(350);
+    expect(B.boss.defaultEnergyRequired).toBe(500);
   });
   it("caps difficulty and limits angular velocity", () => {
     expect(difficulty(0, 0, B.snake.initial).speed).toBe(B.snake.speed);

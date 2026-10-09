@@ -108,7 +108,7 @@ export const B = {
     maxObstacles: 16,
     warningSeconds: 2,
   },
-  boss: { greenValleyEnergyRequired: 350, defaultEnergyRequired: 500 },
+  boss: { greenValleyEnergyRequired: 350, candyWorldEnergyRequired: 400, defaultEnergyRequired: 500 },
   xp: { perRun: 25, scoreDivisor: 20, perMission: 75, firstLevel: 175, perLevelIncrease: 75 },
   prices: [0, 500, 1000, 2000, 5000],
   spawn: { attempts: 120, edge: 34, bodyClearance: 44, headClearance: 200 },
@@ -134,4 +134,9 @@ export const luckyStarCoins = [
   { id: "golden", value: 50, score: 500, weight: 2, color: 0xff9c36, label: "50" },
   { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
 ] as const;
+export const candyWorldCoinWeights = <T extends { id: string; weight: number }>(coins: readonly T[]): Array<Omit<T, "weight"> & { weight: number }> =>
+  coins.map((coin) => ({
+    ...coin,
+    weight: Math.max(0, coin.weight + ({ normal: -40, blue: 24, diamond: 12, golden: 3, mythic: 1 }[coin.id as "normal" | "blue" | "diamond" | "golden" | "mythic"] ?? 0)),
+  }));
 export type CoinKind = (typeof B.coins)[number];

@@ -14,10 +14,11 @@ import { ScreenUI, header, textureURL } from "../ui/ScreenUI";
 type Category = "skins" | "pets" | "maps" | "packs";
 
 export class ShopScene extends Phaser.Scene {
+  private ui!: ScreenUI;
   constructor() { super("Shop"); }
 
   create() {
-    const ui = new ScreenUI(this);
+    const ui = this.ui = new ScreenUI(this);
     const profile = save.profile;
     reconcileWorldUnlocks(profile);
     const previous = this.scene.settings.data as { category?: Category; filter?: "ALL" | "OWNED" | "LOCKED"; rarity?: SkinRarity | "ALL"; scrollY?: number } | undefined;
@@ -37,7 +38,12 @@ export class ShopScene extends Phaser.Scene {
           : !profile.unlockedSkins.includes(skin.id) && !skinUnlockStatus(skin, profile).unlocked)) &&
         (rarity === "ALL" || skin.rarity === rarity));
       const rewardAvailable = profile.rewardedShopDate !== localDay();
-      return `<article class="card shop-ad-reward"><h2>🎬 Bônus diário</h2><p>Assista a um anúncio recompensado e receba ${SHOP_REWARDED_COINS} moedas. Opcional · disponível uma vez por dia.</p><button class="action" data-shop-reward ${rewardAvailable ? "" : "disabled"}>${rewardAvailable ? `ASSISTIR · +${SHOP_REWARDED_COINS} MOEDAS` : "RESGATADO HOJE"}</button></article><div class="skin-filters" role="group" aria-label="Filtrar skins">
+      const ownedCount = skins.filter((skin) => profile.unlockedSkins.includes(skin.id) || skinUnlockStatus(skin, profile).unlocked).length;
+      return `<section class="pet-shop-intro skin-shop-intro" aria-label="Resumo das skins">
+        <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${skins.length} skins</h2><p>Desbloqueie e equipe visuais para personalizar sua cobrinha.</p></div>
+        <div class="pet-wallet"><span>🪙 SALDO</span><strong>${profile.totalCoins.toLocaleString("pt-BR")}</strong><small>moedas</small></div>
+      </section>
+      <article class="card shop-ad-reward"><h2>🎬 Bônus diário</h2><p>Assista a um anúncio recompensado e receba ${SHOP_REWARDED_COINS} moedas. Opcional · disponível uma vez por dia.</p><button class="action" data-shop-reward ${rewardAvailable ? "" : "disabled"}>${rewardAvailable ? `ASSISTIR · +${SHOP_REWARDED_COINS} MOEDAS` : "RESGATADO HOJE"}</button></article><div class="skin-filters" role="group" aria-label="Filtrar skins">
         <button class="action small ${filter === "ALL" ? "" : "secondary"}" data-filter="ALL">TODAS</button>
         <button class="action small ${filter === "OWNED" ? "" : "secondary"}" data-filter="OWNED">MINHAS</button>
         <button class="action small ${filter === "LOCKED" ? "" : "secondary"}" data-filter="LOCKED">BLOQUEADAS</button>
@@ -79,9 +85,10 @@ export class ShopScene extends Phaser.Scene {
             ? `<button class="action" data-buy-pet="${pet.id}" ${profile.totalCoins < FIREFLY_COIN_PRICE ? "disabled" : ""}>COMPRAR · ${FIREFLY_COIN_PRICE.toLocaleString("pt-BR")} MOEDAS</button>`
             : `<button class="action secondary" disabled>${premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
         const detail = unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : firefly && available ? "Desbloqueado pela vitória contra King Snake." : pet.unlockedBy;
-        return `<article class="card rarity-card pet-card ${stateClass} ${pet.rarity === "PREMIUM" ? "rarity-mythic" : ""}">
+        const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
+        return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
           <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
-          <span class="skin-rarity">${pet.rarity}</span><h2>${pet.name}</h2><p class="pet-description">${pet.description}</p>
+          <span class="skin-rarity ${rarityClass}">${pet.rarity}</span><h2>${pet.name}</h2><p class="pet-description">${pet.description}</p>
           <p class="pet-unlock-detail">${detail}</p><div class="pet-card-action">${action}</div>
         </article>`;
       }).join("")}</div>`;
@@ -186,7 +193,12 @@ export class ShopScene extends Phaser.Scene {
   private preview(id: string) {
     audio.play("click");
     haptic("coin");
+    this.ui.root.hidden = true;
     this.scene.pause();
     this.scene.launch("SkinPreview", { skinId: id });
+  }
+
+  showShop() {
+    if (this.ui?.root.isConnected) this.ui.root.hidden = false;
   }
 }

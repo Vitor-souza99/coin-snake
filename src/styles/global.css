@@ -334,6 +334,7 @@ canvas {
 }
 .pet-shop-intro h2 { margin: 5px 0; font-size: clamp(20px, 3vw, 28px); }
 .pet-shop-intro p { margin: 0; color: #597060; font-size: 14px; line-height: 1.5; }
+.skin-shop-intro { max-width: 1050px; margin: 0 auto 16px; }
 .pet-wallet {
   flex: 0 0 auto;
   min-width: 132px;
@@ -416,11 +417,15 @@ canvas {
 .rarity-epic { border-color: #9c65d6; }
 .rarity-legendary { border-color: #e59a35; }
 .rarity-mythic { border-color: #cf60ad; }
+.rarity-card.rarity-rare { border-color: #4a9ad0; }
+.rarity-card.rarity-epic { border-color: #9c65d6; }
+.rarity-card.rarity-mythic { border-color: #cf60ad; }
 .skin-rarity.rarity-common { background: #e4eadb; color: #243b31; }
 .skin-rarity.rarity-rare { background: #d8edfb; color: #18587e; }
 .skin-rarity.rarity-epic { background: #eadcf8; color: #542782; }
 .skin-rarity.rarity-legendary { background: #f9e7c7; color: #75430b; }
 .skin-rarity.rarity-mythic { background: #f5d9eb; color: #762c5d; }
+.skin-rarity.rarity-premium { background: #f5d9eb; color: #762c5d; }
 .skin-rarity {
   display: inline-block;
   margin: 2px 0 8px;
@@ -485,6 +490,7 @@ canvas {
 }
 @media (max-width: 430px) {
   .pet-shop-intro { flex-direction: column; }
+  .skin-shop-intro { align-items: stretch; }
   .pet-wallet { grid-template-columns: auto 1fr auto; justify-items: start; align-items: center; width: 100%; min-width: 0; gap: 8px; }
   .pet-wallet strong { font-size: 20px; }
   .pet-feature-banner { align-items: flex-start; gap: 10px; padding: 12px; }

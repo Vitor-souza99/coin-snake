@@ -37,7 +37,7 @@ import { getBossSkinRewards, getSkin } from "../data/skins";
 import { reconcileWorldUnlocks, rememberWorld, traversableWorlds } from "../systems/WorldSystem";
 import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawnAllowed, candyFinalSpeed, inCandyRiver, stickySpeedMultiplier, type StickyZone } from "../data/candyWorld";
 import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, pearlCoinSpawnAllowed, bonusBubbleReward, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
-import { setImmersiveMode } from "../services/OrientationService";
+import { applyWorldOrientation, setImmersiveMode } from "../services/OrientationService";
 import { missionsForProfile } from "../data/missions";
 export class GameScene extends Phaser.Scene {
   snake!: Snake;
@@ -97,6 +97,8 @@ export class GameScene extends Phaser.Scene {
   private bossCoinsTimer = 2;
   private bossAuraGraphics?: Phaser.GameObjects.Graphics;
   private bossCollisionGrace = 0;
+  private candyBossShieldActive = true;
+  private candyBossEscapeTimer = 0;
   private bossHud?: HTMLElement;
   private bossEnergyHud?: HTMLElement;
   private petSprite?: Phaser.GameObjects.Container;
@@ -139,6 +141,8 @@ export class GameScene extends Phaser.Scene {
     const requestedWorld = initData.rushMode ? "green-valley" : initData.startWorld ?? save.profile.selectedWorld;
     const selected = worldById(requestedWorld);
     this.currentWorld = selected.isImplemented && save.profile.worldsUnlocked.includes(selected.id) ? selected.id : "green-valley";
+    void applyWorldOrientation(this.currentWorld, save.profile.settings.orientation);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void applyWorldOrientation("green-valley", save.profile.settings.orientation));
     this.selectedCosmetic = getSkin(save.profile.selectedSkin) ?? getSkin("classic")!;
     this.worldSpeedMultiplier = worldById(this.currentWorld).speedMultiplier;
     this.masteryCredited = false;
@@ -423,7 +427,7 @@ export class GameScene extends Phaser.Scene {
       if (coin.active) continue;
       const p = this.validPoint(B.spawn.bodyClearance, 65);
       if (!p) break;
-      coin.spawn(p.x, p.y, save.profile.selectedPet === "firefly" ? "firefly" : save.profile.selectedPet === "bee", this.powers.luckyStar > 0);
+      coin.spawn(p.x, p.y, save.profile.selectedPet === "firefly" ? "firefly" : save.profile.selectedPet === "bee", this.powers.luckyStar > 0, this.currentWorld === "candy-world");
       if (this.currentWorld === "ocean" && this.inOceanRegion("deep_trench", p) && Math.random() < OW.deepTrenchRareCoinBonus) {
         const rare = [B.coins.find((kind) => kind.id === "blue")!, B.coins.find((kind) => kind.id === "diamond")!];
         const selected = rare[Math.random() < 0.8 ? 0 : 1];
@@ -1338,6 +1342,7 @@ export class GameScene extends Phaser.Scene {
     this.bossDefinition = undefined;
     this.bossPortalExpiresAt = 0;
     this.currentWorld = world.id;
+    void applyWorldOrientation(world.id, save.profile.settings.orientation);
     const arena = B.arena;
     const entrySide = sourceSide === "left" ? "right" : "left";
     const entryX = entrySide === "left" ? arena.left + 48 : arena.right - 48;
@@ -1406,13 +1411,17 @@ export class GameScene extends Phaser.Scene {
   private bossEnergyRequirement(bossId = worldById(this.currentWorld).bossId) {
     return bossId === "king-snake"
       ? B.boss.greenValleyEnergyRequired
-      : B.boss.defaultEnergyRequired;
+      : bossId === "candy-monster"
+        ? B.boss.candyWorldEnergyRequired
+        : B.boss.defaultEnergyRequired;
   }
   private startBoss(definition: BossDefinition) {
     this.bossPortal?.destroy(); this.bossPortal = undefined;
     this.bossPortalExpiresAt = 0;
     this.bossFight.start();
     this.bossCollisionGrace = 0;
+    this.candyBossShieldActive = definition.id === "candy-monster";
+    this.candyBossEscapeTimer = 0;
     const g = this.add.graphics().fillStyle(definition.id === "king-snake" ? 0x315d3c : 0xc74b9d).fillCircle(0, 0, 55).lineStyle(7, 0xffd66f).strokeCircle(0, 0, 58);
     const eyes = this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5);
     const image = this.add.container(this.snake.x + 240, this.snake.y, [g, eyes]).setDepth(19);
@@ -1432,6 +1441,7 @@ export class GameScene extends Phaser.Scene {
     const boss = this.boss!;
     const cfg = boss.definition.combat;
     this.bossFight.update(dt);
+    this.candyBossEscapeTimer = Math.max(0, this.candyBossEscapeTimer - dt);
     boss.stateTimer -= dt;
       if (boss.definition.id === "king-snake") this.updateKingBehavior(boss, dt);
     else if (boss.definition.id === "candy-monster") this.updateCandyBehavior(boss, dt);
@@ -1453,17 +1463,30 @@ export class GameScene extends Phaser.Scene {
     const collisionRadius = boss.definition.id === "kraken" ? 84 : 58 + B.snake.radius;
     const canHitKraken = boss.definition.id === "kraken" && boss.state === "EXPOSED" && boss.hazard && Math.hypot(this.snake.x - boss.hazard.x, this.snake.y - boss.hazard.y) < 62;
     const contact = boss.definition.id === "kraken" ? canHitKraken : collisionDistance < collisionRadius;
-    if (boss.definition.id === "candy-monster" && this.bossCollisionGrace <= 0) {
+    if (boss.definition.id === "candy-monster") {
       const touchingSegment = this.snake.body.slice(0, this.snake.length).some((segment) => distance(segment, boss.image) < collisionRadius);
-      if (touchingSegment) {
-        if (this.bossFight.combat.active) {
-          this.bossFight.combat.clearAura();
+      if (touchingSegment && this.bossCollisionGrace <= 0 && this.candyBossEscapeTimer <= 0) {
+        const aura = this.bossFight.combat;
+        if (aura.active && aura.source === "candy-aura" && aura.consumeHit(boss.definition.id)) {
           this.bossCollisionGrace = cfg.hitInvulnerability;
-          const shieldPoint = this.bossSafePoint(130);
-          this.spawnBossPickupAt("candy-shield", shieldPoint.x, shieldPoint.y, "S", 0x70cfff);
-          this.feedback(boss.image.x, boss.image.y, "ESCUDO QUEBRADO!", 0xffb52e, true);
-          audio.play("shield_break");
-        } else if (this.powers.invincible <= 0) {
+          this.candyBossEscapeTimer = 2;
+          boss.state = "ATTACK_MODE";
+          boss.stateTimer = 2;
+          if (this.candyBossShieldActive) {
+            this.candyBossShieldActive = false;
+            this.feedback(boss.image.x, boss.image.y, "ESCUDO QUEBRADO! FUJA!", 0xffb52e, true);
+            audio.play("shield_break");
+          } else {
+            this.damageBoss();
+            if (!this.boss) return;
+            this.feedback(boss.image.x, boss.image.y, "−1 HP · FUJA!", 0xffb344, true);
+            this.particles.explode(14, boss.image.x, boss.image.y);
+            audio.play("power"); haptic("power");
+          }
+          this.tweens.killTweensOf(boss.image);
+          this.tweens.add({ targets: boss.image, alpha: 0.25, duration: 200, yoyo: true, repeat: 4 });
+          this.tweens.add({ targets: boss.image, x: boss.image.x + (dx / d) * 160, y: boss.image.y + (dy / d) * 160, duration: 350, ease: "Sine.easeOut" });
+        } else if (!aura.active && this.powers.invincible <= 0) {
           const hadShield = this.powers.shield;
           if (!this.powers.absorb()) {
             if (!this.loseLife()) { this.die(); return; }
@@ -1642,6 +1665,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
   private updateCandyBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
+    if (this.candyBossEscapeTimer > 0) {
+      const away = { x: boss.image.x - this.snake.x, y: boss.image.y - this.snake.y }, length = Math.hypot(away.x, away.y) || 1;
+      const destination = { x: Phaser.Math.Clamp(boss.image.x + away.x / length * 260, B.arena.left + 90, B.arena.right - 90), y: Phaser.Math.Clamp(boss.image.y + away.y / length * 260, B.arena.top + 90, B.arena.bottom - 90) };
+      this.moveBossToward(boss, destination, boss.speed * 1.5, dt);
+      return;
+    }
     if (boss.health <= 2 && boss.state !== "SUGAR_RUSH" && boss.state !== "ATTACK_MODE") {
       boss.state = "SUGAR_RUSH"; boss.speed = boss.definition.movementSpeed * 1.35;
       this.ui.toast("SUGAR RUSH!"); audio.play("power");

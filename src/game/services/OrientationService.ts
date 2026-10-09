@@ -40,6 +40,13 @@ export async function applyOrientation(orientation: Settings["orientation"]): Pr
   }
 }
 
+/** Uses landscape as Candy World's Android default without overriding an explicit preference. */
+export async function applyWorldOrientation(worldId: string, preference: Settings["orientation"]): Promise<boolean> {
+  const isCandyAndroidDefault = Capacitor.isNativePlatform() && worldId === "candy-world" && preference === "auto";
+  const orientation = isCandyAndroidDefault ? "landscape" : preference;
+  return applyOrientation(orientation);
+}
+
 /** Hides Android system bars while the game scene is active. */
 export async function setImmersiveMode(enabled: boolean): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;

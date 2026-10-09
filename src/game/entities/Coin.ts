@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { B, beeCoins, fireflyCoins, type CoinKind } from "../data/balance";
+import { B, beeCoins, candyWorldCoinWeights, fireflyCoins, type CoinKind } from "../data/balance";
 import { weighted } from "../utils/math";
 export class Coin {
   x = 0;
@@ -20,13 +20,15 @@ export class Coin {
       .setOrigin(0.5)
       .setVisible(false);
   }
-  spawn(x: number, y: number, beeEquipped: boolean | "firefly" = false, luckyStar = false) {
+  spawn(x: number, y: number, beeEquipped: boolean | "firefly" = false, luckyStar = false, candyWorld = false) {
     this.x = x;
     this.y = y;
-    const source = beeEquipped === "firefly" ? fireflyCoins : beeEquipped ? beeCoins : B.coins;
+    const source: ReadonlyArray<{ id: string; value: number; score: number; weight: number; color: number; label: string }> =
+      beeEquipped === "firefly" ? fireflyCoins : beeEquipped ? beeCoins : B.coins;
+    const candyAdjusted = candyWorld ? candyWorldCoinWeights(source) : source;
     const weights = luckyStar
-      ? source.map((coin) => ({ ...coin, weight: coin.weight + (coin.id === "normal" ? -10 : coin.id === "blue" ? 5 : coin.id === "diamond" ? 3 : coin.id === "golden" || coin.id === "mythic" ? 1 : 0) }))
-      : source;
+      ? candyAdjusted.map((coin) => ({ ...coin, weight: Math.max(0, coin.weight + (coin.id === "normal" ? -10 : coin.id === "blue" ? 5 : coin.id === "diamond" ? 3 : coin.id === "golden" || coin.id === "mythic" ? 1 : 0)) }))
+      : candyAdjusted;
     this.kind = weighted(weights) as CoinKind;
     this.active = true;
     this.image.setTexture(`coin-${this.kind.id}`).setVisible(true);

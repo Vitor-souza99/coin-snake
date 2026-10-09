@@ -23,6 +23,10 @@ export class SkinPreviewScene extends Phaser.Scene {
   }
 
   create() {
+    this.events.on("androidBackButton", this.close, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      this.events.off("androidBackButton", this.close, this),
+    );
     const profile = save.profile;
     const ownership = skinUnlockStatus(this.skin, profile);
     const isPremium = this.skin.unlockType === "PREMIUM";
@@ -223,6 +227,8 @@ export class SkinPreviewScene extends Phaser.Scene {
 
   private close() {
     this.scene.stop();
+    const shop = this.scene.get("Shop") as import("./ShopScene").ShopScene;
+    shop.showShop();
     this.scene.resume("Shop");
   }
 }

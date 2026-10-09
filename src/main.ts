@@ -17,6 +17,11 @@ if (Capacitor.isNativePlatform()) {
     }
   });
   void App.addListener("backButton", () => {
+    if (game.scene.isActive("SkinPreview")) {
+      const preview = game.scene.getScene("SkinPreview");
+      if (preview instanceof Phaser.Scene) preview.events.emit("androidBackButton");
+      return;
+    }
     const scene = game.scene.getScene("Game");
     if (scene instanceof GameScene && game.scene.isActive("Game"))
       scene.requestPause();
