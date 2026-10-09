@@ -58,7 +58,13 @@ export function unlockWorld(worldId: string) {
 export function selectWorld(worldId: string) {
   const world = worldById(worldId);
   if (!world.isImplemented || !isWorldUnlocked(world, save.profile)) return false;
-  save.profile.selectedWorld = world.id;
+  rememberWorld(save.profile, world.id);
   void save.save();
+  return true;
+}
+export function rememberWorld(state: WorldPlayerState & { selectedWorld: string }, worldId: string) {
+  const world = worldById(worldId);
+  if (!world.isImplemented || !isWorldUnlocked(world, state)) return false;
+  state.selectedWorld = world.id;
   return true;
 }

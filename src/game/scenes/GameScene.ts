@@ -34,7 +34,7 @@ import { PortalSystem } from "../systems/PortalSystem";
 import { awardAchievement } from "../systems/AchievementSystem";
 import { analytics } from "../services/AnalyticsService";
 import { getBossSkinRewards, getSkin } from "../data/skins";
-import { reconcileWorldUnlocks, traversableWorlds } from "../systems/WorldSystem";
+import { reconcileWorldUnlocks, rememberWorld, traversableWorlds } from "../systems/WorldSystem";
 import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawnAllowed, candyFinalSpeed, inCandyRiver, stickySpeedMultiplier, type StickyZone } from "../data/candyWorld";
 import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, pearlCoinSpawnAllowed, bonusBubbleReward, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
 import { setImmersiveMode } from "../services/OrientationService";
@@ -1360,6 +1360,7 @@ export class GameScene extends Phaser.Scene {
     if (world.id !== "green-valley") {
       save.profile.worldsUnlocked = [...new Set([...save.profile.worldsUnlocked, world.id])];
     }
+    if (!this.rushMode) rememberWorld(save.profile, world.id);
     this.run.portalsUsed++;
     awardAchievement(save.profile, "world-traveler");
     this.cameras.main.setBackgroundColor(world.background);

@@ -32,7 +32,7 @@ import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from 
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
 import { BossCombatSystem } from "../src/game/systems/BossCombatSystem";
-import { eligiblePortalWorlds, reconcileWorldUnlocks, traversableWorlds, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
+import { eligiblePortalWorlds, reconcileWorldUnlocks, rememberWorld, traversableWorlds, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
 import { worldById, worlds } from "../src/game/data/worlds";
 import { bosses } from "../src/game/data/bosses";
 import { earnablePetIds, pets } from "../src/game/data/pets";
@@ -336,6 +336,16 @@ describe("roadmap progression systems", () => {
     expect(traversableWorlds(profile, "green-valley").map((world) => world.id)).toEqual(["candy-world", "ocean"]);
     expect(traversableWorlds(profile, "ocean").map((world) => world.id)).toEqual(["green-valley", "candy-world"]);
     expect(traversableWorlds(profile, "green-valley").some((world) => ["desert", "dragon_kingdom"].includes(world.id))).toBe(false);
+  });
+  it("remembers the last implemented unlocked world visited through a portal", () => {
+    const profile = defaults();
+    profile.worldsUnlocked.push("candy-world");
+    expect(rememberWorld(profile, "candy-world")).toBe(true);
+    expect(profile.selectedWorld).toBe("candy-world");
+    expect(rememberWorld(profile, "green-valley")).toBe(true);
+    expect(profile.selectedWorld).toBe("green-valley");
+    expect(rememberWorld(profile, "ocean")).toBe(false);
+    expect(profile.selectedWorld).toBe("green-valley");
   });
   it("classifies locked, premium, future and selected world cards", () => {
     const profile = defaults();
