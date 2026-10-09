@@ -7,6 +7,7 @@ export class Obstacle {
     public y: number,
     public image: Phaser.GameObjects.Image,
     initial = false,
+    public radius = 44,
   ) {
     this.warning = initial ? 0 : B.difficulty.warningSeconds;
     image.setAlpha(initial ? 1 : 0.35);

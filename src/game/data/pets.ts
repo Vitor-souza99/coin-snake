@@ -16,6 +16,16 @@ export interface PetDefinition {
 
 export const pets: PetDefinition[] = [
   {
+    id: "scorpionling",
+    name: "Escorpiãozinho",
+    symbol: "🦂",
+    rarity: "EPIC",
+    description: "+5% na duração do Turbo.",
+    unlockedBy: "Derrote o Escorpião-Rei.",
+    unlockType: "BOSS",
+    bossRewardId: "scorpion-king",
+  },
+  {
     id: "bee",
     name: "Bee",
     symbol: "🐝",

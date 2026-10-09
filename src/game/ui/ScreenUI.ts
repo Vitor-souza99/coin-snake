@@ -40,6 +40,36 @@ export class ScreenUI {
     this.root.append(t);
     this.timers.push(window.setTimeout(() => t.remove(), 3500));
   }
+  worldArrival(worldId: string, worldName: string, details: string[] = []) {
+    this.root.querySelector(".toast")?.remove();
+    this.root.querySelector(".world-arrival")?.remove();
+    const card = document.createElement("div");
+    card.className = `world-arrival world-arrival--${worldId}`;
+    card.setAttribute("role", "status");
+    card.setAttribute("aria-live", "polite");
+
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "world-arrival__eyebrow";
+    eyebrow.textContent = "VOCÊ CHEGOU A";
+    const title = document.createElement("strong");
+    title.className = "world-arrival__title";
+    title.textContent = worldName;
+    card.append(eyebrow, title);
+
+    if (details.length) {
+      const list = document.createElement("ul");
+      list.className = "world-arrival__details";
+      for (const detail of details) {
+        const item = document.createElement("li");
+        item.textContent = detail;
+        list.append(item);
+      }
+      card.append(list);
+    }
+
+    this.root.append(card);
+    this.timers.push(window.setTimeout(() => card.remove(), 5500));
+  }
   modal(
     title: string,
     body: string,

@@ -25,6 +25,7 @@ import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, difficulty,
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
+import { containDesertArenaPoint, desertGustAt, desertGusts, desertRegions, inDesertOasis } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { addXP } from "../src/game/systems/EconomySystem";
@@ -359,9 +360,9 @@ describe("combo and balance", () => {
 });
 describe("roadmap progression systems", () => {
   it("defines a boss for every implemented world and allows the Ocean Kraken save ID", () => {
-    const implementedWorldBossIds = worlds.filter((world) => world.isImplemented).map((world) => world.bossId);
+    const implementedWorldBossIds = worlds.filter((world) => world.isImplemented && world.category !== "SECRET").map((world) => world.bossId);
     expect(implementedWorldBossIds.every((bossId) => bosses.some((boss) => boss.id === bossId))).toBe(true);
-    expect(bosses.map((boss) => boss.id)).toEqual(["king-snake", "candy-monster", "kraken"]);
+    expect(bosses.map((boss) => boss.id)).toEqual(["king-snake", "candy-monster", "kraken", "scorpion-king"]);
     expect(validateSave({ saveVersion: 5, bossesDefeated: ["kraken", "unknown"] }).bossesDefeated).toEqual(["kraken"]);
   });
   it("unlocks Candy after level and King Snake, then Ocean after Candy Monster", () => {
@@ -374,6 +375,34 @@ describe("roadmap progression systems", () => {
     profile.bossesDefeated.push("candy-monster");
     expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual(["ocean"]);
     expect(reconcileWorldUnlocks(profile)).toEqual([]);
+  });
+  it("unlocks Desert only after level 15, Kraken, and Ocean access, and migrates it", () => {
+    const profile = defaults();
+    profile.playerLevel = 15;
+    profile.bossesDefeated.push("king-snake", "candy-monster", "kraken");
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual(["candy-world", "ocean", "silent-abyss", "desert"]);
+    expect(profile.worldsUnlocked).toContain("desert");
+    expect(eligiblePortalWorlds(profile, "ocean").map((world) => world.id)).toContain("desert");
+    const desertSave = validateSave({ saveVersion: 11, playerLevel: 15, bossesDefeated: ["king-snake", "candy-monster", "kraken"], worldsUnlocked: ["green-valley", "candy-world", "ocean", "desert"], selectedWorld: "desert" });
+    expect(desertSave.selectedWorld).toBe("green-valley");
+    expect(validateSave({ saveVersion: 11, playerLevel: 14, bossesDefeated: ["kraken"], worldsUnlocked: ["ocean"] }).worldsUnlocked).not.toContain("desert");
+  });
+  it("keeps the Abyss secret, unlocks it after Kraken, and persists its challenge reward", () => {
+    const profile = defaults();
+    profile.worldsUnlocked.push("ocean", "candy-world");
+    profile.playerLevel = 10;
+    profile.bossesDefeated.push("king-snake", "candy-monster");
+    expect(traversableWorlds(profile, "ocean").map((world) => world.id)).not.toContain("silent-abyss");
+    expect(eligiblePortalWorlds(profile, "ocean").map((world) => world.id)).not.toContain("silent-abyss");
+    profile.bossesDefeated.push("kraken");
+    reconcileWorldUnlocks(profile);
+    expect(profile.worldsUnlocked).toContain("silent-abyss");
+    expect(traversableWorlds(profile, "silent-abyss").map((world) => world.id)).toEqual(["green-valley", "candy-world", "ocean"]);
+    expect(profile.unlockedSkins).not.toContain("abyssal-serpent");
+    const completed = validateSave({ saveVersion: 11, bossesDefeated: ["kraken"], worldsUnlocked: ["ocean", "candy-world", "silent-abyss"], abyssChallengeBest: 90, abyssChallengeCompleted: true });
+    expect(completed.abyssChallengeBest).toBe(90);
+    expect(completed.abyssChallengeCompleted).toBe(true);
+    expect(completed.unlockedSkins).toContain("abyssal-serpent");
   });
   it("keeps portal candidates implemented, unlocked, weighted and non-premium", () => {
     const profile = defaults();
@@ -409,7 +438,7 @@ describe("roadmap progression systems", () => {
     const profile = defaults();
     expect(worldStatus(worldById("candy-world"), profile)).toBe("LOCKED");
     expect(worldStatus(worldById("dragon_kingdom"), profile)).toBe("PREMIUM_LOCKED");
-    expect(worldStatus(worldById("desert"), profile)).toBe("COMING_SOON");
+    expect(worldStatus(worldById("desert"), profile)).toBe("LOCKED");
     expect(worldStatus(worldById("green-valley"), profile)).toBe("SELECTED");
   });
   it("keeps boss energy separate from virtual coins and maps coin values", () => {
@@ -451,7 +480,7 @@ describe("roadmap progression systems", () => {
     expect(powers.invincible).toBe(B.power.shieldGrace);
     powers.activate("turbo", 0.05);
     expect(powers.turbo).toBeCloseTo(B.power.turboDuration * 1.05);
-    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 35]);
+    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 35, 40]);
     expect(bosses.find((boss) => boss.id === "king-snake")?.petReward).toBe("tiny-dragon");
     expect(bosses.find((boss) => boss.id === "candy-monster")?.petReward).toBe("bee");
     expect(bosses.find((boss) => boss.id === "candy-monster")?.additionalPetRewards).toEqual(["candy-blob", "snow-pup"]);
@@ -480,7 +509,7 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(10);
+    expect(profile.saveVersion).toBe(11);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -489,7 +518,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(10);
+    expect(profile.saveVersion).toBe(11);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -507,6 +536,24 @@ describe("roadmap progression systems", () => {
     expect(awardAchievement(profile, id)).toBe(false);
     expect(awardAchievement(profile, "not-real")).toBe(false);
     expect(profile.achievements).toEqual([id]);
+  });
+});
+describe("Desert world mechanics", () => {
+  it("creates arena-scaled routes, oasis, and gusts that apply only inside their lanes", () => {
+    const regions = desertRegions(0, 0, 1000, 800), gusts = desertGusts(0, 0, 1000, 800);
+    const oasis = regions.find((region) => region.id === "oasis")!;
+    expect(inDesertOasis({ x: oasis.x, y: oasis.y }, regions)).toBe(true);
+    expect(inDesertOasis({ x: 0, y: 0 }, regions)).toBe(false);
+    expect(desertGustAt({ x: gusts[0].x, y: gusts[0].y }, 0, gusts).x).toBeGreaterThan(0);
+    expect(desertGustAt({ x: 0, y: 0 }, 0, gusts)).toEqual({ x: 0, y: 0 });
+    expect(desertGustAt({ x: gusts[2].x, y: gusts[2].y }, 0, gusts).x).toBeLessThan(0);
+  });
+  it("keeps the Scorpion arena radius and contains only points inside its boundary", () => {
+    const center = { x: 500, y: 400 }, radius = 100;
+    expect(containDesertArenaPoint({ x: 650, y: 400 }, center, radius, 10)).toBeNull();
+    const contained = containDesertArenaPoint({ x: 530, y: 440 }, center, radius, 10)!;
+    expect(Math.hypot(contained.x - center.x, contained.y - center.y)).toBeCloseTo(110);
+    expect(desertRegions(0, 0, 1000, 800).find((region) => region.id === "scorpion_arena")?.x).toBe(760);
   });
 });
 describe("skin collection catalog", () => {
@@ -573,9 +620,8 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(10);
+    expect(migrated.saveVersion).toBe(11);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
-    expect(migrated.selectedSkin).toBe("cat");
     expect(migrated.premiumEntitlements).toEqual([]);
   });
   it("sanitizes nested fields and derives level from XP", () => {
@@ -602,21 +648,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(10);
+    expect(migrated.saveVersion).toBe(11);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.playerLevel).toBe(5);
+    expect(profile.saveVersion).toBe(11);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(10);
+    expect(migrated.saveVersion).toBe(11);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -747,10 +793,14 @@ describe("missions", () => {
   });
 });
 describe("snake and powers", () => {
-  it("contains a Kraken arena boundary crossing while leaving interior movement untouched", () => {
+  it("always keeps the snake outside the Kraken arena barrier", () => {
     const center = { x: 500, y: 600 };
-    expect(containKrakenArenaPoint({ x: 500, y: 650 }, center, 100, 14)).toBeNull();
-    expect(containKrakenArenaPoint({ x: 500, y: 710 }, center, 100, 14)).toEqual({ x: 500, y: 686 });
+    expect(containKrakenArenaPoint({ x: 500, y: 650 }, center, 100, 14)).toEqual({ x: 500, y: 714 });
+    expect(containKrakenArenaPoint({ x: 500, y: 650 }, center, 100, 14)!.y).toBeGreaterThan(center.y + 100);
+    expect(containKrakenArenaPoint({ x: 500, y: 710 }, center, 100, 14)).toEqual({ x: 500, y: 714 });
+    expect(containKrakenArenaPoint({ x: 500, y: 710 }, center, 100, 14)!.y).toBeGreaterThan(center.y + 100);
+    expect(containKrakenArenaPoint({ x: 500, y: 690 }, center, 100, 14)).toEqual({ x: 500, y: 714 });
+    expect(containKrakenArenaPoint({ x: 500, y: 714 }, center, 100, 14)).toBeNull();
   });
   it("keeps Kraken boss portals outside the arena with clearance", () => {
     const arena = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena")!;

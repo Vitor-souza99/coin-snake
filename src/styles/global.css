@@ -806,6 +806,75 @@ canvas {
   pointer-events: none;
   z-index: 60;
 }
+.world-arrival {
+  --arrival-accent: #78d6a2;
+  position: absolute;
+  left: 50%;
+  bottom: clamp(145px, 19vh, 210px);
+  width: min(440px, calc(100% - 32px));
+  padding: 18px 24px;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--arrival-accent), white 25%);
+  border-radius: 20px;
+  background: linear-gradient(145deg, #102b29f5, #173f39f2);
+  box-shadow: 0 12px 42px #06171375, 0 0 24px color-mix(in srgb, var(--arrival-accent), transparent 72%);
+  color: #fff;
+  text-align: center;
+  pointer-events: none;
+  z-index: 60;
+  animation: world-arrival-enter 0.55s cubic-bezier(.2,.85,.25,1.15), world-arrival-exit .45s ease-in 5.05s forwards;
+}
+.world-arrival::before {
+  position: absolute;
+  top: 0;
+  left: 12%;
+  width: 76%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--arrival-accent), transparent);
+  content: "";
+}
+.world-arrival--candy-world { --arrival-accent: #ff9bd2; background: linear-gradient(145deg, #492747f5, #823e71f2); }
+.world-arrival--ocean { --arrival-accent: #7be8f2; background: linear-gradient(145deg, #102d48f5, #15556bf2); }
+.world-arrival--silent-abyss { --arrival-accent: #65d9cf; background: linear-gradient(145deg, #0b1727f7, #142c3bf5); }
+.world-arrival__eyebrow {
+  display: block;
+  color: var(--arrival-accent);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .24em;
+}
+.world-arrival__title {
+  display: block;
+  margin-top: 4px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(23px, 6vw, 31px);
+  font-weight: 900;
+  line-height: 1.15;
+  text-shadow: 0 2px 14px color-mix(in srgb, var(--arrival-accent), transparent 48%);
+}
+.world-arrival__details {
+  display: grid;
+  gap: 5px;
+  margin: 11px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--arrival-accent), transparent 65%);
+  list-style: none;
+  color: #f3fbfa;
+  font-size: 13px;
+  line-height: 1.4;
+}
+@keyframes world-arrival-enter {
+  from { opacity: 0; translate: 0 14px; scale: .94; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+@keyframes world-arrival-exit {
+  to { opacity: 0; translate: 0 8px; }
+}
+.reduced-motion .world-arrival { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .world-arrival { animation: none; }
+}
 .shop-purchase-success {
   background: linear-gradient(135deg, #21684f, #9c7625);
   border: 2px solid #ffe18a;

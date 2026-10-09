@@ -11,7 +11,7 @@ export class WorldSelectScene extends Phaser.Scene {
     const ui = new ScreenUI(this);
     reconcileWorldUnlocks(save.profile);
     this.cameras.main.setBackgroundColor("#f6f5e6");
-    const cards = worlds.map((world) => {
+    const cards = worlds.filter((world) => world.category !== "SECRET").map((world) => {
       const status = worldStatus(world, save.profile, save.profile.selectedWorld);
       const label = status === "PREMIUM_LOCKED" ? "PREMIUM · EM BREVE" : status === "COMING_SOON" ? "EM BREVE" : status === "LOCKED" ? "BLOQUEADO" : status === "SELECTED" ? "SELECIONADO" : "DISPONÍVEL";
       const disabled = status === "LOCKED" || status === "PREMIUM_LOCKED" || status === "COMING_SOON";

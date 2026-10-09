@@ -33,7 +33,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 10;
+  saveVersion: 11;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;
@@ -47,7 +47,7 @@ export interface PlayerProfile {
   settings: Settings;
   firstLaunch: boolean;
   tutorialCompleted: boolean;
-  hints: { joystick: boolean; turbo: boolean; shrink: boolean; ocean: boolean; oceanCurrent: boolean; pearl: boolean; deepTrench: boolean };
+  hints: { joystick: boolean; turbo: boolean; shrink: boolean; ocean: boolean; oceanCurrent: boolean; pearl: boolean; deepTrench: boolean; desertGust: boolean };
   statistics: GameStatistics;
   missionDate: string;
   dailyMissionIds: string[];
@@ -61,6 +61,8 @@ export interface PlayerProfile {
   mastery: Record<string, number>;
   worldsUnlocked: string[];
   selectedWorld: string;
+  abyssChallengeBest: number;
+  abyssChallengeCompleted: boolean;
 }
 export interface RunState {
   id: string;

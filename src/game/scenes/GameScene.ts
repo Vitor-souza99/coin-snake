@@ -26,7 +26,7 @@ import { controls, shrinkConfig } from "../data/controls";
 import { addXP } from "../systems/EconomySystem";
 import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
-import { worlds, worldById, type WorldDefinition } from "../data/worlds";
+import { worlds, worldById, worldRequirements, type WorldDefinition } from "../data/worlds";
 import { bosses, type BossDefinition } from "../data/bosses";
 import { BossFightSystem } from "../systems/BossFightSystem";
 import { pets } from "../data/pets";
@@ -39,6 +39,7 @@ import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawn
 import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, isOutsideKrakenArena, pearlCoinSpawnAllowed, bonusBubbleReward, containKrakenArenaPoint, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
 import { applyWorldOrientation } from "../services/OrientationService";
 import { missionsForProfile } from "../data/missions";
+import { desertWorldConfig as DW, desertRegions, desertGusts, desertGustAt, inDesertOasis, containDesertArenaPoint, type SandGust } from "../data/desertWorld";
 export class GameScene extends Phaser.Scene {
   snake!: Snake;
   run!: RunState;
@@ -81,6 +82,9 @@ export class GameScene extends Phaser.Scene {
   private dead = false;
   private overlay?: { destroy: () => void };
   private currentWorld = "green-valley";
+  private abyssChallengeElapsed = 0;
+  private abyssChallengeTimer?: HTMLElement;
+  private abyssPortal?: Phaser.GameObjects.Container;
   private worldTransitioning = false;
   private passageCooldown = 0;
   private worldPortal?: Phaser.GameObjects.Container;
@@ -88,7 +92,7 @@ export class GameScene extends Phaser.Scene {
   private bossPortal?: Phaser.GameObjects.Container;
   private bossIntroOpen = false;
   private bossPortalExpiresAt = 0;
-  private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "SUGAR_RUSH" | "IDLE" | "TELEGRAPH_SLAM" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[] };
+  private boss?: { definition: BossDefinition; health: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "SUGAR_RUSH" | "IDLE" | "TELEGRAPH_SLAM" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[]; scorpionTail?: Phaser.GameObjects.Container };
   private bossFight = new BossFightSystem();
   private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield"; image: Phaser.GameObjects.Container }> = [];
   private bossMarkers: Phaser.GameObjects.GameObject[] = [];
@@ -127,6 +131,12 @@ export class GameScene extends Phaser.Scene {
   private krakenBarrierCooldown = 0;
   private krakenReturnAngle?: number;
   private krakenReturnTimer = 0;
+  private desertObjects: Phaser.GameObjects.GameObject[] = [];
+  private desertGustZones: SandGust[] = [];
+  private desertGustGraphics?: Phaser.GameObjects.Graphics;
+  private desertGustFeedbackAt = 0;
+  private desertArenaBarrier?: Phaser.GameObjects.Container;
+  private desertBarrierCooldown = 0;
   private masteryCredited = false;
   constructor() {
     super("Game");
@@ -142,6 +152,9 @@ export class GameScene extends Phaser.Scene {
     const requestedWorld = initData.rushMode ? "green-valley" : initData.startWorld ?? save.profile.selectedWorld;
     const selected = worldById(requestedWorld);
     this.currentWorld = selected.isImplemented && save.profile.worldsUnlocked.includes(selected.id) ? selected.id : "green-valley";
+    this.abyssChallengeElapsed = 0;
+    this.abyssPortal?.destroy(); this.abyssPortal = undefined;
+    this.abyssChallengeTimer = undefined;
     void applyWorldOrientation(this.currentWorld, save.profile.settings.orientation);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => void applyWorldOrientation("green-valley", save.profile.settings.orientation));
     this.selectedCosmetic = getSkin(save.profile.selectedSkin) ?? getSkin("classic")!;
@@ -206,6 +219,12 @@ export class GameScene extends Phaser.Scene {
     this.bubbleTimer = OW.bubbleCooldown;
     this.currentZoneId = undefined;
     this.deepTrenchActive = false;
+    this.desertObjects = [];
+    this.desertGustZones = [];
+    this.desertGustGraphics = undefined;
+    this.desertGustFeedbackAt = 0;
+    this.desertArenaBarrier?.destroy(); this.desertArenaBarrier = undefined;
+    this.desertBarrierCooldown = 0;
     this.clam = undefined;
     this.power = undefined;
     this.poison?.image.destroy();
@@ -220,7 +239,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(worldById(this.currentWorld).background);
     const a = B.arena,
       g = this.add.graphics();
-    g.fillStyle(0x9ac582).fillRoundedRect(
+    g.fillStyle(this.currentWorld === "silent-abyss" ? 0x09111e : this.currentWorld === "desert" ? 0x996136 : 0x9ac582).fillRoundedRect(
       a.left - 5,
       a.top - 5,
       a.right - a.left + 10,
@@ -234,12 +253,12 @@ export class GameScene extends Phaser.Scene {
       a.bottom - a.top,
       24,
     );
-    this.drawWorldPassageMarkers(g);
+    if (this.currentWorld !== "silent-abyss") this.drawWorldPassageMarkers(g);
     for (let i = 0; i < 650; i++) {
       const x = a.left + 22 + ((i * 73) % (a.right - a.left - 44)),
         y = a.top + 22 + ((i * 137) % (a.bottom - a.top - 44));
-      const candy = this.currentWorld === "candy-world", ocean = this.currentWorld === "ocean";
-      g.fillStyle(ocean ? (i % 3 ? 0xb5dfe1 : 0xd3e5c8) : candy ? (i % 3 ? 0xf5b8d8 : 0xffd6a5) : (i % 3 ? 0xbbd09e : 0xcbdca9), ocean ? 0.24 : 0.55).fillEllipse(
+      const candy = this.currentWorld === "candy-world", ocean = this.currentWorld === "ocean", abyss = this.currentWorld === "silent-abyss", desert = this.currentWorld === "desert";
+      g.fillStyle(abyss ? (i % 3 ? 0x31556a : 0x397e78) : desert ? (i % 3 ? 0xc58945 : 0xf1ca79) : ocean ? (i % 3 ? 0xb5dfe1 : 0xd3e5c8) : candy ? (i % 3 ? 0xf5b8d8 : 0xffd6a5) : (i % 3 ? 0xbbd09e : 0xcbdca9), abyss ? 0.2 : desert ? 0.42 : ocean ? 0.24 : 0.55).fillEllipse(
         x,
         y,
         5 + (i % 4),
@@ -248,14 +267,17 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.currentWorld === "candy-world") this.buildCandyWorld(g);
     if (this.currentWorld === "ocean") this.buildOceanWorld(g);
+    if (this.currentWorld === "silent-abyss") this.buildSilentAbyss(g);
+    if (this.currentWorld === "desert") this.buildDesertWorld(g);
     this.coins = Array.from(
       { length: B.difficulty.maxCoins },
       () => new Coin(this),
     );
-    if (this.currentWorld !== "candy-world" && this.currentWorld !== "ocean")
+    if (this.currentWorld !== "candy-world" && this.currentWorld !== "ocean" && this.currentWorld !== "silent-abyss" && this.currentWorld !== "desert")
       for (let i = 0; i < B.difficulty.initialObstacles; i++)
         this.spawnObstacle(true);
     if (this.currentWorld === "ocean") this.spawnOceanCorals();
+    if (this.currentWorld === "desert") this.spawnDesertRuins();
     this.fillCoins(B.difficulty.initialCoins);
     const skin = save.profile.selectedSkin;
     for (let i = 0; i < B.snake.max; i++)
@@ -288,7 +310,7 @@ export class GameScene extends Phaser.Scene {
     );
     if (this.rushMode) this.ui.root.classList.add("rush-mode");
     this.ui.html(
-      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : worldById(this.currentWorld).name.toUpperCase()}</div><div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
+      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
@@ -302,6 +324,7 @@ export class GameScene extends Phaser.Scene {
     this.hud = new GameplayHUD(this.ui);
     this.bossHud = this.ui.get("#boss-hud");
     this.bossEnergyHud = this.ui.get("#boss-energy");
+    this.abyssChallengeTimer = this.ui.root.querySelector("#abyss-timer") ?? undefined;
     this.bossHud?.classList.add("boss-fight-hud");
     this.joystick = new FloatingJoystick(this.ui.get("#joystick"));
     this.turboButton = new TurboButton(
@@ -419,7 +442,7 @@ export class GameScene extends Phaser.Scene {
         }
       if (
         !valid ||
-        this.obstacles.some((o) => distance(p, o) < 95) ||
+        this.obstacles.some((o) => distance(p, o) < (this.currentWorld === "desert" ? o.radius + 24 : 95)) ||
         this.currentWorld === "ocean" && !isSafeOceanSpawn(p, this.snake, this.oceanCorals, this.oceanCurrents, OW.obstacleClearance) ||
         this.coins.some((c) => c.active && distance(p, c) < 60) ||
         (this.power && distance(p, this.power) < 75) ||
@@ -452,7 +475,23 @@ export class GameScene extends Phaser.Scene {
   }
   private spawnObstacle(initial = false) {
     let p = this.validPoint(85, B.spawn.headClearance);
-    if (this.currentWorld === "ocean") return;
+    if (this.currentWorld === "ocean" || this.currentWorld === "silent-abyss") return;
+    if (this.currentWorld === "desert") {
+      if (!p || inDesertOasis(p, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom))) return;
+      const graphics = this.add.graphics().setPosition(p.x, p.y).setDepth(5);
+      const radius = Phaser.Math.Between(20, 31);
+      graphics.fillStyle(0x775238, 0.3).fillEllipse(0, radius * 0.65, radius * 2.4, radius)
+        .fillStyle(Phaser.Utils.Array.GetRandom([0x9d7045, 0xb3814c, 0x87613f]), 1)
+        .fillPoints([
+          new Phaser.Geom.Point(-radius, radius * 0.25), new Phaser.Geom.Point(-radius * 0.7, -radius * 0.65),
+          new Phaser.Geom.Point(0, -radius), new Phaser.Geom.Point(radius * 0.78, -radius * 0.55),
+          new Phaser.Geom.Point(radius, radius * 0.28), new Phaser.Geom.Point(radius * 0.42, radius * 0.8),
+          new Phaser.Geom.Point(-radius * 0.6, radius * 0.72),
+        ], true).lineStyle(3, 0xe2b46d, 0.5).strokeCircle(-radius * 0.18, -radius * 0.15, radius * 0.4);
+      this.desertObjects.push(graphics);
+      this.obstacles.push(new Obstacle(p.x, p.y, graphics as unknown as Phaser.GameObjects.Image, initial, radius));
+      return;
+    }
     if (this.currentWorld === "candy-world") {
       const a = B.arena;
       for (let attempt = 0; p && attempt < 16 && !candyObstacleSafe(p, this.snake, this.boss ? this.boss.image : undefined, this.stickyZones, CW.lollipops.clearance); attempt++)
@@ -548,21 +587,174 @@ export class GameScene extends Phaser.Scene {
     this.clam = { x: clamX, y: clamY, state: "CLOSED", image: clamImage, timer: OW.pearlCooldown + Math.random() * OW.pearlCooldown };
     this.addOceanBubble(false);
   }
+  private buildSilentAbyss(g: Phaser.GameObjects.Graphics) {
+    const a = B.arena, w = a.right - a.left, h = a.bottom - a.top;
+    this.oceanObjects.push(g);
+    g.fillStyle(0x020913, 0.96).fillRoundedRect(a.left, a.top, w, h, 24);
+    g.fillStyle(0x142b3b, 0.72).fillEllipse(a.left + w * 0.5, a.top + h * 0.51, w * 0.7, h * 0.68);
+    g.lineStyle(5, 0x254c59, 0.72).strokeEllipse(a.left + w * 0.5, a.top + h * 0.51, w * 0.7, h * 0.68);
+    for (let i = 0; i < 14; i++) {
+      const x = a.left + w * (0.08 + ((i * 37) % 84) / 100), y = a.top + h * (0.08 + ((i * 53) % 82) / 100);
+      const glow = this.add.circle(x, y, 4 + i % 4, i % 3 === 0 ? 0x58c7b8 : 0x477c9b, 0.38).setDepth(2);
+      this.oceanDecorations.push(glow);
+      this.tweens.add({ targets: glow, alpha: 0.12, duration: 1700 + i * 90, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = a.left + w * (0.12 + i * 0.15), y = a.top + h * (i % 2 ? 0.2 : 0.79);
+      g.fillStyle(0x132c39, 0.95).fillRoundedRect(x - 15, y - 34, 30, 68, 8);
+      g.lineStyle(2, 0x398d91, 0.4).strokeRoundedRect(x - 15, y - 34, 30, 68, 8);
+    }
+    const exit = this.add.graphics().fillStyle(0x193747, 0.38).fillEllipse(0, 0, 80, 80).lineStyle(4, 0x398d91, 0.65).strokeEllipse(0, 0, 62, 62);
+    const exitLabel = this.add.text(0, 48, "VOLTAR", { fontSize: "13px", color: "#a1ddd2", fontStyle: "bold" }).setOrigin(0.5);
+    this.worldPortal = this.add.container(a.left + 90, a.top + h * 0.5, [exit, exitLabel]).setDepth(9);
+    this.worldPortal.setData("destination", "ocean");
+    this.worldPortal.setData("side", "left");
+    this.worldPassages = [this.worldPortal];
+  }
+  private buildDesertWorld(g: Phaser.GameObjects.Graphics) {
+    const a = B.arena, w = a.right - a.left, h = a.bottom - a.top;
+    const regions = desertRegions(a.left, a.top, a.right, a.bottom);
+    this.desertObjects.push(g);
+    // Wind-swept dune bands and ancient paths establish distinct readable routes.
+    for (let index = 0; index < 11; index++) {
+      const y = a.top + h * (0.08 + index * 0.085);
+      g.lineStyle(index % 2 ? 12 : 7, index % 2 ? 0xd29a50 : 0xf5d58c, 0.22)
+        .beginPath().moveTo(a.left + 20, y + Math.sin(index * 1.7) * 30)
+        .lineTo(a.left + w * 0.34, y - 25)
+        .lineTo(a.left + w * 0.68, y + 22)
+        .lineTo(a.right - 20, y - Math.sin(index * 1.3) * 34).strokePath();
+    }
+    const oasis = regions.find((region) => region.id === "oasis")!;
+    const water = this.add.graphics().fillStyle(0x41b9b0, 0.28).fillEllipse(0, 0, oasis.width * 0.9, oasis.height * 0.72)
+      .lineStyle(6, 0x58bca3, 0.78).strokeEllipse(0, 0, oasis.width * 0.9, oasis.height * 0.72)
+      .fillStyle(0x9fc85d, 0.88).fillEllipse(-oasis.width * 0.31, -oasis.height * 0.15, 34, 62)
+      .fillEllipse(oasis.width * 0.32, oasis.height * 0.18, 30, 55);
+    const oasisLabel = this.add.text(0, oasis.height * 0.55, "OÁSIS", { fontSize: "17px", color: "#fff4c8", fontStyle: "bold", stroke: "#65452b", strokeThickness: 4 }).setOrigin(0.5);
+    this.desertObjects.push(this.add.container(oasis.x, oasis.y, [water, oasisLabel]).setDepth(3));
+
+    const ruins = regions.find((region) => region.id === "ruins")!;
+    g.fillStyle(0x875c3d, 0.25).fillEllipse(ruins.x, ruins.y, ruins.width * 1.2, ruins.height * 0.9);
+    for (let index = 0; index < 7; index++) {
+      const x = ruins.x - ruins.width * 0.38 + (index % 4) * ruins.width * 0.23;
+      const y = ruins.y - ruins.height * 0.22 + Math.floor(index / 4) * ruins.height * 0.48;
+      const height = 54 + (index * 29) % 48;
+      g.fillStyle(0x815637, 0.95).fillRoundedRect(x - 16, y - height / 2, 32, height, 5)
+        .fillStyle(0xc18a4f, 0.95).fillRoundedRect(x - 12, y - height / 2 + 4, 24, height - 8, 4)
+        .lineStyle(2, 0xf0c77b, 0.45).lineBetween(x - 9, y - height / 2 + 14, x - 9, y + height / 2 - 12);
+    }
+
+    this.desertGustZones = desertGusts(a.left, a.top, a.right, a.bottom);
+    this.desertGustGraphics = this.add.graphics().setDepth(4);
+    this.desertObjects.push(this.desertGustGraphics);
+    for (const gust of this.desertGustZones) {
+      const marker = this.add.graphics().fillStyle(0xffd47a, 0.2).fillRoundedRect(-gust.width / 2, -gust.height / 2, gust.width, gust.height, 30)
+        .lineStyle(3, 0xe8a84c, 0.3).strokeRoundedRect(-gust.width / 2, -gust.height / 2, gust.width, gust.height, 30);
+      const arrows = this.add.text(0, 0, gust.direction.x ? "›   ›   ›   ›   ›" : "⌄\n⌄\n⌄\n⌄", { fontSize: "25px", color: "#ffe5a5", fontStyle: "bold", align: "center" }).setOrigin(0.5).setAlpha(0.45);
+      const zone = this.add.container(gust.x, gust.y, [marker, arrows]).setDepth(4);
+      this.desertObjects.push(zone);
+    }
+    const arena = regions.find((region) => region.id === "scorpion_arena")!;
+    g.lineStyle(7, 0xaa7039, 0.24).strokeEllipse(arena.x, arena.y, arena.width, arena.height);
+    g.lineStyle(3, 0xffd47a, 0.28).strokeEllipse(arena.x, arena.y, arena.width * 0.9, arena.height * 0.9);
+  }
+  private spawnDesertRuins() {
+    const a = B.arena, ruins = desertRegions(a.left, a.top, a.right, a.bottom).find((region) => region.id === "ruins")!;
+    for (let index = 0; index < 9; index++) {
+      const x = ruins.x + ((index * 97) % (ruins.width * 0.66)) - ruins.width * 0.33;
+      const y = ruins.y + ((index * 137) % (ruins.height * 0.66)) - ruins.height * 0.33;
+      if (distance({ x, y }, this.snake) < B.spawn.headClearance || this.obstacles.some((obstacle) => distance(obstacle, { x, y }) < 115)) continue;
+      const radius = 20 + (index % 3) * 6, graphics = this.add.graphics().setPosition(x, y).setDepth(5);
+      graphics.fillStyle(0x795339, 0.28).fillEllipse(0, radius * 0.65, radius * 2.5, radius)
+        .fillStyle(index % 2 ? 0xb57a43 : 0x986641, 0.98).fillPoints([
+          new Phaser.Geom.Point(-radius, radius * 0.25), new Phaser.Geom.Point(-radius * 0.72, -radius * 0.58),
+          new Phaser.Geom.Point(-radius * 0.1, -radius), new Phaser.Geom.Point(radius * 0.72, -radius * 0.54),
+          new Phaser.Geom.Point(radius, radius * 0.35), new Phaser.Geom.Point(radius * 0.4, radius * 0.78),
+          new Phaser.Geom.Point(-radius * 0.56, radius * 0.75),
+        ], true).lineStyle(3, 0xe2b46d, 0.48).strokeCircle(-radius * 0.2, -radius * 0.15, radius * 0.45);
+      this.desertObjects.push(graphics);
+      this.obstacles.push(new Obstacle(x, y, graphics as unknown as Phaser.GameObjects.Image, true, radius));
+    }
+    for (let index = 0; index < 6; index++) {
+      const x = a.left + (a.right - a.left) * (0.12 + (index * 0.137) % 0.78);
+      const y = a.top + (a.bottom - a.top) * (0.12 + (index * 0.191) % 0.76);
+      if (distance({ x, y }, this.snake) < B.spawn.headClearance || this.obstacles.some((obstacle) => distance(obstacle, { x, y }) < 120)) continue;
+      const cactus = this.add.graphics().setPosition(x, y).setDepth(5);
+      cactus.fillStyle(0x567143, 0.25).fillEllipse(0, 25, 45, 14).fillStyle(0x67904c, 0.96).fillRoundedRect(-9, -28, 18, 57, 8).fillRoundedRect(-27, -11, 13, 33, 7).fillRoundedRect(14, -19, 13, 34, 7)
+        .lineStyle(2, 0xd4df99, 0.7).lineBetween(-3, -20, -3, 18).lineBetween(23, -10, 23, 4).lineBetween(-22, -4, -22, 8);
+      this.desertObjects.push(cactus);
+      this.obstacles.push(new Obstacle(x, y, cactus as unknown as Phaser.GameObjects.Image, true, 20));
+    }
+  }
+  private updateDesertGusts() {
+    const graphics = this.desertGustGraphics;
+    if (!graphics) return;
+    graphics.clear();
+    for (const gust of this.desertGustZones) {
+      const inside = this.snake.x >= gust.x - gust.width / 2 && this.snake.x <= gust.x + gust.width / 2 && this.snake.y >= gust.y - gust.height / 2 && this.snake.y <= gust.y + gust.height / 2;
+      const pulse = 0.72 + (Math.sin(this.run.elapsed * 2.4 + gust.phase) + 1) * 0.14;
+      graphics.lineStyle(inside ? 7 : 4, inside ? 0xffe39a : 0xe8a84c, inside ? 0.85 : 0.38).beginPath()
+        .moveTo(gust.x - gust.direction.x * gust.width * 0.2, gust.y - gust.direction.y * gust.height * 0.2)
+        .lineTo(gust.x + gust.direction.x * gust.width * 0.2, gust.y + gust.direction.y * gust.height * 0.2).strokePath();
+      if (inside && !save.profile.hints.desertGust) {
+        save.profile.hints.desertGust = true;
+        void save.save();
+        this.ui.toast("Rajada de areia! Correntes de vento desviam sua cobra — ajuste a direção para resistir.");
+        haptic("coin");
+      }
+      if (inside && this.run.elapsed >= this.desertGustFeedbackAt) {
+        this.desertGustFeedbackAt = this.run.elapsed + 8;
+        this.feedback(this.snake.x, this.snake.y, "RAJADA!", 0xffd47a);
+        haptic("coin");
+      }
+      if (inside) graphics.fillStyle(0xffe7ad, 0.75).fillCircle(gust.x + gust.direction.x * Math.sin(this.run.elapsed * 3 + gust.phase) * gust.width * 0.12, gust.y + gust.direction.y * Math.sin(this.run.elapsed * 3 + gust.phase) * gust.height * 0.12, 4 + pulse * 3);
+    }
+  }
+  private revealAbyssPortal() {
+    if (this.currentWorld !== "ocean" || !save.profile.bossesDefeated.includes("kraken") || this.abyssPortal?.active) return;
+    const regions = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom);
+    const trench = regions.find((region) => region.id === "deep_trench")!;
+    const x = trench.x, y = trench.y;
+    const g = this.add.graphics().fillStyle(0x123a4a, 0.36).fillEllipse(0, 0, 102, 102).lineStyle(5, 0x53c8bd, 0.76).strokeEllipse(0, 0, 78, 78).lineStyle(2, 0x9affed, 0.54).strokeEllipse(0, 0, 55, 55);
+    const label = this.add.text(0, 57, "FENDA", { fontSize: "14px", color: "#9affed", fontStyle: "bold" }).setOrigin(0.5);
+    this.abyssPortal = this.add.container(x, y, [g, label]).setDepth(9).setAlpha(0.82);
+    this.tweens.add({ targets: this.abyssPortal, alpha: 0.48, duration: 1300, yoyo: true, repeat: -1 });
+    this.ui?.toast("Uma fenda silenciosa se abriu no fundo do oceano. Procure-a no Deep Trench.");
+  }
   private drawOceanCurrents() {
     if (!this.currentGraphics) return;
     const g = this.currentGraphics;
     g.clear();
     for (const zone of this.oceanCurrents) {
-      g.fillStyle(zone.type === "RAPID" ? 0x71d5ee : 0x8fd9e6, 0.055 + zone.visualIntensity * 0.08).fillRoundedRect(zone.x - zone.width / 2, zone.y - zone.height / 2, zone.width, zone.height, 30);
-      g.lineStyle(2, 0x70bacb, zone.visualIntensity * 0.55);
-      const horizontal = Math.abs(zone.direction.x) >= Math.abs(zone.direction.y);
-      for (let i = 0; i < 5; i++) {
-        const offset = (i - 2) * Math.max(14, zone.height * 0.12);
-        const x1 = horizontal ? zone.x - zone.width * 0.38 : zone.x + offset;
-        const y1 = horizontal ? zone.y + offset : zone.y - zone.height * 0.36;
-        const x2 = horizontal ? zone.x + zone.width * 0.38 : zone.x + offset + zone.direction.x * 16;
-        const y2 = horizontal ? zone.y + offset + zone.direction.y * 16 : zone.y + zone.height * 0.36;
-        g.lineBetween(x1, y1, x2, y2);
+      const color = zone.type === "RAPID" ? 0x71d5ee : 0x8fd9e6;
+      const alpha = zone.visualIntensity;
+      const halfWidth = zone.width / 2;
+      const halfHeight = zone.height / 2;
+      const directionLength = Math.hypot(zone.direction.x, zone.direction.y) || 1;
+      const directionX = zone.direction.x / directionLength;
+      const directionY = zone.direction.y / directionLength;
+      const arrowLength = Math.min(38, Math.max(24, Math.min(zone.width, zone.height) * 0.24));
+      const headLength = 9;
+      const headWidth = 6;
+      const acrossX = -directionY;
+      const acrossY = directionX;
+
+      g.fillStyle(color, 0.1 + alpha * 0.18).fillRoundedRect(zone.x - halfWidth, zone.y - halfHeight, zone.width, zone.height, 30);
+      g.lineStyle(2, color, 0.45 + alpha * 0.45);
+      const arrowCount = Math.max(3, Math.min(7, Math.floor(zone.width / 100)));
+      const spacing = zone.width / (arrowCount + 1);
+      for (let i = 1; i <= arrowCount; i++) {
+        const centerX = zone.x - halfWidth + spacing * i;
+        const centerY = zone.y;
+        const startX = centerX - directionX * arrowLength / 2;
+        const startY = centerY - directionY * arrowLength / 2;
+        const tipX = centerX + directionX * arrowLength / 2;
+        const tipY = centerY + directionY * arrowLength / 2;
+        const baseX = tipX - directionX * headLength;
+        const baseY = tipY - directionY * headLength;
+
+        g.lineBetween(startX, startY, tipX, tipY);
+        g.lineBetween(tipX, tipY, baseX + acrossX * headWidth, baseY + acrossY * headWidth);
+        g.lineBetween(tipX, tipY, baseX - acrossX * headWidth, baseY - acrossY * headWidth);
       }
     }
   }
@@ -607,6 +799,7 @@ export class GameScene extends Phaser.Scene {
   }
   private updateOcean(dt: number) {
     if (this.currentWorld !== "ocean") return;
+    if (save.profile.bossesDefeated.includes("kraken") && !this.abyssPortal?.active) this.revealAbyssPortal();
     this.bubbleTimer -= dt;
     if (this.bubbleTimer <= 0) {
       this.bubbleTimer = OW.bubbleCooldown;
@@ -750,6 +943,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.krakenReturnTimer = Math.max(0, this.krakenReturnTimer - dt);
+    this.desertBarrierCooldown = Math.max(0, this.desertBarrierCooldown - dt);
     if (this.krakenReturnTimer > 0 && this.krakenReturnAngle !== undefined) target = this.krakenReturnAngle;
     const wasTurbo = this.turbo.active;
     this.turbo.update(
@@ -766,16 +960,35 @@ export class GameScene extends Phaser.Scene {
     const playerSpeed = d.speed * this.worldSpeedMultiplier * (this.powers.slowed > 0 ? B.hazard.slowMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionSpeed : 1) *
       (this.currentWorld === "candy-world"
         ? candyFinalSpeed(1, this.turbo.active ? B.power.turboSpeed : 1, this.stickySpeed) * (inCandyRiver(this.snake, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom) ? CW.river.slowMultiplier : 1)
+        : this.currentWorld === "desert" ? (this.turbo.active ? B.power.turboSpeed : 1) * (inDesertOasis(this.snake, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) ? DW.oasisSlowMultiplier : 1)
         : this.turbo.active ? B.power.turboSpeed : 1);
     const steeringTarget = this.steering.update(target, dt);
-    if (this.currentWorld === "ocean") {
-      const force = currentForceAt(this.snake, this.oceanCurrents);
-      this.snake.moveVector(dt, steeringTarget, playerSpeed, force, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1), OW.maxEffectiveSpeed);
+    if (this.currentWorld === "ocean" || this.currentWorld === "silent-abyss" || this.currentWorld === "desert") {
+      const force = this.currentWorld === "desert" ? desertGustAt(this.snake, this.run.elapsed, this.desertGustZones) : currentForceAt(this.snake, this.oceanCurrents);
+      const speedCap = this.currentWorld === "desert" ? DW.maxEffectiveSpeed : OW.maxEffectiveSpeed;
+      this.snake.moveVector(dt, steeringTarget, playerSpeed, force, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1), speedCap);
+      if (this.currentWorld === "desert") this.updateDesertGusts();
     } else {
       this.snake.move(dt, steeringTarget, playerSpeed, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1));
     }
     this.krakenBarrierCooldown = Math.max(0, this.krakenBarrierCooldown - dt);
-    this.containSnakeInKrakenArena();
+    if (this.currentWorld === "ocean") this.containSnakeInKrakenArena();
+    if (this.currentWorld === "desert") this.containSnakeInScorpionArena();
+    if (this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted) {
+      this.abyssChallengeElapsed += dt;
+      const remaining = Math.max(0, Math.ceil(90 - this.abyssChallengeElapsed));
+      if (this.abyssChallengeTimer) this.abyssChallengeTimer.textContent = `DESAFIO · ${remaining}s`;
+      if (this.abyssChallengeElapsed >= 90) {
+        save.profile.abyssChallengeCompleted = true;
+        save.profile.abyssChallengeBest = Math.max(save.profile.abyssChallengeBest, 90);
+        save.profile.unlockedSkins = [...new Set([...save.profile.unlockedSkins, "abyssal-serpent"] )];
+        void save.save();
+        this.abyssChallengeTimer?.remove(); this.abyssChallengeTimer = undefined;
+        this.halted = true; this.pauseKind = "pause"; this.resetControls();
+        this.overlay = this.ui.modal("✨ A fenda silenciou", "Você sobreviveu por 90 segundos no Abismo Mudo. Serpente Abissal desbloqueada e salva na sua coleção.", [{ label: "Continuar", run: () => this.continue() }]);
+        return;
+      }
+    }
     if (this.currentWorld === "candy-world") {
       const insideSticky = this.stickyZones.some((zone) => Math.hypot(this.snake.x-zone.x,this.snake.y-zone.y)<zone.radius);
       const wasSticky = this.stickySpeed < 0.99;
@@ -796,6 +1009,14 @@ export class GameScene extends Phaser.Scene {
       const sourceSide = passage.x <= (arena.left + arena.right) / 2 ? "left" : "right";
       const direction = sourceSide === "left" ? Math.PI : 0;
       this.enterWorld(passage.getData("destination") as string, sourceSide, passage.y, direction);
+      return;
+    }
+    if (!this.boss && this.currentWorld === "silent-abyss" && this.worldPortal?.visible && distance(this.snake, this.worldPortal) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
+      this.enterWorld("ocean", "left", this.worldPortal.y, Math.PI);
+      return;
+    }
+    if (!this.boss && this.currentWorld === "ocean" && this.abyssPortal?.visible && distance(this.snake, this.abyssPortal) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
+      this.enterWorld("silent-abyss", "left", this.abyssPortal.y, Math.PI);
       return;
     }
     if (!this.boss && this.bossPortal && this.bossPortal.visible && distance(this.snake, this.bossPortal) >= 100) {
@@ -852,6 +1073,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.boss) this.updateBoss(dt);
     else if (!this.rushMode) this.refreshWorldPassages();
+    this.updateBossPickups(dt);
     for (const o of this.obstacles) {
       if (o.warning > 0 && distance(o, this.snake) < 110)
         o.warning = Math.max(o.warning, 0.3);
@@ -866,7 +1088,7 @@ export class GameScene extends Phaser.Scene {
       this.snake.y > a.bottom - r
     );
     const overlappingObstacle = this.obstacles.find(
-      (o) => o.warning === 0 && distance(this.snake, o) < (this.currentWorld === "ocean" ? (this.oceanCorals.find((coral) => coral.x === o.x && coral.y === o.y)?.radius ?? 24) + B.snake.radius : 44),
+      (o) => o.warning === 0 && distance(this.snake, o) < (this.currentWorld === "ocean" ? (this.oceanCorals.find((coral) => coral.x === o.x && coral.y === o.y)?.radius ?? 24) + B.snake.radius : this.currentWorld === "desert" ? o.radius + B.snake.radius : 44),
     );
     const overlappingBody = this.snake.selfCollision();
     const ghostActive = this.powers.updateGhost(dt, overlappingBody || !!overlappingObstacle);
@@ -1351,15 +1573,19 @@ export class GameScene extends Phaser.Scene {
     if (this.worldTransitioning) return;
     this.worldTransitioning = true;
     const world = worldById(id);
-    this.worldPortal?.destroy(); this.worldPortal = undefined;
+    if (this.currentWorld !== "silent-abyss") { this.worldPortal?.destroy(); this.worldPortal = undefined; }
+    this.abyssPortal?.destroy(); this.abyssPortal = undefined;
     for (const passage of this.worldPassages) passage.destroy();
     this.worldPassages = [];
     this.bossPortal?.destroy(); this.bossPortal = undefined;
     this.krakenBarrier?.destroy(); this.krakenBarrier = undefined;
+    this.desertArenaBarrier?.destroy(); this.desertArenaBarrier = undefined;
+    this.desertBarrierCooldown = 0;
     this.krakenReturnAngle = undefined; this.krakenReturnTimer = 0;
     this.bossDefinition = undefined;
     this.bossPortalExpiresAt = 0;
     this.currentWorld = world.id;
+    this.abyssChallengeTimer?.remove(); this.abyssChallengeTimer = undefined;
     void applyWorldOrientation(world.id, save.profile.settings.orientation);
     const arena = B.arena;
     const entrySide = sourceSide === "left" ? "right" : "left";
@@ -1376,6 +1602,9 @@ export class GameScene extends Phaser.Scene {
     for(const obstacle of this.obstacles) obstacle.destroy();
     this.obstacles=[];
     this.stickyZones=[]; this.stickySpeed=1; this.stickyGraphics?.destroy(); this.stickyGraphics=undefined;
+    for (const object of this.desertObjects) { this.tweens.killTweensOf(object); object.destroy(); }
+    this.desertObjects=[]; this.desertGustZones=[]; this.desertGustGraphics=undefined;
+    this.desertGustFeedbackAt = 0;
     this.candyCoinSpawned=false; this.candyCoinTimer=CW.candyCoin.opportunitySeconds;
     for(const object of this.candyWorldObjects)object.destroy();
     this.candyWorldObjects=[];
@@ -1393,6 +1622,20 @@ export class GameScene extends Phaser.Scene {
       this.spawnOceanCorals();
       this.pearlTimer = OW.pearlCooldown;
     }
+    if(world.id==="silent-abyss") {
+      this.abyssChallengeElapsed = 0;
+      this.buildSilentAbyss(this.add.graphics().setDepth(1));
+      if (!save.profile.abyssChallengeCompleted) {
+        const timer = document.createElement("div");
+        timer.id = "abyss-timer"; timer.className = "world-tag"; timer.textContent = "DESAFIO · 90 s";
+        this.ui.root.append(timer); this.abyssChallengeTimer = timer;
+      }
+    }
+    if(world.id==="desert") {
+      this.buildDesertWorld(this.add.graphics().setDepth(1));
+      this.spawnDesertRuins();
+      this.createDesertArenaBarrier();
+    }
     else for(const obstacle of [...this.obstacles]) if(this.candyWorldObjects.some((object)=>object===obstacle.image)){obstacle.destroy();this.obstacles.splice(this.obstacles.indexOf(obstacle),1);}
     if (world.id !== "ocean") for (const coin of this.coins) if (coin.active && coin.kind.id === "pearl_coin") coin.hide();
     for (const obstacle of this.obstacles) if ("setTint" in obstacle.image) obstacle.image.setTint(world.accent);
@@ -1400,12 +1643,26 @@ export class GameScene extends Phaser.Scene {
     this.ui.get<HTMLElement>("#world-tag").style.backgroundColor = "transparent";
     analytics.track("portalEntered", { world: world.id });
     void save.save();
-      this.ui.toast(`Você chegou a ${world.name}.`);
-    if(world.id==="candy-world")this.ui.toast("CANDY WORLD · Caramelo reduz sua velocidade!");
-    if (world.hazard === "sticky") this.ui.toast("Sticky zones reduzem sua velocidade por instantes.");
-    if (world.hazard === "current" && save.profile.hints.ocean) this.ui.toast("Correntes oceânicas empurram sua Snake. Navegue com cuidado.");
-    if (world.id === "ocean" && !save.profile.hints.ocean) { save.profile.hints.ocean = true; void save.save(); this.ui.toast("OCEAN WORLD · Currents can push your Snake!"); }
+    const arrivalDetails: string[] = [];
+    if (world.id === "candy-world") arrivalDetails.push("🍬 Caramelo reduz sua velocidade.");
+    if (world.hazard === "sticky") arrivalDetails.push("Cuidado: zonas pegajosas reduzem sua velocidade por instantes.");
+    if (world.hazard === "current" && save.profile.hints.ocean) arrivalDetails.push("Correntes oceânicas podem empurrar sua cobra.");
+    if (world.id === "ocean" && !save.profile.hints.ocean) {
+      save.profile.hints.ocean = true;
+      void save.save();
+      arrivalDetails.push("🌊 As correntes podem empurrar sua cobra. Navegue com cuidado!");
+    }
+    if (world.id === "desert" && !save.profile.hints.desertGust) {
+      save.profile.hints.desertGust = true;
+      void save.save();
+      arrivalDetails.push("🌬️ Rajadas de areia desviam seu movimento; oásis reduzem levemente a velocidade e oferecem uma rota mais calma.");
+    }
+    if (world.id === "silent-abyss" && !save.profile.abyssChallengeCompleted) arrivalDetails.push("Desafio: sobreviva por 90 segundos para desbloquear a Serpente Abissal.");
+    this.ui.worldArrival(world.id, world.name, arrivalDetails);
     this.refreshWorldPassages({ side: entrySide, y: entryY });
+    if (world.id === "ocean") {
+      this.revealAbyssPortal();
+    }
     this.updateCamera(0, true);
     this.renderSnake();
     this.passageCooldown = 0.75;
@@ -1415,12 +1672,12 @@ export class GameScene extends Phaser.Scene {
   }
   private spawnBossPortal(bossId: string) {
     if (this.bossPortal || this.dead) return;
-    const arenaRegion = bossId === "kraken" ? oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena") : undefined;
-    const p = bossId === "kraken"
+    const arenaRegion = bossId === "kraken" ? oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena") : bossId === "scorpion-king" ? desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "scorpion_arena") : undefined;
+    const p = bossId === "kraken" || bossId === "scorpion-king"
       ? this.validPoint(100, 180, true, {
           center: arenaRegion!,
-          radius: Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * OW.krakenArena.radius,
-          clearance: 90,
+          radius: Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * (bossId === "kraken" ? OW.krakenArena.radius : DW.scorpionArena.radius),
+          clearance: bossId === "kraken" ? 90 : 120,
         })
       : this.validPoint(100, 180, true);
     if (!p) return;
@@ -1438,24 +1695,35 @@ export class GameScene extends Phaser.Scene {
       ? B.boss.greenValleyEnergyRequired
       : bossId === "candy-monster"
         ? B.boss.candyWorldEnergyRequired
+        : bossId === "scorpion-king" ? B.boss.desertEnergyRequired
         : B.boss.defaultEnergyRequired;
   }
   private startBoss(definition: BossDefinition) {
     this.bossPortal?.destroy(); this.bossPortal = undefined;
     this.bossPortalExpiresAt = 0;
     for (const passage of this.worldPassages) passage.setVisible(false);
+    const isKraken = definition.id === "kraken";
+    const isScorpionKing = definition.id === "scorpion-king";
     this.bossFight.start();
     this.bossCollisionGrace = 0;
     this.candyBossEscapeTimer = 0;
-    const initialX = this.snake.x + 240, initialY = this.snake.y;
+    const initialX = isKraken
+      ? B.arena.left + (B.arena.right - B.arena.left) * OW.krakenArena.x
+      : isScorpionKing ? B.arena.left + (B.arena.right - B.arena.left) * DW.scorpionArena.x
+      : this.snake.x + 240;
+    const initialY = isKraken
+      ? B.arena.top + (B.arena.bottom - B.arena.top) * OW.krakenArena.y
+      : isScorpionKing ? B.arena.top + (B.arena.bottom - B.arena.top) * DW.scorpionArena.y
+      : this.snake.y;
     const isKingSnake = definition.id === "king-snake";
     const isCandyBee = definition.id === "candy-monster";
-    const isKraken = definition.id === "kraken";
     if (isKraken) this.createKrakenBarrier();
     const image = isKraken
       ? this.createKraken(initialX, initialY)
       : isKingSnake
       ? this.add.image(initialX, initialY, "king-snake-head").setScale(1.05).setDepth(19)
+      : isScorpionKing
+        ? this.createScorpionKing(initialX, initialY)
       : isCandyBee
         ? this.createCandyBee(initialX, initialY)
       : this.add.container(initialX, initialY, [
@@ -1469,7 +1737,7 @@ export class GameScene extends Phaser.Scene {
     const initialState = definition.id === "kraken" ? "IDLE" : "CHASE";
     const preference = save.profile.settings.speedPreference;
     const attackCooldown = bossAttackTiming(definition.combat.attackCooldown, preference, 1.5);
-    const boss = this.boss = { definition, health: definition.maxHealth, phase: 0, attack: attackCooldown, speed: bossMovementSpeed(definition.movementSpeed, preference), image, bodySegments, trail, visualAngle: 0, lastVisualX: initialX, lastVisualY: initialY, state: initialState, stateTimer: attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0, krakenTentacles: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("tentacles") as Phaser.GameObjects.Graphics[] : undefined };
+    const boss = this.boss = { definition, health: definition.maxHealth, phase: 0, attack: attackCooldown, speed: bossMovementSpeed(definition.movementSpeed, preference), image, bodySegments, trail, visualAngle: 0, lastVisualX: initialX, lastVisualY: initialY, state: initialState, stateTimer: attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0, krakenTentacles: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("tentacles") as Phaser.GameObjects.Graphics[] : undefined, scorpionTail: isScorpionKing && image instanceof Phaser.GameObjects.Container ? image.getData("scorpionTail") as Phaser.GameObjects.Container : undefined };
     this.bossHud!.hidden = false;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = true;
     this.bossHud!.textContent = `${definition.name} · ${boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" ? "" : " · ATTACK 0/100"}`;
@@ -1477,8 +1745,10 @@ export class GameScene extends Phaser.Scene {
     this.bossCoinsTimer = 2;
     this.ui.toast(definition.id === "king-snake"
       ? "Boss fight! Desvie da investida e pegue a coroa quando o King Snake ficar atordoado."
-      : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
-    if (!isKingSnake && !isCandyBee && !isKraken) image.setSize(210, 210);
+      : definition.id === "scorpion-king"
+        ? "Boss fight! Desvie da investida do Escorpião-Rei e pegue a gema quando ele ficar atordoado."
+        : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
+    if (!isKingSnake && !isCandyBee && !isKraken && !isScorpionKing) image.setSize(210, 210);
   }
   private createKrakenBarrier() {
     this.krakenBarrier?.destroy();
@@ -1503,6 +1773,33 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: water, alpha: 0.5, duration: 850, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     this.tweens.add({ targets: rim, alpha: 0.78, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
+  private createDesertArenaBarrier() {
+    this.desertArenaBarrier?.destroy();
+    const arena = desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "scorpion_arena")!;
+    const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * DW.scorpionArena.radius;
+    const field = this.add.graphics().fillStyle(0xc47b38, 0.08).fillCircle(0, 0, radius - 12);
+    const rim = this.add.graphics().lineStyle(15, 0x80502d, 0.82).strokeCircle(0, 0, radius)
+      .lineStyle(5, 0xf4c775, 0.72).strokeCircle(0, 0, radius - 8);
+    this.desertArenaBarrier = this.add.container(arena.x, arena.y, [field, rim]).setDepth(4);
+    this.tweens.add({ targets: rim, alpha: 0.58, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+  }
+  private containSnakeInScorpionArena() {
+    if (!this.boss || this.boss.definition.id !== "scorpion-king" || !this.desertArenaBarrier) return;
+    const center = this.desertArenaBarrier;
+    const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * DW.scorpionArena.radius;
+    const contained = containDesertArenaPoint(this.snake, center, radius, B.snake.radius + 8);
+    if (!contained) return;
+    const angle = Math.atan2(this.snake.y - center.y, this.snake.x - center.x);
+    this.snake.x = contained.x; this.snake.y = contained.y; this.snake.angle = angle;
+    this.snake.body[0].x = contained.x; this.snake.body[0].y = contained.y;
+    this.snake.moveVector(0, angle, 0, { x: 0, y: 0 });
+    this.steering.reset(angle); this.aim = null;
+    if (this.desertBarrierCooldown <= 0) {
+      this.desertBarrierCooldown = 0.65;
+      this.feedback(this.snake.x, this.snake.y, "ARENA DO ESCORPIÃO-REI!", 0xffd47a);
+      this.cameras.main.shake(120, 0.0015); audio.play("current_flow"); haptic("coin");
+    }
+  }
   private containSnakeInKrakenArena() {
     if (!this.boss || this.boss.definition.id !== "kraken" || !this.krakenBarrier) return;
     const center = this.krakenBarrier;
@@ -1512,9 +1809,7 @@ export class GameScene extends Phaser.Scene {
     const dx = this.snake.x - center.x, dy = this.snake.y - center.y;
     this.snake.x = contained.x;
     this.snake.y = contained.y;
-    const returnAngle = Math.atan2(dy, dx) + Math.PI;
-    this.snake.x = contained.x;
-    this.snake.y = contained.y;
+    const returnAngle = Math.atan2(dy, dx);
     this.snake.angle = returnAngle;
     this.snake.body[0].x = contained.x;
     this.snake.body[0].y = contained.y;
@@ -1525,7 +1820,7 @@ export class GameScene extends Phaser.Scene {
     this.aim = null;
     if (this.krakenBarrierCooldown <= 0) {
       this.krakenBarrierCooldown = 0.65;
-      this.feedback(this.snake.x, this.snake.y, "CORRENTE DO KRAKEN!", 0x73e8ed);
+      this.feedback(this.snake.x, this.snake.y, "BARREIRA DO KRAKEN!", 0x73e8ed);
       this.cameras.main.shake(120, 0.0015);
       audio.play("current_flow");
       haptic("coin");
@@ -1569,6 +1864,57 @@ export class GameScene extends Phaser.Scene {
     kraken.setData("tentacles", tentacles);
     return kraken;
   }
+  private createScorpionKing(x: number, y: number) {
+    const scorpion = this.add.container(x, y).setDepth(19);
+    const tail = this.add.container(0, 0);
+
+    // Raised, segmented tail and a glowing desert-stinger silhouette.
+    const tailShape = this.add.graphics();
+    tailShape.lineStyle(25, 0x57331f, 1).beginPath().moveTo(25, 18).lineTo(63, -9).lineTo(82, -48).lineTo(61, -82).strokePath();
+    tailShape.lineStyle(16, 0xc87932, 1).beginPath().moveTo(25, 18).lineTo(63, -9).lineTo(82, -48).lineTo(61, -82).strokePath();
+    tailShape.fillStyle(0xf5c35c, 1).fillCircle(25, 18, 11).fillCircle(63, -9, 10).fillCircle(82, -48, 9);
+    const stinger = this.add.graphics();
+    stinger.fillStyle(0x533020, 1).fillTriangle(61, -93, 44, -70, 72, -72);
+    stinger.fillStyle(0xffb347, 1).fillTriangle(61, -89, 51, -72, 67, -74);
+    stinger.fillStyle(0xffe27b, 0.8).fillCircle(61, -79, 5);
+    tail.add([tailShape, stinger]);
+
+    const legs = this.add.graphics();
+    legs.lineStyle(13, 0x57331f, 1);
+    for (const side of [-1, 1]) {
+      for (let index = 0; index < 3; index++) {
+        const startX = side * (24 + index * 7), startY = -2 + index * 15;
+        const kneeX = side * (56 + index * 5), kneeY = startY + 20;
+        const footX = side * (72 + index * 4), footY = startY + 38;
+        legs.beginPath().moveTo(startX, startY).lineTo(kneeX, kneeY).lineTo(footX, footY).strokePath();
+        legs.fillStyle(0xe6a34c, 1).fillCircle(startX, startY, 6).fillCircle(kneeX, kneeY, 6);
+      }
+    }
+
+    const pincers = this.add.graphics();
+    pincers.lineStyle(18, 0x57331f, 1).beginPath().moveTo(-37, 3).lineTo(-66, 22).lineTo(-86, 9).strokePath();
+    pincers.lineStyle(12, 0xe6a34c, 1).beginPath().moveTo(-37, 3).lineTo(-66, 22).strokePath();
+    pincers.lineStyle(18, 0x57331f, 1).beginPath().moveTo(37, 3).lineTo(66, 22).lineTo(86, 9).strokePath();
+    pincers.lineStyle(12, 0xe6a34c, 1).beginPath().moveTo(37, 3).lineTo(66, 22).strokePath();
+    pincers.lineStyle(9, 0xf5c35c, 1).beginPath().moveTo(-66, 22).lineTo(-82, 37).moveTo(-66, 22).lineTo(-90, 26).moveTo(66, 22).lineTo(82, 37).moveTo(66, 22).lineTo(90, 26).strokePath();
+
+    const shell = this.add.graphics();
+    shell.fillStyle(0x57331f, 1).fillEllipse(0, 10, 112, 92);
+    shell.fillStyle(0xb9672c, 1).fillEllipse(0, 2, 100, 82);
+    shell.fillStyle(0xe39a3f, 1).fillEllipse(0, -5, 82, 64);
+    shell.fillStyle(0xffd275, 0.72).fillEllipse(-19, -23, 31, 12);
+    shell.lineStyle(4, 0x8c4928, 0.9).beginPath().moveTo(-30, -26).lineTo(-12, -3).lineTo(-23, 16).moveTo(0, -34).lineTo(7, -7).lineTo(-2, 14).moveTo(29, -23).lineTo(12, -2).lineTo(25, 16).strokePath();
+    const face = this.add.graphics();
+    face.fillStyle(0x42291f, 1).fillEllipse(-20, -8, 10, 16).fillEllipse(20, -8, 10, 16);
+    face.fillStyle(0xffe992, 1).fillCircle(-20, -10, 4).fillCircle(20, -10, 4);
+    face.fillStyle(0x3b251d, 1).fillCircle(-20, -10, 1.7).fillCircle(20, -10, 1.7);
+    face.lineStyle(4, 0x57331f, 1).beginPath().moveTo(-10, 14).lineTo(0, 20).lineTo(10, 14).strokePath();
+
+    scorpion.add([tail, legs, pincers, shell, face]);
+    scorpion.setSize(220, 220);
+    scorpion.setData("scorpionTail", tail);
+    return scorpion;
+  }
   private createCandyBee(x: number, y: number) {
     const outline = 0x633a32;
     const bee = this.add.container(x, y).setDepth(19);
@@ -1607,10 +1953,12 @@ export class GameScene extends Phaser.Scene {
     boss.stateTimer -= dt;
       if (boss.definition.id === "king-snake") this.updateKingBehavior(boss, dt);
     else if (boss.definition.id === "candy-monster") this.updateCandyBehavior(boss, dt);
-    else this.updateKrakenBehavior(boss, dt);
+    else if (boss.definition.id === "kraken") this.updateKrakenBehavior(boss, dt);
+    else this.updateScorpionBehavior(boss, dt);
     if (!this.boss) return;
     if (boss.definition.id === "king-snake") this.updateKingSnakeVisual(boss, dt);
     else if (boss.definition.id === "kraken") this.updateKrakenVisual(boss);
+    else if (boss.definition.id === "scorpion-king") this.updateScorpionKingVisual(boss);
 
     if (boss.definition.id !== "king-snake") {
       this.bossCoinsTimer -= dt;
@@ -1619,14 +1967,13 @@ export class GameScene extends Phaser.Scene {
         this.spawnBossPickup("boss-coin", 25, "◆", 0xffd35a);
       }
     }
-    this.updateBossPickups(dt);
-
     const dx = this.snake.x - boss.image.x, dy = this.snake.y - boss.image.y;
     const d = Math.hypot(dx, dy) || 1;
     const collisionDistance = Math.hypot(dx, dy);
-    const collisionRadius = boss.definition.id === "kraken" ? 84 : 58 + B.snake.radius;
+    const collisionRadius = boss.definition.id === "kraken" ? 84 : boss.definition.id === "scorpion-king" ? 78 : 58 + B.snake.radius;
     const canHitKraken = boss.definition.id === "kraken" && boss.state === "EXPOSED" && boss.hazard && Math.hypot(this.snake.x - boss.hazard.x, this.snake.y - boss.hazard.y) < 62;
-    const contact = boss.definition.id === "kraken" ? canHitKraken : collisionDistance < collisionRadius;
+    const canHitScorpion = boss.definition.id === "scorpion-king" && boss.state === "STUNNED";
+    const contact = boss.definition.id === "kraken" ? canHitKraken : boss.definition.id === "scorpion-king" ? canHitScorpion && collisionDistance < collisionRadius : collisionDistance < collisionRadius;
     if (boss.definition.id === "candy-monster") {
       const touchingHead = distance(this.snake, boss.image) < collisionRadius;
       const touchingSegment = this.snake.body.slice(0, this.snake.length).some((segment) => distance(segment, boss.image) < collisionRadius);
@@ -1660,7 +2007,8 @@ export class GameScene extends Phaser.Scene {
         ? boss.state === "STUNNED" && aura.source === "crown-orb"
         : boss.definition.id === "candy-monster"
           ? boss.state === "ATTACK_MODE" && aura.source === "candy-aura"
-          : boss.state === "EXPOSED";
+          : boss.definition.id === "kraken" ? boss.state === "EXPOSED"
+            : boss.state === "STUNNED" && aura.source === "crown-orb";
       const kingSnake = boss.definition.id === "king-snake";
       const kingChargeContact = kingSnake && boss.state === "CHARGE";
       if (kingChargeContact && this.bossCollisionGrace <= 0) {
@@ -1682,6 +2030,7 @@ export class GameScene extends Phaser.Scene {
         // The King Snake is harmless while stunned, but cannot be damaged without aura.
       } else if (aura.active && vulnerable && aura.consumeHit(boss.definition.id)) {
         if (boss.definition.id === "kraken") { boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.5; }
+        else if (boss.definition.id === "scorpion-king") { boss.state = "RECOVER"; boss.stateTimer = 1.1; }
         this.damageBoss();
         if (!this.boss) return;
         this.feedback(boss.image.x, boss.image.y, "−1", 0xffb344, true);
@@ -1689,7 +2038,7 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: boss.image, x: boss.image.x + dx / d * 24, y: boss.image.y + dy / d * 24, duration: 130, yoyo: true, ease: "Sine.easeOut" });
         this.particles.explode(14, boss.image.x, boss.image.y);
         audio.play("power"); haptic("power");
-      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && boss.definition.id !== "candy-monster" && this.bossCollisionGrace <= 0 && !this.powers.ghostActive) {
+      } else if (!aura.active && boss.definition.id !== "kraken" && !kingSnake && boss.definition.id !== "candy-monster" && boss.definition.id !== "scorpion-king" && this.bossCollisionGrace <= 0 && !this.powers.ghostActive) {
         const hadShield = this.powers.shield;
         if (!this.powers.absorb()) {
           this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
@@ -1839,6 +2188,17 @@ export class GameScene extends Phaser.Scene {
       boss.hazard.setAlpha(0.62 + Math.sin(this.run.elapsed * 16) * 0.25);
     }
   }
+  private updateScorpionKingVisual(boss: NonNullable<GameScene["boss"]>) {
+    const tail = boss.scorpionTail;
+    if (!tail) return;
+      const telegraphing = boss.state === "PREPARE_CHARGE";
+    const fury = boss.health <= 2;
+    const pulse = Math.sin(this.run.elapsed * (telegraphing || fury ? 12 : 2.4));
+    tail.rotation = telegraphing ? -0.2 + pulse * 0.08 : -0.08 + pulse * 0.055;
+    boss.image.setScale(1 + boss.phase * 0.035 + (telegraphing ? Math.max(0, pulse) * 0.035 : 0));
+    if (fury) tail.setAlpha(0.82 + Math.sin(this.run.elapsed * 15) * 0.18);
+    else tail.setAlpha(1);
+  }
   private updateKingBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const arena = B.arena;
     const preference = save.profile.settings.speedPreference;
@@ -1857,6 +2217,16 @@ export class GameScene extends Phaser.Scene {
     } else if (boss.state === "PREPARE_CHARGE") {
       if (boss.stateTimer <= 0) { boss.state = "CHARGE"; boss.stateTimer = 1.25; audio.play("power"); }
     } else if (boss.state === "CHARGE") {
+      const hitHead = distance(this.snake, boss.image) < 88;
+      const hitBody = this.snake.body.slice(1, this.snake.length).some((segment) => distance(segment, boss.image) < 70);
+      if ((hitHead || hitBody) && this.bossCollisionGrace <= 0 && this.powers.invincible <= 0 && !this.powers.ghostActive) {
+        const hadShield = this.powers.shield;
+        if (!this.powers.absorb()) {
+          if (hitHead && !this.loseLife()) { this.die(); return; }
+          if (!hitHead) this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
+        } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+        this.bossCollisionGrace = boss.definition.combat.hitInvulnerability;
+      }
       const speed = boss.speed * (furious ? 5.8 : 5);
       boss.image.x += boss.chargeX * speed * dt; boss.image.y += boss.chargeY * speed * dt;
       if (boss.image.x < arena.left + 70 || boss.image.x > arena.right - 70 || boss.image.y < arena.top + 70 || boss.image.y > arena.bottom - 70) {
@@ -1874,6 +2244,45 @@ export class GameScene extends Phaser.Scene {
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
       if (furious && boss.doubleCharge === 0 && boss.attack < 0) { boss.state = "PREPARE_CHARGE"; boss.stateTimer = 0.65; boss.doubleCharge = 2; }
       else { boss.state = "CHASE"; boss.stateTimer = telegraph(boss.definition.combat.attackCooldown * (furious ? 0.7 : 1), 1.5); }
+    }
+  }
+  private updateScorpionBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
+    const arena = B.arena, preference = save.profile.settings.speedPreference;
+    const furious = boss.phase >= 2;
+    if (boss.state === "CHASE") {
+      this.moveBossToward(boss, this.snake, boss.speed * (furious ? 1.35 : 0.92 + boss.phase * 0.12), dt);
+      if (boss.stateTimer <= 0) {
+        boss.state = "PREPARE_CHARGE";
+        boss.stateTimer = bossAttackTiming(boss.definition.combat.telegraphDuration * (furious ? 0.78 : 1 - boss.phase * 0.1), preference, 0.65);
+        const dx = this.snake.x - boss.image.x, dy = this.snake.y - boss.image.y, length = Math.hypot(dx, dy) || 1;
+        boss.chargeX = dx / length; boss.chargeY = dy / length;
+        for (const marker of this.bossMarkers) marker.destroy();
+        const marker = this.add.graphics().lineStyle(10, 0xff6547, 0.7).lineBetween(boss.image.x, boss.image.y, boss.image.x + boss.chargeX * 520, boss.image.y + boss.chargeY * 520).setDepth(8);
+        this.bossMarkers.push(marker);
+        this.feedback(boss.image.x, boss.image.y, furious ? "INVESTIDA FURIOSA!" : "INVESTIDA!", 0xffa34b, true);
+        audio.play("error"); haptic("coin");
+      }
+    } else if (boss.state === "PREPARE_CHARGE") {
+      if (boss.stateTimer <= 0) { boss.state = "CHARGE"; boss.stateTimer = 1.15; audio.play("power"); }
+    } else if (boss.state === "CHARGE") {
+      const speed = boss.speed * (furious ? 6.1 : 5.2);
+      boss.image.x += boss.chargeX * speed * dt; boss.image.y += boss.chargeY * speed * dt;
+      if (boss.image.x < arena.left + 100 || boss.image.x > arena.right - 100 || boss.image.y < arena.top + 100 || boss.image.y > arena.bottom - 100 || boss.stateTimer <= 0) {
+        boss.image.x = Phaser.Math.Clamp(boss.image.x, arena.left + 100, arena.right - 100);
+        boss.image.y = Phaser.Math.Clamp(boss.image.y, arena.top + 100, arena.bottom - 100);
+        boss.state = "STUNNED"; boss.stateTimer = boss.definition.combat.stunDuration;
+        for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
+        this.spawnBossPickup("crown-orb", 100, "◆", 0xffc247);
+        this.particles.explode(16, boss.image.x, boss.image.y); audio.play("error"); haptic("power");
+      }
+    } else if (boss.state === "STUNNED" && boss.phase >= 1 && !this.bossFight.combat.active && !this.bossPickups.some((pickup) => pickup.kind === "sugar-shield")) {
+      const pickup = this.bossSafePoint(130);
+      this.spawnBossPickupAt("sugar-shield", pickup.x, pickup.y, "✦", 0xffc247);
+    } else if (boss.state === "STUNNED" && boss.stateTimer <= 0) {
+      boss.state = "RECOVER"; boss.stateTimer = 0.65;
+    } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
+      boss.state = "CHASE";
+      boss.stateTimer = bossAttackTiming(boss.definition.combat.attackCooldown * (furious ? 0.68 : 1 - boss.phase * 0.12), preference, 1.4);
     }
   }
   private updateCandyBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
@@ -1938,13 +2347,13 @@ export class GameScene extends Phaser.Scene {
         this.bossMarkers.push(marker); audio.play("error");
       }
     }
-    if (boss.definition.id !== "candy-monster" && boss.phase >= 1 && !this.bossPickups.some((item) => item.kind === "sugar-shield") && !this.bossFight.combat.active) this.spawnBossPickup("sugar-shield", 0, "S", 0xff76d7);
+    if (boss.phase >= 1 && !this.bossPickups.some((item) => item.kind === "sugar-shield") && !this.bossFight.combat.active) this.spawnBossPickup("sugar-shield", 0, "S", boss.definition.id === "scorpion-king" ? 0xffc247 : 0xff76d7);
     if (boss.definition.id === "candy-monster" && boss.phase >= 1 && !this.powers.shield && !this.bossPickups.some((item) => item.kind === "candy-shield") && Math.random() < dt * 0.08) this.spawnBossPickup("candy-shield", 0, "S", 0x70cfff);
   }
   private updateKrakenBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const preference = save.profile.settings.speedPreference;
-    boss.image.x = B.arena.left + (B.arena.right - B.arena.left) * 0.78;
-    boss.image.y = B.arena.top + (B.arena.bottom - B.arena.top) * 0.74;
+    boss.image.x = B.arena.left + (B.arena.right - B.arena.left) * OW.krakenArena.x;
+    boss.image.y = B.arena.top + (B.arena.bottom - B.arena.top) * OW.krakenArena.y;
     if (boss.phase >= 1 && !this.bossCurrent) {
       this.bossCurrent = { x: B.arena.left + 700, y: B.arena.top + 650, direction: Math.PI, force: boss.phase >= 2 ? 20 : 13, life: 7, graphics: this.add.graphics().setDepth(5) };
     }
@@ -2021,6 +2430,7 @@ export class GameScene extends Phaser.Scene {
     for (const segment of this.boss.bodySegments) segment.destroy();
     this.boss.image.destroy(); this.boss = undefined;
     this.krakenBarrier?.destroy(); this.krakenBarrier = undefined;
+    this.desertArenaBarrier?.destroy(); this.desertArenaBarrier = undefined;
     this.krakenBarrierCooldown = 0;
     this.krakenReturnAngle = undefined;
     this.krakenReturnTimer = 0;
@@ -2054,8 +2464,12 @@ export class GameScene extends Phaser.Scene {
       save.profile.totalCoins += defeated.rewardCoins;
       addXP(save.profile, defeated.rewardXP);
     }
+    if (defeated.id === "kraken") {
+      save.profile.worldsUnlocked = [...new Set([...save.profile.worldsUnlocked, "silent-abyss"] )];
+      this.revealAbyssPortal();
+    }
     const newlyUnlocked = first ? reconcileWorldUnlocks(save.profile) : [];
-    const nextWorld = worlds.find((world) => world.requiredBossId === defeated.id && world.isImplemented);
+    const nextWorld = worlds.find((world) => world.requiredBossId === defeated.id && world.isImplemented && worldRequirements(world, save.profile).unlocked && !save.profile.worldsUnlocked.includes(world.id));
     const portalGuidance = nextWorld
       ? save.profile.worldsUnlocked.includes(nextWorld.id)
         ? `🌀 Portal para ${nextWorld.name} liberado! Ele está na borda da arena. Leve a cobrinha até a passagem e atravesse para viajar.`

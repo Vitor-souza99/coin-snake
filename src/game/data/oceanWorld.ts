@@ -84,11 +84,11 @@ export function deepTrenchCoinChance(baseChance: number, inDeepTrench: boolean):
   return Math.min(1, baseChance + (inDeepTrench ? oceanWorldConfig.deepTrenchRareCoinBonus : 0));
 }
 
-/** Keeps a point inside the Kraken arena and reports whether it crossed the rim. */
+/** Keeps a point outside the Kraken arena and reports crossings. */
 export function containKrakenArenaPoint(point: Point, center: Point, radius: number, clearance: number): Point | null {
   const dx = point.x - center.x, dy = point.y - center.y;
-  const distance = Math.hypot(dx, dy), limit = Math.max(0, radius - clearance);
-  if (distance <= limit) return null;
+  const distance = Math.hypot(dx, dy), limit = radius + clearance;
+  if (distance >= limit) return null;
   const scale = limit / (distance || 1);
   return { x: center.x + dx * scale, y: center.y + dy * scale };
 }

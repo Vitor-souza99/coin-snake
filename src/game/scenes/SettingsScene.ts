@@ -79,7 +79,7 @@ export class SettingsScene extends Phaser.Scene {
       void save.save();
     });
     ui.on("#tutorial", () => {
-      save.profile.hints = { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false };
+      save.profile.hints = { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false, desertGust: false };
       void save.save();
       ui.toast("As dicas aparecer�o na pr�xima partida.");
     });

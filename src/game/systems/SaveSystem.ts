@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 10,
+    saveVersion: 11,
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -42,7 +42,7 @@ export function defaults(): PlayerProfile {
     },
     firstLaunch: true,
     tutorialCompleted: false,
-    hints: { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false },
+    hints: { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false, desertGust: false },
     statistics: {
       totalGames: 0,
       totalCoinsCollected: 0,
@@ -67,12 +67,14 @@ export function defaults(): PlayerProfile {
     mastery: {},
     worldsUnlocked: ["green-valley"],
     selectedWorld: "green-valley",
+    abyssChallengeBest: 0,
+    abyssChallengeCompleted: false,
   };
 }
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bossCoinBalance = num(r.bossCoinBalance);
   p.bestScore = num(r.bestScore);
@@ -136,6 +138,7 @@ export function validateSave(input: unknown): PlayerProfile {
     oceanCurrent: bool(hints.oceanCurrent, false),
     pearl: bool(hints.pearl, false),
     deepTrench: bool(hints.deepTrench, false),
+    desertGust: bool(hints.desertGust, false),
   };
   const stats = record(r.statistics);
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
@@ -170,8 +173,8 @@ export function validateSave(input: unknown): PlayerProfile {
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
   p.mastery = Object.fromEntries(skins.map((skin) => [skin.id, isV3 ? num(mastery[skin.id]) : 0]));
-  const worldIds = new Set(["green-valley", "candy-world", "ocean"]);
-  const legacyWorldAliases: Record<string, string> = { green_valley: "green-valley", candy_world: "candy-world", ocean_world: "ocean" };
+  const worldIds = new Set(["green-valley", "candy-world", "ocean", "silent-abyss", "desert"]);
+  const legacyWorldAliases: Record<string, string> = { green_valley: "green-valley", candy_world: "candy-world", ocean_world: "ocean", desert_world: "desert" };
   const savedWorlds = isV3 && Array.isArray(r.worldsUnlocked)
     ? r.worldsUnlocked.flatMap((id): string[] => {
         if (typeof id !== "string") return [];
@@ -183,11 +186,17 @@ export function validateSave(input: unknown): PlayerProfile {
   const defeated = new Set(p.bossesDefeated);
   if (p.playerLevel >= 5 && defeated.has("king-snake")) p.worldsUnlocked.push("candy-world");
   if (p.playerLevel >= 10 && defeated.has("candy-monster") && p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("ocean");
+  if (defeated.has("kraken") && p.worldsUnlocked.includes("ocean")) p.worldsUnlocked.push("silent-abyss");
+  else p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "silent-abyss");
+  if (p.playerLevel >= 15 && defeated.has("kraken") && p.worldsUnlocked.includes("ocean")) p.worldsUnlocked.push("desert");
   p.worldsUnlocked = [...new Set(p.worldsUnlocked)];
+  p.abyssChallengeBest = num(r.abyssChallengeBest);
+  p.abyssChallengeCompleted = bool(r.abyssChallengeCompleted, false);
+  if (p.abyssChallengeCompleted) p.unlockedSkins = [...new Set([...p.unlockedSkins, "abyssal-serpent"] )];
+  if (p.worldsUnlocked.includes("ocean") && !p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("candy-world");
   p.selectedWorld = typeof r.selectedWorld === "string" && p.worldsUnlocked.includes(legacyWorldAliases[r.selectedWorld] ?? r.selectedWorld)
     ? legacyWorldAliases[r.selectedWorld] ?? r.selectedWorld
     : "green-valley";
-  if (p.worldsUnlocked.includes("ocean") && !p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("candy-world");
   p.missionDate =
     typeof r.missionDate === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(r.missionDate)
@@ -240,7 +249,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>10){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>11){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

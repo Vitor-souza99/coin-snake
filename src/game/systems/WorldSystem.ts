@@ -1,11 +1,11 @@
-import { canonicalWorldId, isWorldUnlocked, worlds, worldById, worldRequirements, type WorldDefinition, type WorldPlayerState } from "../data/worlds";
+import { canonicalWorldId, isWorldUnlocked, worlds, worldById, worldRequirements, worldRequirementLabel, type WorldDefinition, type WorldPlayerState } from "../data/worlds";
 import { save } from "./SaveSystem";
 
 export type WorldCardStatus = "AVAILABLE" | "SELECTED" | "LOCKED" | "PREMIUM_LOCKED" | "COMING_SOON";
 export function worldStatus(world: WorldDefinition, state: WorldPlayerState, selectedWorld = "green-valley"): WorldCardStatus {
   if (world.unlockType === "PREMIUM") return "PREMIUM_LOCKED";
-  if (!world.isImplemented) return "COMING_SOON";
   if (!isWorldUnlocked(world, state)) return "LOCKED";
+  if (!world.isImplemented) return "COMING_SOON";
   return canonicalWorldId(selectedWorld) === world.id ? "SELECTED" : "AVAILABLE";
 }
 export function worldRequirementText(world: WorldDefinition, state: WorldPlayerState) {
@@ -14,7 +14,7 @@ export function worldRequirementText(world: WorldDefinition, state: WorldPlayerS
   const requirements = worldRequirements(world, state);
   return [
     world.requiredLevel ? `${requirements.levelMet ? "✓" : "✗"} Nível ${world.requiredLevel}` : "",
-    world.requiredBossId ? `${requirements.bossMet ? "✓" : "✗"} Derrote ${world.requiredBossId === "king-snake" ? "King Snake" : world.requiredBossId === "candy-monster" ? "Candy Monster" : world.requiredBossId}` : "",
+    world.requiredBossId ? `${requirements.bossMet ? "✓" : "✗"} Derrote ${worldRequirementLabel(world.requiredBossId)}` : "",
     world.prerequisiteWorldId ? `${requirements.worldMet ? "✓" : "✗"} Visite ${worldById(world.prerequisiteWorldId).name}` : "",
   ].filter(Boolean).join(" · ") || "Desbloqueado";
 }
@@ -22,6 +22,13 @@ export function reconcileWorldUnlocks(state: WorldPlayerState) {
   const newlyUnlocked: WorldDefinition[] = [];
   if (!state.worldsUnlocked.includes("green-valley")) state.worldsUnlocked.push("green-valley");
   for (const world of worlds) {
+    if (world.category === "SECRET") {
+      if (world.id === "silent-abyss" && state.bossesDefeated.includes("kraken") && state.worldsUnlocked.includes("ocean") && !state.worldsUnlocked.includes(world.id)) {
+        state.worldsUnlocked.push(world.id);
+        newlyUnlocked.push(world);
+      }
+      continue;
+    }
     if (world.unlockType === "PREMIUM" || !worldRequirements(world, state).unlocked) continue;
     if (!state.worldsUnlocked.includes(world.id)) {
       state.worldsUnlocked.push(world.id);
@@ -31,10 +38,10 @@ export function reconcileWorldUnlocks(state: WorldPlayerState) {
   return newlyUnlocked;
 }
 export function eligiblePortalWorlds(state: WorldPlayerState, current: string) {
-  return worlds.filter((world) => world.id !== "green-valley" && world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && isWorldUnlocked(world, state) && world.portalWeight > 0);
+  return worlds.filter((world) => world.category !== "SECRET" && world.id !== "green-valley" && world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && isWorldUnlocked(world, state) && world.portalWeight > 0);
 }
 export function traversableWorlds(state: WorldPlayerState, current: string) {
-  return worlds.filter((world) => world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && isWorldUnlocked(world, state));
+  return worlds.filter((world) => world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && (world.category !== "SECRET" || canonicalWorldId(current) === world.id && state.worldsUnlocked.includes(world.id)) && isWorldUnlocked(world, state));
 }
 export function weightedWorldChoice(candidates: WorldDefinition[], lastWorld = "", random = Math.random): WorldDefinition | undefined {
   const pool = candidates.filter((world) => world.id !== canonicalWorldId(lastWorld));
@@ -50,7 +57,7 @@ export function weightedWorldChoice(candidates: WorldDefinition[], lastWorld = "
 }
 export function unlockWorld(worldId: string) {
   const world = worldById(worldId), state = save.profile;
-  if (world.unlockType === "PREMIUM" || !world.isImplemented || !worldRequirements(world, state).unlocked) return false;
+  if (world.category === "SECRET" || world.unlockType === "PREMIUM" || !world.isImplemented || !worldRequirements(world, state).unlocked) return false;
   if (!state.worldsUnlocked.includes(world.id)) state.worldsUnlocked.push(world.id);
   void save.save();
   return true;
