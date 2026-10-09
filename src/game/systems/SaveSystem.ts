@@ -35,6 +35,7 @@ export function defaults(): PlayerProfile {
       sfxVolume: 0.35,
       reducedMotion: false,
       cameraMode: "standard",
+      speedPreference: "medium",
       orientation: "auto",
       language: "auto",
     },
@@ -115,6 +116,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.settings.leftHanded = bool(s.leftHanded, false);
   p.settings.reducedMotion = bool(s.reducedMotion, false);
   p.settings.cameraMode = s.cameraMode === "panoramic" ? "panoramic" : "standard";
+  p.settings.speedPreference = s.speedPreference === "low" || s.speedPreference === "high" || s.speedPreference === "very-high" ? s.speedPreference : "medium";
   p.settings.orientation = s.orientation === "portrait" || s.orientation === "landscape" ? s.orientation : "auto";
   p.settings.language = s.language === "pt-BR" || s.language === "en" ? s.language : "auto";
   const volume = (v: unknown, fallback: number) =>

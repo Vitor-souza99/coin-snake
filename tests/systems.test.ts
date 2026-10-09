@@ -21,7 +21,7 @@ import {
   updateMissionDay,
 } from "../src/game/systems/MissionSystem";
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
-import { difficulty } from "../src/game/systems/DifficultySystem";
+import { difficulty, speedPreferenceMultipliers } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, oceanWorldConfig } from "../src/game/data/oceanWorld";
@@ -260,6 +260,16 @@ describe("combo and balance", () => {
     expect(start).toBe(160);
     expect(afterOneLevel).toBe(165);
     expect(difficulty(0, 0, B.snake.initial + 20).speed).toBe(180);
+  });
+  it("applies the saved speed preference while preserving run progression", () => {
+    const start = difficulty(0, 0, B.snake.initial);
+    expect(speedPreferenceMultipliers).toEqual({ low: 0.8, medium: 1, high: 1.15, "very-high": 1.3 });
+    expect(difficulty(0, 0, B.snake.initial, "low").speed).toBeCloseTo(start.speed * 0.8);
+    expect(difficulty(0, 0, B.snake.initial, "medium").speed).toBe(start.speed);
+    expect(difficulty(0, 0, B.snake.initial, "high").speed).toBeCloseTo(start.speed * 1.15);
+    expect(difficulty(0, 0, B.snake.initial, "very-high").speed).toBeCloseTo(start.speed * 1.3);
+    expect(difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial, "low").speed).toBeGreaterThan(difficulty(0, 0, B.snake.initial, "low").speed);
+    expect(difficulty(100_000, 1_000_000, B.snake.max, "very-high").speed).toBe(B.snake.maxSpeed * 1.3);
   });
   it("uses the increased base speed and raises the cap through growth and levels", () => {
     const start = difficulty(0, 0, B.snake.initial);

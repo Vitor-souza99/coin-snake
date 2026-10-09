@@ -719,7 +719,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.combo.update(dt);
     this.powers.update(dt);
-    const d = difficulty(this.run.elapsed, this.run.score, this.snake.length);
+    const d = difficulty(this.run.elapsed, this.run.score, this.snake.length, save.profile.settings.speedPreference);
     let target = this.snake.angle;
     if (this.aim && distance(this.snake, this.aim) > 12)
       target = Math.atan2(this.aim.y - this.snake.y, this.aim.x - this.snake.x);
@@ -774,7 +774,7 @@ export class GameScene extends Phaser.Scene {
       if(!this.candyCoinSpawned&&this.candyCoinTimer<=0&&candyCoinSpawnAllowed(this.currentWorld,Math.random(),CW.candyCoin.chance)){const slot=this.coins.find(c=>!c.active),p=this.validPoint(B.spawn.bodyClearance,110);if(slot&&p){slot.spawnCandy(p.x,p.y);this.candyCoinSpawned=true;}}
     }
     this.updateOcean(dt);
-    const passage = this.worldPassages.find((item) => distance(this.snake, item) < 68);
+    const passage = !this.boss && this.worldPassages.find((item) => item.visible && distance(this.snake, item) < 68);
     if (passage && !this.worldTransitioning && this.passageCooldown <= 0) {
       const arena = B.arena;
       const sourceSide = passage.x <= (arena.left + arena.right) / 2 ? "left" : "right";
@@ -782,10 +782,10 @@ export class GameScene extends Phaser.Scene {
       this.enterWorld(passage.getData("destination") as string, sourceSide, passage.y, direction);
       return;
     }
-    if (this.bossPortal && distance(this.snake, this.bossPortal) >= 100) {
+    if (!this.boss && this.bossPortal && this.bossPortal.visible && distance(this.snake, this.bossPortal) >= 100) {
       this.bossPortal.setData("hintDismissed", false);
     }
-    if (this.bossPortal && distance(this.snake, this.bossPortal) < 75 && !this.bossPortal.getData("hintDismissed") && !this.bossIntroOpen) {
+    if (!this.boss && this.bossPortal && this.bossPortal.visible && distance(this.snake, this.bossPortal) < 75 && !this.bossPortal.getData("hintDismissed") && !this.bossIntroOpen) {
       const requiredEnergy = this.bossEnergyRequirement(this.bossDefinition?.id);
       if (this.run.bossEnergy < requiredEnergy) {
         const energy = Math.floor(this.run.bossEnergy);
@@ -827,7 +827,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (this.halted) return;
-    if (this.bossPortal && this.bossPortalExpiresAt > 0 && this.run.elapsed >= this.bossPortalExpiresAt) {
+    if (!this.boss && this.bossPortal && this.bossPortalExpiresAt > 0 && this.run.elapsed >= this.bossPortalExpiresAt) {
       this.bossPortal.destroy();
       this.bossPortal = undefined;
       this.bossDefinition = undefined;
@@ -1418,6 +1418,7 @@ export class GameScene extends Phaser.Scene {
   private startBoss(definition: BossDefinition) {
     this.bossPortal?.destroy(); this.bossPortal = undefined;
     this.bossPortalExpiresAt = 0;
+    for (const passage of this.worldPassages) passage.setVisible(false);
     this.bossFight.start();
     this.bossCollisionGrace = 0;
     this.candyBossShieldActive = definition.id === "candy-monster";
@@ -1464,6 +1465,7 @@ export class GameScene extends Phaser.Scene {
     const canHitKraken = boss.definition.id === "kraken" && boss.state === "EXPOSED" && boss.hazard && Math.hypot(this.snake.x - boss.hazard.x, this.snake.y - boss.hazard.y) < 62;
     const contact = boss.definition.id === "kraken" ? canHitKraken : collisionDistance < collisionRadius;
     if (boss.definition.id === "candy-monster") {
+      const touchingHead = distance(this.snake, boss.image) < collisionRadius;
       const touchingSegment = this.snake.body.slice(0, this.snake.length).some((segment) => distance(segment, boss.image) < collisionRadius);
       if (touchingSegment && this.bossCollisionGrace <= 0 && this.candyBossEscapeTimer <= 0) {
         const aura = this.bossFight.combat;
@@ -1486,7 +1488,7 @@ export class GameScene extends Phaser.Scene {
           this.tweens.killTweensOf(boss.image);
           this.tweens.add({ targets: boss.image, alpha: 0.25, duration: 200, yoyo: true, repeat: 4 });
           this.tweens.add({ targets: boss.image, x: boss.image.x + (dx / d) * 160, y: boss.image.y + (dy / d) * 160, duration: 350, ease: "Sine.easeOut" });
-        } else if (!aura.active && this.powers.invincible <= 0) {
+        } else if (!aura.active && touchingHead && (boss.state === "CHASE" || boss.state === "SUGAR_RUSH") && this.powers.invincible <= 0) {
           const hadShield = this.powers.shield;
           if (!this.powers.absorb()) {
             if (!this.loseLife()) { this.die(); return; }
@@ -1672,7 +1674,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (boss.health <= 2 && boss.state !== "SUGAR_RUSH" && boss.state !== "ATTACK_MODE") {
-      boss.state = "SUGAR_RUSH"; boss.speed = boss.definition.movementSpeed * 1.35;
+      boss.state = "SUGAR_RUSH"; boss.speed = boss.definition.movementSpeed * 1.1;
       this.ui.toast("SUGAR RUSH!"); audio.play("power");
     }
     if (boss.state === "DROP_ATTACK") {
@@ -1684,7 +1686,7 @@ export class GameScene extends Phaser.Scene {
         const zone = this.add.container(targetX, targetY, [splat]).setDepth(7);
         this.tweens.add({ targets: zone, alpha: 0, delay: 4500, duration: 400, onComplete: () => { zone.destroy(); this.stickyZones = this.stickyZones.filter((item) => Math.hypot(item.x - targetX, item.y - targetY) > 100); this.renderStickyZones(); } });
         const headHit = distance(this.snake, { x: targetX, y: targetY }) < attackRadius + B.snake.radius;
-        const bodyHit = this.snake.body.slice(1, this.snake.length).some((segment) => distance(segment, { x: targetX, y: targetY }) < attackRadius + B.snake.radius);
+          const bodyHit = this.snake.body.slice(1, this.snake.length).some((segment) => distance(segment, { x: targetX, y: targetY }) < attackRadius + B.snake.radius);
         if (headHit) {
           const hadShield = this.powers.shield;
           const hadInvincibility = this.powers.invincible > 0;
@@ -1694,8 +1696,18 @@ export class GameScene extends Phaser.Scene {
           } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
           else if (hadInvincibility) this.feedback(this.snake.x, this.snake.y, "PROTEGIDO!", 0x70cfff);
         } else if (!headHit && bodyHit) {
-          this.snake.length = Math.max(B.snake.initial, this.snake.length - Math.max(1, Math.ceil(this.snake.length * 0.2)));
-          this.feedback(targetX, targetY, "CORPO ENCURTADO!", 0xff76d7);
+          if (this.powers.shield || this.powers.invincible > 0) {
+            const hadShield = this.powers.shield;
+            const hadInvincibility = this.powers.invincible > 0;
+            this.powers.absorb();
+            this.feedback(targetX, targetY, hadShield ? "ESCUDO!" : hadInvincibility ? "PROTEGIDO!" : "BLOQUEADO!", 0x70cfff);
+          } else if (this.snake.length <= B.snake.initial) {
+            if (!this.loseLife()) { this.die(); return; }
+            this.feedback(this.snake.x, this.snake.y, `VIDA PERDIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
+          } else {
+            this.snake.length = Math.max(B.snake.initial, this.snake.length - Math.max(1, Math.ceil(this.snake.length * 0.2)));
+            this.feedback(targetX, targetY, "CORPO ENCURTADO!", 0xff76d7);
+          }
         }
         if (!headHit && !bodyHit && this.stickyZones.length < 4) { this.stickyZones.push({ x: targetX, y: targetY, radius: attackRadius - 2 }); this.renderStickyZones(); }
         boss.state = boss.health <= 3 ? "SUGAR_RUSH" : "CHASE"; boss.stateTimer = boss.definition.combat.attackCooldown;
@@ -1710,9 +1722,9 @@ export class GameScene extends Phaser.Scene {
         if (boss.health <= 2) boss.speed = boss.definition.movementSpeed * 1.75;
       }
     } else {
-      this.moveBossToward(boss, this.snake, boss.speed * (boss.state === "SUGAR_RUSH" ? 1.75 : 1), dt);
+      this.moveBossToward(boss, this.snake, boss.speed * (boss.state === "SUGAR_RUSH" ? 1.1 : 1), dt);
       if (boss.stateTimer <= 0) {
-        boss.state = "DROP_ATTACK"; boss.stateTimer = boss.definition.combat.telegraphDuration * (boss.health <= 2 ? 0.7 : 1);
+        boss.state = "DROP_ATTACK"; boss.stateTimer = boss.definition.combat.telegraphDuration;
         boss.targetX = this.snake.x; boss.targetY = this.snake.y;
         const markerRadius = boss.health <= 2 ? 94 : 58;
         const marker = this.add.graphics().fillStyle(0xff5e8b, 0.28).fillCircle(boss.targetX, boss.targetY, markerRadius).lineStyle(6, 0xff5283).strokeCircle(boss.targetX, boss.targetY, markerRadius).setDepth(8);
@@ -1720,6 +1732,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (boss.definition.id !== "candy-monster" && boss.phase >= 1 && !this.bossPickups.some((item) => item.kind === "sugar-shield") && !this.bossFight.combat.active) this.spawnBossPickup("sugar-shield", 0, "S", 0xff76d7);
+    if (boss.definition.id === "candy-monster" && boss.phase >= 1 && !this.powers.shield && !this.bossPickups.some((item) => item.kind === "candy-shield") && Math.random() < dt * 0.08) this.spawnBossPickup("candy-shield", 0, "S", 0x70cfff);
   }
   private updateKrakenBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     boss.image.x = B.arena.left + (B.arena.right - B.arena.left) * 0.78;
@@ -1769,7 +1782,7 @@ export class GameScene extends Phaser.Scene {
         this.boss.phase = nextPhase;
         this.boss.state = this.boss.definition.id === "kraken" ? "RECOVER" : "CHASE";
         this.boss.stateTimer = 1.2;
-        this.boss.speed = this.boss.definition.movementSpeed * (this.boss.definition.id === "candy-monster" && this.boss.health <= 3 ? 1.35 : 1 + nextPhase * 0.12);
+        this.boss.speed = this.boss.definition.id === "candy-monster" && this.boss.health <= 2 ? this.boss.definition.movementSpeed * 0.8 : this.boss.definition.movementSpeed * (1 + nextPhase * 0.12);
         this.feedback(this.boss.image.x, this.boss.image.y, `FASE ${nextPhase + 1}`, 0xffd66f, true);
         if (this.boss.definition.id === "king-snake" && this.boss.health <= 2) {
           this.tweens.add({ targets: this.boss.image, alpha: 0.45, scale: 1.12, duration: 140, yoyo: true, repeat: 2 });
@@ -1786,6 +1799,7 @@ export class GameScene extends Phaser.Scene {
     const defeated = this.boss.definition;
     this.boss.image.destroy(); this.boss = undefined;
     this.bossFight.finish();
+    for (const passage of this.worldPassages) passage.setVisible(true);
     for (const pickup of this.bossPickups) pickup.image.destroy(); this.bossPickups = [];
     for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
     this.bossCurrent?.graphics.destroy(); this.bossCurrent = undefined;

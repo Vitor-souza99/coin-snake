@@ -122,6 +122,13 @@ describe("v1 migration", () => {
     expect(validateSave({ ...defaults(), settings: { orientation: "diagonal" } }).settings.orientation).toBe("auto");
     expect(validateSave({ ...defaults(), settings: { orientation: "portrait" } }).settings.orientation).toBe("portrait");
   });
+  it("persists valid speed preferences and defaults missing or invalid ones to medium", () => {
+    expect(defaults().settings.speedPreference).toBe("medium");
+    expect(validateSave({ ...defaults(), settings: {} }).settings.speedPreference).toBe("medium");
+    expect(validateSave({ ...defaults(), settings: { speedPreference: "invalid" } }).settings.speedPreference).toBe("medium");
+    expect(validateSave({ ...defaults(), settings: { speedPreference: "low" } }).settings.speedPreference).toBe("low");
+    expect(validateSave({ ...defaults(), settings: { speedPreference: "very-high" } }).settings.speedPreference).toBe("very-high");
+  });
   it("detects Portuguese device languages and falls back to English", () => {
     expect(detectLanguage("pt-BR")).toBe("pt-BR");
     expect(detectLanguage("pt-PT")).toBe("pt-BR");

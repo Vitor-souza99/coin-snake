@@ -12,6 +12,7 @@ export interface Settings {
   sfxVolume: number;
   reducedMotion: boolean;
   cameraMode: "standard" | "panoramic";
+  speedPreference: "low" | "medium" | "high" | "very-high";
   orientation: "auto" | "portrait" | "landscape";
   language: LanguagePreference;
 }

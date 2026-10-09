@@ -40,10 +40,10 @@ export async function applyOrientation(orientation: Settings["orientation"]): Pr
   }
 }
 
-/** Uses landscape as Candy World's Android default without overriding an explicit preference. */
+/** Uses landscape as Candy World's mobile default without overriding an explicit preference. */
 export async function applyWorldOrientation(worldId: string, preference: Settings["orientation"]): Promise<boolean> {
-  const isCandyAndroidDefault = Capacitor.isNativePlatform() && worldId === "candy-world" && preference === "auto";
-  const orientation = isCandyAndroidDefault ? "landscape" : preference;
+  const isMobile = Capacitor.isNativePlatform() || window.matchMedia("(pointer: coarse)").matches;
+  const orientation = preference === "auto" && isMobile && worldId === "candy-world" ? "landscape" : preference;
   return applyOrientation(orientation);
 }
 
