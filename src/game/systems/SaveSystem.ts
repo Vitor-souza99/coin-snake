@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 11,
+    saveVersion: 12,
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -74,7 +74,7 @@ export function defaults(): PlayerProfile {
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bossCoinBalance = num(r.bossCoinBalance);
   p.bestScore = num(r.bestScore);
@@ -144,7 +144,7 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10].includes(r.saveVersion as number);
+  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(r.saveVersion as number);
   const validPetIds = new Set(earnablePetIds);
   const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : [];
   p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";
@@ -173,7 +173,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
   p.mastery = Object.fromEntries(skins.map((skin) => [skin.id, isV3 ? num(mastery[skin.id]) : 0]));
-  const worldIds = new Set(["green-valley", "candy-world", "ocean", "silent-abyss", "desert"]);
+  const worldIds = new Set(["green-valley", "candy-world", "ocean", "silent-abyss", "desert", "spider-lair"]);
   const legacyWorldAliases: Record<string, string> = { green_valley: "green-valley", candy_world: "candy-world", ocean_world: "ocean", desert_world: "desert" };
   const savedWorlds = isV3 && Array.isArray(r.worldsUnlocked)
     ? r.worldsUnlocked.flatMap((id): string[] => {
@@ -188,6 +188,8 @@ export function validateSave(input: unknown): PlayerProfile {
   if (p.playerLevel >= 10 && defeated.has("candy-monster") && p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("ocean");
   if (defeated.has("kraken") && p.worldsUnlocked.includes("ocean")) p.worldsUnlocked.push("silent-abyss");
   else p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "silent-abyss");
+  if (defeated.has("scorpion-king")) p.worldsUnlocked.push("spider-lair");
+  else p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "spider-lair");
   if (p.playerLevel >= 15 && defeated.has("kraken") && p.worldsUnlocked.includes("ocean")) p.worldsUnlocked.push("desert");
   p.worldsUnlocked = [...new Set(p.worldsUnlocked)];
   p.abyssChallengeBest = num(r.abyssChallengeBest);

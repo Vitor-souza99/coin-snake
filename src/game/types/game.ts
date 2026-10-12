@@ -33,7 +33,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 11;
+  saveVersion: 12;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;

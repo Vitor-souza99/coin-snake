@@ -4,6 +4,17 @@ export interface AttackAuraOptions {
   bossId: string;
 }
 
+/** Resolves Candy's response to aura activation without preserving a pending attack. */
+export function activateCandyAura(combat: BossCombatSystem, bossId: string): boolean {
+  if (!combat.activateAttackAura({ maxHits: 1, source: "candy-aura", bossId })) return false;
+  return true;
+}
+
+/** Starts the guaranteed flee window only after an aura hit was consumed. */
+export function resolveCandyAuraHit(combat: BossCombatSystem, bossId: string): boolean {
+  return combat.active && combat.source === "candy-aura" && combat.consumeHit(bossId);
+}
+
 /** Combat-only charge and damage aura; deliberately independent from Boss Energy. */
 export class BossCombatSystem {
   attackCharge = 0;

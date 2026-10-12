@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { save } from "../systems/SaveSystem";
+import { logoLayout } from "../ui/LogoLayout";
 
 /** Brief, skippable brand reveal; never waits on optional image assets. */
 export class LogoScene extends Phaser.Scene {
@@ -10,26 +11,27 @@ export class LogoScene extends Phaser.Scene {
   }
 
   create() {
-    const { width, height } = this.scale;
     const reducedMotion = save.profile.settings.reducedMotion;
     this.cameras.main.setBackgroundColor("#153f36");
+    const layout = () => logoLayout(this.scale.width, this.scale.height);
+    const initialLayout = layout();
 
     const hasLogo = this.textures.exists("brand-symbol");
     const logo = hasLogo
       ? this.add
-          .image(width / 2, height * 0.43, "brand-symbol")
-          .setDisplaySize(Math.min(width * 0.52, 260), Math.min(width * 0.52, 260))
+          .image(initialLayout.centerX, initialLayout.logoY, "brand-symbol")
+          .setDisplaySize(initialLayout.logoSize, initialLayout.logoSize)
           .setAlpha(0)
           .setScale(0.72)
       : this.add
-          .text(width / 2, height * 0.43, "◉", { fontSize: "150px", color: "#ffd96b" })
+          .text(initialLayout.centerX, initialLayout.logoY, "◉", { fontSize: `${initialLayout.logoSize}px`, color: "#ffd96b" })
           .setOrigin(0.5)
           .setAlpha(0)
           .setScale(0.72);
     const title = this.add
-      .text(width / 2, height * 0.7, "COIN SNAKE", {
+      .text(initialLayout.centerX, initialLayout.titleY, "COIN SNAKE", {
         fontFamily: "Arial, sans-serif",
-        fontSize: `${Math.max(28, Math.min(48, width * 0.1))}px`,
+        fontSize: `${initialLayout.titleFontSize}px`,
         fontStyle: "bold",
         color: "#fffdf0",
         stroke: "#174a3a",
@@ -38,6 +40,19 @@ export class LogoScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setAlpha(0);
+
+    const handleResize = () => {
+      if (!this.scene.isActive()) return;
+      const next = layout();
+      logo.setPosition(next.centerX, next.logoY);
+      if (hasLogo) logo.setDisplaySize(next.logoSize, next.logoSize);
+      else if (logo instanceof Phaser.GameObjects.Text) logo.setFontSize(`${next.logoSize}px`);
+      title.setPosition(next.centerX, next.titleY).setFontSize(`${next.titleFontSize}px`);
+    };
+    this.scale.on(Phaser.Scale.Events.RESIZE, handleResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, handleResize);
+    });
 
     const finish = () => this.finish();
     let skipEnabled = false;
@@ -70,7 +85,7 @@ export class LogoScene extends Phaser.Scene {
           duration: reducedMotion ? 0 : 520,
           ease: "Sine.InOut",
           onComplete: () => {
-            if (!this.completing) this.tweens.add({ targets: title, alpha: 1, y: height * 0.67, duration: 220 });
+            if (!this.completing) this.tweens.add({ targets: title, alpha: 1, duration: 220 });
           },
         });
       },

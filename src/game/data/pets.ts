@@ -26,6 +26,16 @@ export const pets: PetDefinition[] = [
     bossRewardId: "scorpion-king",
   },
   {
+    id: "spiderling",
+    name: "Aranhinha",
+    symbol: "🕷️",
+    rarity: "LEGENDARY",
+    description: "+5% na duração da aura de ataque.",
+    unlockedBy: "Derrote a Aranha Real no Covil da Aranha.",
+    unlockType: "BOSS",
+    bossRewardId: "spider-queen",
+  },
+  {
     id: "bee",
     name: "Bee",
     symbol: "🐝",

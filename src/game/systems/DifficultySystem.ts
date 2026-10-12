@@ -27,6 +27,16 @@ export function bossAttackTiming(baseDuration: number, speedPreference: SpeedPre
   return Math.max(minimum, baseDuration * bossDifficultyProfile(speedPreference).timingMultiplier);
 }
 
+/** Give the player enough time to leave a boss attack zone at their current movement speed. */
+export function candyTelegraphTiming(baseDuration: number, playerSpeed: number, attackRadius: number): number {
+  const minimum = 1.15;
+  const maximum = 1.8;
+  const safeSpeed = Math.max(1, playerSpeed);
+  const escapeDistance = attackRadius + B.snake.radius + 24;
+  const escapeWindow = (escapeDistance / safeSpeed) * 1.35;
+  return Math.min(maximum, Math.max(minimum, baseDuration, escapeWindow));
+}
+
 export function difficulty(seconds: number, score: number, length: number, speedPreference: SpeedPreference = "medium") {
   const d = B.difficulty;
   const level = Math.min(

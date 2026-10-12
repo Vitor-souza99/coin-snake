@@ -27,6 +27,10 @@ export function reconcileWorldUnlocks(state: WorldPlayerState) {
         state.worldsUnlocked.push(world.id);
         newlyUnlocked.push(world);
       }
+      if (world.id === "spider-lair" && state.bossesDefeated.includes("scorpion-king") && !state.worldsUnlocked.includes(world.id)) {
+        state.worldsUnlocked.push(world.id);
+        newlyUnlocked.push(world);
+      }
       continue;
     }
     if (world.unlockType === "PREMIUM" || !worldRequirements(world, state).unlocked) continue;
@@ -41,7 +45,8 @@ export function eligiblePortalWorlds(state: WorldPlayerState, current: string) {
   return worlds.filter((world) => world.category !== "SECRET" && world.id !== "green-valley" && world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && isWorldUnlocked(world, state) && world.portalWeight > 0);
 }
 export function traversableWorlds(state: WorldPlayerState, current: string) {
-  return worlds.filter((world) => world.id !== canonicalWorldId(current) && world.isImplemented && world.unlockType !== "PREMIUM" && (world.category !== "SECRET" || canonicalWorldId(current) === world.id && state.worldsUnlocked.includes(world.id)) && isWorldUnlocked(world, state));
+  const currentId = canonicalWorldId(current);
+  return worlds.filter((world) => world.id !== currentId && world.isImplemented && world.unlockType !== "PREMIUM" && (world.category !== "SECRET" || world.id === "silent-abyss" && currentId === world.id && state.worldsUnlocked.includes(world.id)) && isWorldUnlocked(world, state));
 }
 export function weightedWorldChoice(candidates: WorldDefinition[], lastWorld = "", random = Math.random): WorldDefinition | undefined {
   const pool = candidates.filter((world) => world.id !== canonicalWorldId(lastWorld));

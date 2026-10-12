@@ -21,23 +21,24 @@ import {
   updateMissionDay,
 } from "../src/game/systems/MissionSystem";
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
-import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, difficulty, speedPreferenceMultipliers } from "../src/game/systems/DifficultySystem";
+import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegraphTiming, difficulty, speedPreferenceMultipliers } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
-import { containDesertArenaPoint, desertGustAt, desertGusts, desertRegions, inDesertOasis } from "../src/game/data/desertWorld";
+import { containDesertArenaPoint, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { addXP } from "../src/game/systems/EconomySystem";
 import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
-import { BossCombatSystem } from "../src/game/systems/BossCombatSystem";
+import { activateCandyAura, BossCombatSystem, resolveCandyAuraHit } from "../src/game/systems/BossCombatSystem";
 import { eligiblePortalWorlds, reconcileWorldUnlocks, rememberWorld, traversableWorlds, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
 import { worldById, worlds } from "../src/game/data/worlds";
 import { bosses } from "../src/game/data/bosses";
 import { earnablePetIds, pets } from "../src/game/data/pets";
 import { awardAchievement, achievementDefinitions } from "../src/game/systems/AchievementSystem";
+import { logoLayout } from "../src/game/ui/LogoLayout";
 import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
 import { purchases } from "../src/game/services/PurchaseService";
 import {
@@ -191,6 +192,17 @@ describe("economy", () => {
   });
 });
 describe("boss entry hints", () => {
+  it("scales Candy's attack warning to snake speed while keeping it readable", () => {
+    const slow = candyTelegraphTiming(0.8, 80, 64);
+    const normal = candyTelegraphTiming(0.8, 160, 64);
+    const fast = candyTelegraphTiming(0.8, 320, 64);
+
+    expect(slow).toBeCloseTo(1.72125);
+    expect(normal).toBeGreaterThanOrEqual(1.15);
+    expect(fast).toBeCloseTo(1.15);
+    expect(candyTelegraphTiming(0.8, 1, 64)).toBe(1.8);
+  });
+
   it("provides an actionable hint for every implemented boss", () => {
     expect(bosses.length).toBeGreaterThan(0);
     for (const boss of bosses) {
@@ -208,10 +220,12 @@ describe("boss entry hints", () => {
     expect(king.entryHint).toMatch(/coroa/i);
     expect(king.phases).toContain(2);
   });
-  it("configures the Candy Monster's eight-hit fight and two-coin aura charge", () => {
+  it("configures the Candy Monster's six-hit fight, faster attacks, and two-coin aura charge", () => {
     const candy = bosses.find((boss) => boss.id === "candy-monster")!;
-    expect(candy.maxHealth).toBe(8);
-    expect(candy.phases).toEqual([5, 2]);
+    expect(candy.maxHealth).toBe(6);
+    expect(candy.phases).toEqual([4, 2]);
+    expect(candy.combat.attackCooldown).toBe(4);
+    expect(candy.attackInterval).toBe(4);
     expect(candy.combat.attackChargePerBossCoin).toBe(25);
     expect(candy.combat.auraMaxHits).toBe(1);
     expect(candy.entryHint).toMatch(/Boss Coins/i);
@@ -220,6 +234,28 @@ describe("boss entry hints", () => {
   });
 });
 describe("boss attack aura", () => {
+  it("activates Candy aura as a pursuit state and clears a pending attack", () => {
+    const combat = new BossCombatSystem();
+    combat.addCharge(100);
+
+    expect(activateCandyAura(combat, "candy-monster")).toBe(true);
+    expect(combat.active).toBe(true);
+    expect(combat.source).toBe("candy-aura");
+    expect(activateCandyAura(combat, "candy-monster")).toBe(false);
+  });
+
+  it("consumes Candy aura only for a matching boss hit, then enters a distinct flee state", () => {
+    const combat = new BossCombatSystem();
+    combat.addCharge(100);
+    expect(activateCandyAura(combat, "candy-monster")).toBe(true);
+
+    expect(resolveCandyAuraHit(combat, "king-snake")).toBe(false);
+    expect(combat.active).toBe(true);
+    expect(resolveCandyAuraHit(combat, "candy-monster")).toBe(true);
+    expect(combat.active).toBe(false);
+    expect(resolveCandyAuraHit(combat, "candy-monster")).toBe(false);
+  });
+
   it("stays active without a time limit until its allowed hit is consumed", () => {
     const combat = new BossCombatSystem();
     combat.addCharge(100);
@@ -362,7 +398,7 @@ describe("roadmap progression systems", () => {
   it("defines a boss for every implemented world and allows the Ocean Kraken save ID", () => {
     const implementedWorldBossIds = worlds.filter((world) => world.isImplemented && world.category !== "SECRET").map((world) => world.bossId);
     expect(implementedWorldBossIds.every((bossId) => bosses.some((boss) => boss.id === bossId))).toBe(true);
-    expect(bosses.map((boss) => boss.id)).toEqual(["king-snake", "candy-monster", "kraken", "scorpion-king"]);
+    expect(bosses.map((boss) => boss.id)).toEqual(["king-snake", "candy-monster", "kraken", "scorpion-king", "spider-queen"]);
     expect(validateSave({ saveVersion: 5, bossesDefeated: ["kraken", "unknown"] }).bossesDefeated).toEqual(["kraken"]);
   });
   it("unlocks Candy after level and King Snake, then Ocean after Candy Monster", () => {
@@ -384,7 +420,7 @@ describe("roadmap progression systems", () => {
     expect(profile.worldsUnlocked).toContain("desert");
     expect(eligiblePortalWorlds(profile, "ocean").map((world) => world.id)).toContain("desert");
     const desertSave = validateSave({ saveVersion: 11, playerLevel: 15, bossesDefeated: ["king-snake", "candy-monster", "kraken"], worldsUnlocked: ["green-valley", "candy-world", "ocean", "desert"], selectedWorld: "desert" });
-    expect(desertSave.selectedWorld).toBe("green-valley");
+    expect(desertSave.selectedWorld).toBe("desert");
     expect(validateSave({ saveVersion: 11, playerLevel: 14, bossesDefeated: ["kraken"], worldsUnlocked: ["ocean"] }).worldsUnlocked).not.toContain("desert");
   });
   it("keeps the Abyss secret, unlocks it after Kraken, and persists its challenge reward", () => {
@@ -403,6 +439,19 @@ describe("roadmap progression systems", () => {
     expect(completed.abyssChallengeBest).toBe(90);
     expect(completed.abyssChallengeCompleted).toBe(true);
     expect(completed.unlockedSkins).toContain("abyssal-serpent");
+  });
+  it("unlocks the Spider Lair only after Scorpion King victory, persists it and keeps it off portals", () => {
+    const profile = defaults();
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).not.toContain("spider-lair");
+    profile.bossesDefeated.push("scorpion-king");
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toContain("spider-lair");
+    expect(traversableWorlds(profile, "green-valley").map((world) => world.id)).not.toContain("spider-lair");
+    expect(eligiblePortalWorlds(profile, "green-valley").map((world) => world.id)).not.toContain("spider-lair");
+    const migrated = validateSave({ saveVersion: 11, bossesDefeated: ["scorpion-king"], worldsUnlocked: ["green-valley"] });
+    expect(migrated.worldsUnlocked).toContain("spider-lair");
+    expect(migrated.unlockedSkins).not.toContain("royal-spider");
+    expect(migrated.availablePets).not.toContain("spiderling");
+    expect(migrated.unlockedPets).not.toContain("spiderling");
   });
   it("keeps portal candidates implemented, unlocked, weighted and non-premium", () => {
     const profile = defaults();
@@ -480,7 +529,7 @@ describe("roadmap progression systems", () => {
     expect(powers.invincible).toBe(B.power.shieldGrace);
     powers.activate("turbo", 0.05);
     expect(powers.turbo).toBeCloseTo(B.power.turboDuration * 1.05);
-    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 35, 40]);
+    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 35, 40, 45]);
     expect(bosses.find((boss) => boss.id === "king-snake")?.petReward).toBe("tiny-dragon");
     expect(bosses.find((boss) => boss.id === "candy-monster")?.petReward).toBe("bee");
     expect(bosses.find((boss) => boss.id === "candy-monster")?.additionalPetRewards).toEqual(["candy-blob", "snow-pup"]);
@@ -509,7 +558,7 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(11);
+    expect(profile.saveVersion).toBe(12);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -518,7 +567,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(11);
+    expect(profile.saveVersion).toBe(12);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -538,13 +587,32 @@ describe("roadmap progression systems", () => {
     expect(profile.achievements).toEqual([id]);
   });
 });
+describe("logo intro responsive layout", () => {
+  it.each([[844, 390], [390, 844], [1280, 720], [320, 240]])("keeps logo and title centered in %ix%i viewports", (width, height) => {
+    const layout = logoLayout(width, height);
+    expect(layout.centerX).toBe(width / 2);
+    expect(layout.logoSize).toBeLessThanOrEqual(Math.min(260, width * (width > height ? 0.3 : 0.52), height * (width > height ? 0.38 : 0.34)));
+    expect(layout.logoY).toBeGreaterThan(layout.logoSize * 0.71);
+    expect(layout.titleY).toBeLessThan(height - layout.titleFontSize);
+    expect(layout.titleY - layout.logoY).toBeGreaterThan(layout.logoSize * 0.35);
+  });
+});
+
 describe("Desert world mechanics", () => {
   it("creates arena-scaled routes, oasis, and gusts that apply only inside their lanes", () => {
     const regions = desertRegions(0, 0, 1000, 800), gusts = desertGusts(0, 0, 1000, 800);
     const oasis = regions.find((region) => region.id === "oasis")!;
     expect(inDesertOasis({ x: oasis.x, y: oasis.y }, regions)).toBe(true);
     expect(inDesertOasis({ x: 0, y: 0 }, regions)).toBe(false);
+    expect(desertRouteAt({ x: oasis.x, y: oasis.y }, regions)).toBe("oasis");
+    expect(desertRouteAt({ x: 260, y: 200 }, regions)).toBe("ruins");
+    expect(desertRouteAt({ x: 900, y: 700 }, regions)).toBe("dunes");
+    const rareSpots = desertRareCoinSpots(regions);
+    expect(rareSpots).toHaveLength(3);
+    expect(rareSpots.every((point) => desertRouteAt(point, regions) === "ruins")).toBe(true);
+    expect(desertRareCoinSpots([])).toEqual([]);
     expect(desertGustAt({ x: gusts[0].x, y: gusts[0].y }, 0, gusts).x).toBeGreaterThan(0);
+    expect(desertRouteGustAt({ x: oasis.x, y: oasis.y }, 0, gusts, regions)).toEqual({ x: 0, y: 0 });
     expect(desertGustAt({ x: 0, y: 0 }, 0, gusts)).toEqual({ x: 0, y: 0 });
     expect(desertGustAt({ x: gusts[2].x, y: gusts[2].y }, 0, gusts).x).toBeLessThan(0);
   });
@@ -620,7 +688,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(11);
+    expect(migrated.saveVersion).toBe(12);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
   });
@@ -648,21 +716,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(11);
+    expect(migrated.saveVersion).toBe(12);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(11);
+    expect(profile.saveVersion).toBe(12);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(11);
+    expect(migrated.saveVersion).toBe(12);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
