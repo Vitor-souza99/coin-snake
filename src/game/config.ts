@@ -5,6 +5,7 @@ import { BootScene } from "./scenes/BootScene";
 import { LogoScene } from "./scenes/LogoScene";
 import { MainMenuScene } from "./scenes/MainMenuScene";
 import { GameScene } from "./scenes/GameScene";
+import { DifficultySelectScene } from "./scenes/DifficultySelectScene";
 import { ShopScene } from "./scenes/ShopScene";
 import { MissionsScene } from "./scenes/MissionsScene";
 import { GameOverScene } from "./scenes/GameOverScene";
@@ -23,6 +24,7 @@ export const config: Phaser.Types.Core.GameConfig = {
     BootScene,
     LogoScene,
     MainMenuScene,
+    DifficultySelectScene,
     SettingsScene,
     CollectionScene,
     GameScene,

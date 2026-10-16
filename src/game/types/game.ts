@@ -3,6 +3,7 @@ export interface Point {
   y: number;
 }
 export type LanguagePreference = "auto" | "pt-BR" | "en";
+export type GameDifficulty = "easy" | "normal" | "hard";
 export interface Settings {
   muted: boolean;
   volume: number;
@@ -12,7 +13,7 @@ export interface Settings {
   sfxVolume: number;
   reducedMotion: boolean;
   cameraMode: "standard" | "panoramic";
-  speedPreference: "low" | "medium" | "high" | "very-high";
+  gameDifficulty: GameDifficulty;
   orientation: "auto" | "portrait" | "landscape";
   language: LanguagePreference;
 }
@@ -33,7 +34,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 12;
+  saveVersion: 13;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;
@@ -55,6 +56,7 @@ export interface PlayerProfile {
   unlockedPets: string[];
   availablePets: string[];
   selectedPet: string | null;
+  cloverGardenProgress: number;
   rewardedShopDate: string;
   bossesDefeated: string[];
   achievements: string[];
@@ -87,6 +89,7 @@ export interface RunState {
   bossDefeats: number;
   rushMode: boolean;
   rushRemaining: number;
+  gameDifficulty: GameDifficulty;
 }
 export function newRun(): RunState {
   return {
@@ -112,5 +115,6 @@ export function newRun(): RunState {
     bossDefeats: 0,
     rushMode: false,
     rushRemaining: 60,
+    gameDifficulty: "normal",
   };
 }

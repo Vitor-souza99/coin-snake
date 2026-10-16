@@ -31,6 +31,7 @@ export function reconcileWorldUnlocks(state: WorldPlayerState) {
         state.worldsUnlocked.push(world.id);
         newlyUnlocked.push(world);
       }
+      if (world.id === "clover-garden") continue;
       continue;
     }
     if (world.unlockType === "PREMIUM" || !worldRequirements(world, state).unlocked) continue;
@@ -46,7 +47,10 @@ export function eligiblePortalWorlds(state: WorldPlayerState, current: string) {
 }
 export function traversableWorlds(state: WorldPlayerState, current: string) {
   const currentId = canonicalWorldId(current);
-  return worlds.filter((world) => world.id !== currentId && world.isImplemented && world.unlockType !== "PREMIUM" && (world.category !== "SECRET" || world.id === "silent-abyss" && currentId === world.id && state.worldsUnlocked.includes(world.id)) && isWorldUnlocked(world, state));
+  if (currentId === "silent-abyss" && "abyssChallengeCompleted" in state && state.abyssChallengeCompleted) {
+    return worlds.filter((world) => world.id === "ocean" && world.isImplemented && isWorldUnlocked(world, state));
+  }
+  return worlds.filter((world) => world.id !== currentId && world.id !== "clover-garden" && world.isImplemented && world.unlockType !== "PREMIUM" && (world.category !== "SECRET" || world.id === "silent-abyss" && currentId === world.id && state.worldsUnlocked.includes(world.id)) && isWorldUnlocked(world, state));
 }
 export function weightedWorldChoice(candidates: WorldDefinition[], lastWorld = "", random = Math.random): WorldDefinition | undefined {
   const pool = candidates.filter((world) => world.id !== canonicalWorldId(lastWorld));

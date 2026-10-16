@@ -91,7 +91,7 @@ describe("v1 migration", () => {
       missions: { collector: { progress: 70, claimed: false } },
     };
     const p = validateSave(old);
-    expect(p.saveVersion).toBe(12);
+    expect(p.saveVersion).toBe(13);
     expect(p.totalCoins).toBe(812);
     expect(p.selectedSkin).toBe("cat");
     expect(p.xp).toBe(900);
@@ -122,12 +122,14 @@ describe("v1 migration", () => {
     expect(validateSave({ ...defaults(), settings: { orientation: "diagonal" } }).settings.orientation).toBe("auto");
     expect(validateSave({ ...defaults(), settings: { orientation: "portrait" } }).settings.orientation).toBe("portrait");
   });
-  it("persists valid speed preferences and defaults missing or invalid ones to medium", () => {
-    expect(defaults().settings.speedPreference).toBe("medium");
-    expect(validateSave({ ...defaults(), settings: {} }).settings.speedPreference).toBe("medium");
-    expect(validateSave({ ...defaults(), settings: { speedPreference: "invalid" } }).settings.speedPreference).toBe("medium");
-    expect(validateSave({ ...defaults(), settings: { speedPreference: "low" } }).settings.speedPreference).toBe("low");
-    expect(validateSave({ ...defaults(), settings: { speedPreference: "very-high" } }).settings.speedPreference).toBe("very-high");
+  it("persists game difficulties and migrates legacy speed preferences", () => {
+    expect(defaults().settings.gameDifficulty).toBe("normal");
+    expect(validateSave({ ...defaults(), settings: {} }).settings.gameDifficulty).toBe("normal");
+    expect(validateSave({ ...defaults(), settings: { gameDifficulty: "invalid" } }).settings.gameDifficulty).toBe("normal");
+    expect(validateSave({ ...defaults(), settings: { gameDifficulty: "easy" } }).settings.gameDifficulty).toBe("easy");
+    expect(validateSave({ ...defaults(), settings: { gameDifficulty: "hard" } }).settings.gameDifficulty).toBe("hard");
+    expect(validateSave({ ...defaults(), settings: { speedPreference: "low" } }).settings.gameDifficulty).toBe("easy");
+    expect(validateSave({ ...defaults(), settings: { speedPreference: "very-high" } }).settings.gameDifficulty).toBe("hard");
   });
   it("detects Portuguese device languages and falls back to English", () => {
     expect(detectLanguage("pt-BR")).toBe("pt-BR");

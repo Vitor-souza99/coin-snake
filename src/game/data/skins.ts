@@ -96,6 +96,11 @@ export const getSkin = (id: string) => skins.find((entry) => entry.id === id);
 export const getBossSkinRewards = (bossId: string) => skins.filter((entry) => entry.bossRewardId === bossId);
 export const skinsByFamily = (family: string) => skins.filter((entry) => entry.family === family);
 export const getSkinPreviewConfig = (id: string) => getSkin(id)?.previewConfig;
+export const isMysterySkin = (skin: SkinDefinition) => skin.id === "abyssal-serpent";
+export const skinMysteryClues = {
+  subtle: "Uma presença antiga repousa onde as correntes deixam de cantar.",
+  clear: "Sobreviva por 90 segundos no Abismo Mudo para descobrir esta skin.",
+} as const;
 export function skinUnlockStatus(skin: SkinDefinition, profile: { unlockedSkins: string[]; playerLevel: number; bossesDefeated: string[]; mastery: Record<string, number>; achievements: string[] }) {
   if (profile.unlockedSkins.includes(skin.id)) return { unlocked: true, label: "Desbloqueada" };
   switch (skin.unlockType) {

@@ -30,7 +30,7 @@ export const pets: PetDefinition[] = [
     name: "Aranhinha",
     symbol: "🕷️",
     rarity: "LEGENDARY",
-    description: "+5% na duração da aura de ataque.",
+    description: "A Aranhinha percorre o mapa e atrai moedas comuns próximas até você.",
     unlockedBy: "Derrote a Aranha Real no Covil da Aranha.",
     unlockType: "BOSS",
     bossRewardId: "spider-queen",
@@ -132,6 +132,15 @@ export const pets: PetDefinition[] = [
     requiredBossIds: ["king-snake", "candy-monster", "kraken"],
   },
   {
+    id: "lucky-leprechaun",
+    name: "Duende da Sorte",
+    symbol: "🍀",
+    rarity: "MYTHIC",
+    description: "Mascote permanente: +2 pontos percentuais na chance de surgir uma vida extra e libera uma vaga para outro mascote.",
+    unlockedBy: "Encontre os quatro trevos luminosos no Jardim do Trevo Esquecido.",
+    unlockType: "BOSS",
+  },
+  {
     id: "crystal-fox",
     name: "Crystal Fox",
     symbol: "🦊",
@@ -144,5 +153,5 @@ export const pets: PetDefinition[] = [
 ];
 
 export const earnablePetIds = pets
-  .filter((pet) => pet.unlockType === "BOSS")
+  .filter((pet) => pet.id !== "lucky-leprechaun" && pet.unlockType === "BOSS")
   .map((pet) => pet.id);

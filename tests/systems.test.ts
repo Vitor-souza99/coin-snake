@@ -21,10 +21,11 @@ import {
   updateMissionDay,
 } from "../src/game/systems/MissionSystem";
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
-import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegraphTiming, difficulty, speedPreferenceMultipliers } from "../src/game/systems/DifficultySystem";
+import { attractSpiderlingCoin, spiderlingCoinRadius, spiderlingCoinSpeed } from "../src/game/systems/SpiderlingSystem";
+import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegraphTiming, difficulty, difficultyProfiles, powerUpSpawnInterval } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
-import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
+import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
 import { containDesertArenaPoint, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
@@ -39,8 +40,32 @@ import { bosses } from "../src/game/data/bosses";
 import { earnablePetIds, pets } from "../src/game/data/pets";
 import { awardAchievement, achievementDefinitions } from "../src/game/systems/AchievementSystem";
 import { logoLayout } from "../src/game/ui/LogoLayout";
-import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
+import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, isMysterySkin, skinMysteryClues, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
 import { purchases } from "../src/game/services/PurchaseService";
+
+describe("Spiderling coin assistance", () => {
+  it("attracts nearby common coins toward the snake at a capped speed", () => {
+    const coin = { x: 100, y: 0, kind: { id: "normal" } };
+    expect(attractSpiderlingCoin(coin, { x: 0, y: 0 }, 0.25)).toBe(true);
+    expect(coin.x).toBe(100 - spiderlingCoinSpeed * 0.25);
+    expect(coin.y).toBe(0);
+  });
+
+  it("does not attract distant, special, stationary, or invalid-step coins", () => {
+    for (const id of ["mythic", "candy_coin", "pearl_coin"]) {
+      const coin = { x: 10, y: 0, kind: { id } };
+      expect(attractSpiderlingCoin(coin, { x: 0, y: 0 }, 1)).toBe(false);
+      expect(coin.x).toBe(10);
+    }
+    const distant = { x: spiderlingCoinRadius + 1, y: 0, kind: { id: "normal" } };
+    expect(attractSpiderlingCoin(distant, { x: 0, y: 0 }, 1)).toBe(false);
+    expect(attractSpiderlingCoin({ x: 10, y: 0, kind: { id: "normal" } }, { x: 0, y: 0 }, 0)).toBe(false);
+  });
+
+  it("advertises the Spiderling's coin-attraction ability", () => {
+    expect(pets.find((pet) => pet.id === "spiderling")?.description).toContain("atrai moedas comuns");
+  });
+});
 import {
   distance,
   weighted,
@@ -279,16 +304,16 @@ describe("boss attack aura", () => {
     expect(combat.consumeProtectionHit("king-snake")).toBe(false);
   });
 
-  it("keeps hit limits and boss matching while aura has no timer", () => {
+  it("keeps hit limits and boss matching for the Scorpion's sugar shield aura", () => {
     const combat = new BossCombatSystem();
     combat.addCharge(100);
-    expect(combat.activateAttackAura({ maxHits: 2, source: "sugar_shield", bossId: "candy-monster" })).toBe(true);
+    expect(combat.activateAttackAura({ maxHits: 2, source: "sugar_shield", bossId: "scorpion-king" })).toBe(true);
 
     combat.update(120);
     expect(combat.consumeHit("king-snake")).toBe(false);
-    expect(combat.consumeHit("candy-monster")).toBe(true);
+    expect(combat.consumeHit("scorpion-king")).toBe(true);
     combat.update(0.81);
-    expect(combat.consumeHit("candy-monster")).toBe(true);
+    expect(combat.consumeHit("scorpion-king")).toBe(true);
     expect(combat.active).toBe(false);
   });
 
@@ -325,23 +350,25 @@ describe("combo and balance", () => {
     expect(afterOneLevel).toBe(165);
     expect(difficulty(0, 0, B.snake.initial + 20).speed).toBe(180);
   });
-  it("applies the saved speed preference while preserving run progression", () => {
+  it("applies game difficulty to speed and collection frequency while preserving progression", () => {
     const start = difficulty(0, 0, B.snake.initial);
-    expect(speedPreferenceMultipliers).toEqual({ low: 0.8, medium: 1, high: 1.15, "very-high": 1.3 });
-    expect(difficulty(0, 0, B.snake.initial, "low").speed).toBeCloseTo(start.speed * 0.8);
-    expect(difficulty(0, 0, B.snake.initial, "medium").speed).toBe(start.speed);
-    expect(difficulty(0, 0, B.snake.initial, "high").speed).toBeCloseTo(start.speed * 1.15);
-    expect(difficulty(0, 0, B.snake.initial, "very-high").speed).toBeCloseTo(start.speed * 1.3);
-    expect(difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial, "low").speed).toBeGreaterThan(difficulty(0, 0, B.snake.initial, "low").speed);
-    expect(difficulty(100_000, 1_000_000, B.snake.max, "very-high").speed).toBe(B.snake.maxSpeed * 1.3);
+    expect(difficultyProfiles.easy.speedMultiplier).toBe(0.85);
+    expect(difficulty(0, 0, B.snake.initial, "easy").speed).toBeCloseTo(start.speed * 0.85);
+    expect(difficulty(0, 0, B.snake.initial, "normal").speed).toBe(start.speed);
+    expect(difficulty(0, 0, B.snake.initial, "hard").speed).toBeCloseTo(start.speed * 1.12);
+    expect(powerUpSpawnInterval("easy")).toBeLessThan(powerUpSpawnInterval("normal"));
+    expect(powerUpSpawnInterval("normal")).toBe(B.power.interval);
+    expect(powerUpSpawnInterval("hard")).toBeGreaterThan(powerUpSpawnInterval("normal"));
+    expect(difficulty(B.difficulty.secondsPerLevel, 0, B.snake.initial, "easy").speed).toBeGreaterThan(difficulty(0, 0, B.snake.initial, "easy").speed);
+    expect(difficulty(100_000, 1_000_000, B.snake.max, "hard").speed).toBe(B.snake.maxSpeed * 1.12);
   });
-  it("scales boss movement and attack pacing to speed preference with safe reaction floors", () => {
-    expect(bossDifficultyProfile("low")).toEqual({ movementMultiplier: 0.85, timingMultiplier: 1 / 0.85 });
-    expect(bossDifficultyProfile("medium")).toEqual({ movementMultiplier: 1, timingMultiplier: 1 });
-    expect(bossMovementSpeed(100, "very-high")).toBe(120);
-    expect(bossAttackTiming(4, "low")).toBeCloseTo(4 / 0.85);
-    expect(bossAttackTiming(0.9, "very-high", 0.7)).toBe(0.75);
-    expect(bossAttackTiming(1, "low", 1.5)).toBe(1.5);
+  it("scales boss movement and attack pacing by game difficulty with reaction floors", () => {
+    expect(bossDifficultyProfile("easy")).toEqual({ movementMultiplier: 0.85, timingMultiplier: 1.2 });
+    expect(bossDifficultyProfile("normal")).toEqual({ movementMultiplier: 1, timingMultiplier: 1 });
+    expect(bossMovementSpeed(100, "hard")).toBeCloseTo(115);
+    expect(bossAttackTiming(4, "easy")).toBeCloseTo(4.8);
+    expect(bossAttackTiming(0.9, "hard", 0.7)).toBe(0.765);
+    expect(bossAttackTiming(1, "hard", 1.5)).toBe(1.5);
   });
   it("uses the increased base speed and raises the cap through growth and levels", () => {
     const start = difficulty(0, 0, B.snake.initial);
@@ -439,6 +466,7 @@ describe("roadmap progression systems", () => {
     expect(completed.abyssChallengeBest).toBe(90);
     expect(completed.abyssChallengeCompleted).toBe(true);
     expect(completed.unlockedSkins).toContain("abyssal-serpent");
+    expect(traversableWorlds(completed, "silent-abyss").map((world) => world.id)).toEqual(["ocean"]);
   });
   it("unlocks the Spider Lair only after Scorpion King victory, persists it and keeps it off portals", () => {
     const profile = defaults();
@@ -556,9 +584,16 @@ describe("roadmap progression systems", () => {
     expect(profile.unlockedPets).toEqual(earnablePetIds);
     expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
   });
+  it("unlocks the always-active lucky leprechaun only after four persisted clovers", () => {
+    const incomplete = validateSave({ saveVersion: 12, cloverGardenProgress: 3, unlockedPets: ["lucky-leprechaun"] });
+    const complete = validateSave({ saveVersion: 12, cloverGardenProgress: 4 });
+    expect(incomplete.unlockedPets).not.toContain("lucky-leprechaun");
+    expect(complete.unlockedPets).toContain("lucky-leprechaun");
+    expect(pets.find((pet) => pet.id === "lucky-leprechaun")?.description).toContain("+2 pontos percentuais");
+  });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(12);
+    expect(profile.saveVersion).toBe(13);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -567,7 +602,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(12);
+    expect(profile.saveVersion).toBe(13);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -625,6 +660,18 @@ describe("Desert world mechanics", () => {
   });
 });
 describe("skin collection catalog", () => {
+  it("keeps the Abyssal Serpent mysterious until its challenge skin is unlocked", () => {
+    const profile = defaults();
+    const abyssal = getSkin("abyssal-serpent")!;
+    expect(isMysterySkin(abyssal)).toBe(true);
+    expect(skinUnlockStatus(abyssal, profile).unlocked).toBe(false);
+    expect(skinMysteryClues.subtle).not.toContain("90 segundos");
+    expect(skinMysteryClues.clear).toContain("90 segundos");
+
+    profile.unlockedSkins.push("abyssal-serpent");
+    expect(skinUnlockStatus(abyssal, profile).unlocked).toBe(true);
+    expect(isMysterySkin(getSkin("royal-spider")!)).toBe(false);
+  });
   it("defines every rarity and validates rarity/unlock metadata", () => {
     expect(skinRarities).toEqual(["COMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"]);
     expect(isSkinRarity("MYTHIC")).toBe(true);
@@ -688,7 +735,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(12);
+    expect(migrated.saveVersion).toBe(13);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
   });
@@ -716,21 +763,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(12);
+    expect(migrated.saveVersion).toBe(13);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(12);
+    expect(profile.saveVersion).toBe(13);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(12);
+    expect(migrated.saveVersion).toBe(13);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -876,6 +923,16 @@ describe("snake and powers", () => {
     expect(isOutsideKrakenArena(arena, arena, radius, 90)).toBe(false);
     expect(isOutsideKrakenArena({ x: arena.x + radius + 91, y: arena.y }, arena, radius, 90)).toBe(true);
     expect(isOutsideKrakenArena({ x: arena.x + radius + 89, y: arena.y }, arena, radius, 90)).toBe(false);
+  });
+  it("aims Kraken attacks at the snake outside its arena and within map bounds", () => {
+    const center = { x: 500, y: 500 }, radius = 110;
+    const bounds = { left: 0, top: 0, right: 1000, bottom: 1000 };
+    const snake = { x: 620, y: 500 };
+    const target = krakenAttackTarget(snake, bounds, 96);
+    expect(target).toEqual(snake);
+    expect(isOutsideKrakenArena(target, center, radius)).toBe(true);
+    expect(target.x).toBeLessThanOrEqual(bounds.right - 96);
+    expect(krakenAttackTarget({ x: -100, y: 500 }, bounds, 96)).toEqual({ x: 96, y: 500 });
   });
   it("applies regional Ocean currents additively while preserving player input and clamping Turbo speed", () => {
     const spawn = { x: 700, y: 750 };
@@ -1057,3 +1114,4 @@ describe("snake and powers", () => {
     expect(B.coins.reduce((total, coin) => total + coin.weight, 0)).toBe(100.1);
   });
 });
+

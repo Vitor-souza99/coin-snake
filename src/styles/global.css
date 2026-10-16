@@ -77,6 +77,72 @@ canvas {
   margin: 8px 0 16px;
   letter-spacing: -1px;
 }
+.difficulty-select > .settings-grid {
+  width: min(100%, 560px);
+  margin: 24px auto;
+  grid-template-columns: 1fr;
+}
+.difficulty-select .action[data-difficulty] {
+  display: grid;
+  gap: 7px;
+  text-align: left;
+  min-height: 78px;
+}
+.difficulty-select .action[data-difficulty] small {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.difficulty-tip {
+  width: min(100%, 560px);
+  margin: 0 auto 18px;
+  padding: 16px 18px;
+  border: 1px solid #dce5cb;
+  border-radius: 18px;
+  background: #fffef5;
+  box-shadow: 0 4px 0 #25492e06;
+}
+.difficulty-tip__heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #59735d;
+  font-size: 11px;
+  letter-spacing: 1.3px;
+}
+.difficulty-tip__icon {
+  color: #c9841f;
+  font-size: 17px;
+}
+.difficulty-tip__count {
+  margin-left: auto;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.difficulty-tip p {
+  margin: 9px 0 8px;
+  color: #294b39;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.difficulty-tip__next {
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #21684f;
+  font-size: 13px;
+  font-weight: 800;
+}
+.difficulty-tip__next span {
+  margin-left: 3px;
+  font-size: 16px;
+}
+.difficulty-select > .action {
+  display: block;
+  width: min(100%, 560px);
+  margin: 10px auto;
+}
 .kicker {
   font-size: 11px;
   letter-spacing: 2px;
@@ -410,6 +476,20 @@ canvas {
   background: #fffef5;
 }
 .skin-card { cursor: pointer; }
+.mystery-skin-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+  border: 2px solid #78909a;
+  border-radius: 50%;
+  color: #d7e5e2;
+  background: radial-gradient(circle at 35% 30%, #405d68, #172735 72%);
+  font-size: 38px;
+  font-weight: 900;
+  box-shadow: 0 0 22px #397f9140;
+}
 .skin-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .skin-card-actions .action { flex: 1 1 96px; min-width: 0; }
 .rarity-card { border-top: 4px solid #a9b59c; }
@@ -654,6 +734,36 @@ canvas {
   font-size: 10px;
   font-weight: 800;
   color: #446540;
+}
+#abyss-timer {
+  top: 109px;
+  left: 18px;
+  z-index: 5;
+  padding: 10px 15px;
+  border: 2px solid #69d9d0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #102f3df2, #071722f5);
+  box-shadow: 0 4px 18px #0009, 0 0 14px #49cfc455;
+  color: #e1fffb;
+  font-size: clamp(15px, 2.5vw, 19px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1.2px;
+  line-height: 1.2;
+  text-shadow: 0 1px 5px #000;
+}
+#abyss-timer.urgent {
+  border-color: #ff647b;
+  background: linear-gradient(135deg, #651e35f5, #311324f7);
+  color: #fff1e8;
+  box-shadow: 0 4px 20px #000b, 0 0 20px #ff385c99;
+  animation: abyss-timer-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes abyss-timer-pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.07); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #abyss-timer.urgent { animation: none; }
 }
 .joystick-zone {
   position: absolute;
@@ -992,6 +1102,10 @@ canvas {
     margin-bottom: 14px;
   }
   .world-tag {
+    top: 85px;
+    left: 15px;
+  }
+  #abyss-timer {
     top: 85px;
     left: 15px;
   }

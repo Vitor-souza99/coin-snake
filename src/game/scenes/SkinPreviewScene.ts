@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { getSkin, skinUnlockStatus, type SkinDefinition } from "../data/skins";
+import { getSkin, skinUnlockStatus, isMysterySkin, skinMysteryClues, type SkinDefinition } from "../data/skins";
 import { save } from "../systems/SaveSystem";
 import { buySkin } from "../systems/EconomySystem";
 import { audio } from "../services/AudioService";
@@ -13,6 +13,7 @@ export class SkinPreviewScene extends Phaser.Scene {
   private effects!: Phaser.GameObjects.Graphics;
   private mode: "normal" | "turbo" | "victory" = "normal";
   private elapsed = 0;
+  private mystery = false;
 
   constructor() { super("SkinPreview"); }
 
@@ -29,25 +30,26 @@ export class SkinPreviewScene extends Phaser.Scene {
     );
     const profile = save.profile;
     const ownership = skinUnlockStatus(this.skin, profile);
+    this.mystery = isMysterySkin(this.skin) && !ownership.unlocked;
     const isPremium = this.skin.unlockType === "PREMIUM";
     this.ui = new ScreenUI(this, "screen skin-preview-screen");
     this.ui.html(`${header("Preview da skin", "Veja todos os detalhes · cosmético")}
       <section class="skin-preview-layout">
         <div class="skin-preview-stage" aria-label="Preview animado da cobrinha">
           <div class="skin-preview-canvas" id="skin-preview-canvas" aria-hidden="true"></div>
-          <div class="skin-preview-controls" id="skin-preview-controls">
+          <div class="skin-preview-controls" id="skin-preview-controls" ${this.mystery ? "hidden" : ""}>
             <button class="action small" id="preview-normal">Normal</button>
             <button class="action small secondary" id="preview-turbo">Turbo</button>
             ${this.skin.previewConfig.showVictory ? '<button class="action small secondary" id="preview-victory">Vitória</button>' : ""}
           </div>
         </div>
         <article class="card skin-preview-info">
-          <span class="skin-rarity rarity-${this.skin.rarity.toLowerCase()}">${this.skin.rarity}</span>
-          <h2>${this.skin.name}</h2>
-          <p class="muted">${this.skin.description}</p>
-          <p><b>Família:</b> ${this.skin.family === "dragon" ? "Dragon Collection" : this.skin.family}</p>
+          <span class="skin-rarity rarity-${this.skin.rarity.toLowerCase()}">${this.mystery ? "MISTÉRIO" : this.skin.rarity}</span>
+          <h2>${this.mystery ? "Skin misteriosa" : this.skin.name}</h2>
+          <p class="muted">${this.mystery ? skinMysteryClues.subtle : this.skin.description}</p>
+          ${this.mystery ? `<p class="muted" id="mystery-clue" hidden>${skinMysteryClues.clear}</p><button class="action small secondary" id="reveal-mystery-clue">REVELAR PISTA</button><p><b>Desbloqueio:</b> Complete o desafio do Abismo Mudo.</p>` : `<p><b>Família:</b> ${this.skin.family === "dragon" ? "Dragon Collection" : this.skin.family}</p>
           <p><b>Desbloqueio:</b> ${isPremium ? "🔒 PREMIUM" : ownership.label}</p>
-          ${isPremium ? '<p class="muted">Premium — disponível futuramente. Sua aparência e efeitos podem ser visualizados, mas não equipados.</p>' : `<p class="muted">${ownership.unlocked ? "Disponível na sua coleção." : this.skin.unlockType === "COINS" ? `Saldo atual: ${profile.totalCoins.toLocaleString("pt-BR")} moedas.` : `Requisito: ${ownership.label}.`}</p>`}
+          ${isPremium ? '<p class="muted">Premium — disponível futuramente. Sua aparência e efeitos podem ser visualizados, mas não equipados.</p>' : `<p class="muted">${ownership.unlocked ? "Disponível na sua coleção." : this.skin.unlockType === "COINS" ? `Saldo atual: ${profile.totalCoins.toLocaleString("pt-BR")} moedas.` : `Requisito: ${ownership.label}.`}</p>`}`}
           <div class="skin-preview-actions" id="skin-preview-actions"></div>
         </article>
       </section>`);
@@ -85,6 +87,12 @@ export class SkinPreviewScene extends Phaser.Scene {
     });
     this.renderAction();
     this.ui.on("#back", () => this.close());
+    this.ui.on("#reveal-mystery-clue", () => {
+      this.ui.get<HTMLElement>("#mystery-clue").hidden = false;
+      const button = this.ui.get<HTMLButtonElement>("#reveal-mystery-clue");
+      button.disabled = true;
+      button.textContent = "PISTA REVELADA";
+    });
     this.ui.on("#preview-normal", () => this.setMode("normal"));
     this.ui.on("#preview-turbo", () => this.setMode("turbo"));
     if (this.skin.previewConfig.showVictory)
@@ -96,14 +104,15 @@ export class SkinPreviewScene extends Phaser.Scene {
     this.sprites = [];
     this.effects?.destroy();
     this.effects = this.add.graphics().setDepth(1);
-    const count = this.skin.previewConfig.segments;
+    const count = this.mystery ? 5 : this.skin.previewConfig.segments;
     // Keep the head at index 0: update() animates from the head toward the tail.
     for (let index = 0; index < count; index++) {
       const head = index === 0;
-      const texture = head ? `${this.skin.id}-preview-head` : `${this.skin.id}-preview-body`;
-      const fallback = head ? `${this.skin.id}-head` : `${this.skin.id}-body`;
+      const texture = this.mystery ? "coin-normal" : head ? `${this.skin.id}-preview-head` : `${this.skin.id}-preview-body`;
+      const fallback = this.mystery ? "coin-normal" : head ? `${this.skin.id}-head` : `${this.skin.id}-body`;
       const image = this.add.image(0, 0, this.textures.exists(texture) ? texture : fallback)
-        .setScale(head ? 0.72 : 0.61).setDepth(2 + count - index);
+        .setScale(this.mystery ? 1.15 : head ? 0.72 : 0.61).setDepth(2 + count - index);
+      if (this.mystery) image.setTint(0x273a48).setAlpha(0.65);
       this.sprites.push(image);
     }
     this.previewWidth = width;
@@ -132,14 +141,14 @@ export class SkinPreviewScene extends Phaser.Scene {
       y: cy + Math.sin(angle * 2) * ry,
     });
     this.effects.clear();
-    this.effects.lineStyle(14, this.skin.dark, 0.16).beginPath();
+    this.effects.lineStyle(14, this.mystery ? 0x273a48 : this.skin.dark, 0.16).beginPath();
     for (let index = 0; index < this.sprites.length; index++) {
       const point = pointAt(phase - index * spacing);
       if (index === 0) this.effects.moveTo(point.x, point.y);
       else this.effects.lineTo(point.x, point.y);
     }
     this.effects.strokePath();
-    if (this.skin.trailConfig.enabled) {
+    if (!this.mystery && this.skin.trailConfig.enabled) {
       this.effects.lineStyle(
         this.skin.trailConfig.width,
         this.skin.trailConfig.color,
@@ -183,6 +192,10 @@ export class SkinPreviewScene extends Phaser.Scene {
   private renderAction() {
     const container = this.ui.get("#skin-preview-actions");
     const p = save.profile;
+    if (this.mystery) {
+      container.innerHTML = '<button class="action secondary" disabled>🔒 DESAFIO DO ABISMO MUDO</button>';
+      return;
+    }
     const owned = p.unlockedSkins.includes(this.skin.id);
     const selected = p.selectedSkin === this.skin.id;
     const status = skinUnlockStatus(this.skin, p);

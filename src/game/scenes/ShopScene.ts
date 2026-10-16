@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { skins, skinRarities, skinUnlockStatus, type SkinRarity } from "../data/skins";
+import { skins, skinRarities, skinUnlockStatus, isMysterySkin, skinMysteryClues, type SkinRarity } from "../data/skins";
 import { pets } from "../data/pets";
 import { worlds } from "../data/worlds";
 import { save } from "../systems/SaveSystem";
@@ -89,9 +89,10 @@ export class ShopScene extends Phaser.Scene {
         <button class="action small ${filter === "LOCKED" ? "" : "secondary"}" data-filter="LOCKED">BLOQUEADAS</button>
         <select id="filter-rarity" aria-label="Filtrar por raridade"><option value="ALL">Todas as raridades</option>${skinRarities.map((value) => `<option value="${value}" ${rarity === value ? "selected" : ""}>${value}</option>`).join("")}</select>
       </div><div class="grid">${list.map((skin) => {
-        const owned = profile.unlockedSkins.includes(skin.id);
+        const owned = profile.unlockedSkins.includes(skin.id) || skinUnlockStatus(skin, profile).unlocked;
         const selected = profile.selectedSkin === skin.id;
         const status = skinUnlockStatus(skin, profile);
+        const mystery = isMysterySkin(skin) && !status.unlocked;
         const premium = skin.unlockType === "PREMIUM";
         const price = skin.unlockType === "COINS" ? `${skin.coinPrice?.toLocaleString("pt-BR")} moedas` : status.label;
         const equip = !premium && (owned || status.unlocked)
@@ -99,10 +100,10 @@ export class ShopScene extends Phaser.Scene {
           : !premium && skin.unlockType === "COINS" && skin.coinPrice !== null
             ? `<button class="action small" data-buy-skin="${skin.id}" ${profile.totalCoins < skin.coinPrice ? "disabled" : ""}>COMPRAR</button>`
             : "";
-        return `<article class="card skin-card rarity-card rarity-${skin.rarity.toLowerCase()}" data-skin="${skin.id}" tabindex="0" role="button" aria-label="Visualizar ${skin.name}, ${skin.rarity}">
-          <img src="${textureURL(this, `${skin.id}-preview-head`)}" alt="Preview de ${skin.name}">
-          <div class="details"><h2>${skin.name}</h2><span class="skin-rarity rarity-${skin.rarity.toLowerCase()}">${skin.rarity}</span><p>${premium ? "🔒 PREMIUM · INDISPONÍVEL" : owned ? selected ? "✓ EQUIPADA" : "✓ DESBLOQUEADA" : price}</p>
-          <div class="skin-card-actions"><button class="action small secondary" data-view="${skin.id}">VER</button>${equip}</div></div></article>`;
+        return `<article class="card skin-card rarity-card rarity-${skin.rarity.toLowerCase()}" data-skin="${skin.id}" tabindex="0" role="button" aria-label="Visualizar ${mystery ? "skin misteriosa" : `${skin.name}, ${skin.rarity}`}">
+          ${mystery ? '<div class="mystery-skin-mark" aria-label="Aparência oculta">?</div>' : `<img src="${textureURL(this, `${skin.id}-preview-head`)}" alt="Preview de ${skin.name}">`}
+          <div class="details"><h2>${mystery ? "Skin misteriosa" : skin.name}</h2><span class="skin-rarity rarity-${skin.rarity.toLowerCase()}">${mystery ? "MISTÉRIO" : skin.rarity}</span><p>${mystery ? skinMysteryClues.subtle : premium ? "🔒 PREMIUM · INDISPONÍVEL" : owned ? selected ? "✓ EQUIPADA" : "✓ DESBLOQUEADA" : price}</p>
+          <div class="skin-card-actions"><button class="action small secondary" data-view="${skin.id}">VER</button>${mystery ? '<button class="action small secondary" data-mystery-clue>REVELAR PISTA</button>' : equip}</div></div></article>`;
       }).join("") || '<p class="muted">Nenhuma skin nesta seleção.</p>'}</div>`;
     };
 
@@ -185,6 +186,12 @@ export class ShopScene extends Phaser.Scene {
         });
         ui.root.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation(); this.preview(button.dataset.view!);
+        }));
+        ui.root.querySelectorAll<HTMLButtonElement>("[data-mystery-clue]").forEach((button) => button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          button.closest(".details")?.querySelector("p")?.replaceChildren(document.createTextNode(skinMysteryClues.clear));
+          button.disabled = true;
+          button.textContent = "PISTA REVELADA";
         }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-buy-skin]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation();

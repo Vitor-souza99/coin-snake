@@ -97,3 +97,11 @@ export function containKrakenArenaPoint(point: Point, center: Point, radius: num
 export function isOutsideKrakenArena(point: Point, center: Point, radius: number, clearance = 0): boolean {
   return Math.hypot(point.x - center.x, point.y - center.y) >= radius + clearance;
 }
+
+/** Keeps a Kraken attack target near the snake and inside the map's visible bounds. */
+export function krakenAttackTarget(point: Point, bounds: { left: number; top: number; right: number; bottom: number }, clearance: number): Point {
+  return {
+    x: Math.max(bounds.left + clearance, Math.min(bounds.right - clearance, point.x)),
+    y: Math.max(bounds.top + clearance, Math.min(bounds.bottom - clearance, point.y)),
+  };
+}

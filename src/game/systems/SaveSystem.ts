@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 12,
+    saveVersion: 13,
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -36,7 +36,7 @@ export function defaults(): PlayerProfile {
       sfxVolume: 0.35,
       reducedMotion: false,
       cameraMode: "standard",
-      speedPreference: "medium",
+      gameDifficulty: "normal",
       orientation: "auto",
       language: "auto",
     },
@@ -61,6 +61,7 @@ export function defaults(): PlayerProfile {
     unlockedPets: [],
     availablePets: [],
     selectedPet: null,
+    cloverGardenProgress: 0,
     rewardedShopDate: "",
     bossesDefeated: [],
     achievements: [],
@@ -74,7 +75,7 @@ export function defaults(): PlayerProfile {
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bossCoinBalance = num(r.bossCoinBalance);
   p.bestScore = num(r.bestScore);
@@ -120,7 +121,15 @@ export function validateSave(input: unknown): PlayerProfile {
   p.settings.leftHanded = bool(s.leftHanded, false);
   p.settings.reducedMotion = bool(s.reducedMotion, false);
   p.settings.cameraMode = s.cameraMode === "panoramic" ? "panoramic" : "standard";
-  p.settings.speedPreference = s.speedPreference === "low" || s.speedPreference === "high" || s.speedPreference === "very-high" ? s.speedPreference : "medium";
+  p.settings.gameDifficulty = s.gameDifficulty === "easy" || s.gameDifficulty === "hard"
+    ? s.gameDifficulty
+    : s.gameDifficulty === "normal"
+      ? "normal"
+      : s.speedPreference === "low"
+        ? "easy"
+        : s.speedPreference === "high" || s.speedPreference === "very-high"
+          ? "hard"
+          : "normal";
   p.settings.orientation = s.orientation === "portrait" || s.orientation === "landscape" ? s.orientation : "auto";
   p.settings.language = s.language === "pt-BR" || s.language === "en" ? s.language : "auto";
   const volume = (v: unknown, fallback: number) =>
@@ -144,9 +153,9 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(r.saveVersion as number);
-  const validPetIds = new Set(earnablePetIds);
-  const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : [];
+  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(r.saveVersion as number);
+  const validPetIds = new Set([...earnablePetIds, "lucky-leprechaun"]);
+  const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id) && (id !== "lucky-leprechaun" || num(r.cloverGardenProgress) >= 4)) : [];
   p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";
   const bossIds = new Set(bosses.map((boss) => boss.id));
   p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => typeof id === "string" && bossIds.has(id)))] : [];
@@ -169,6 +178,8 @@ export function validateSave(input: unknown): PlayerProfile {
   if ((r.saveVersion as number) <= 8 && bossWins.has("king-snake")) p.unlockedPets.push("firefly");
   if (r.saveVersion === 9 && bossWins.has("kraken")) p.unlockedPets.push("tiny-dragon");
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
+  p.cloverGardenProgress = Math.min(4, num(r.cloverGardenProgress));
+  if (p.cloverGardenProgress >= 4 && !p.unlockedPets.includes("lucky-leprechaun")) p.unlockedPets.push("lucky-leprechaun");
   p.unlockedSkins = [...new Set([...p.unlockedSkins, ...p.bossesDefeated.flatMap((bossId) => getBossSkinRewards(bossId).map((skin) => skin.id))])];
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
@@ -183,6 +194,7 @@ export function validateSave(input: unknown): PlayerProfile {
       })
     : [];
   p.worldsUnlocked = [...new Set(["green-valley", ...savedWorlds])];
+  p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "clover-garden");
   const defeated = new Set(p.bossesDefeated);
   if (p.playerLevel >= 5 && defeated.has("king-snake")) p.worldsUnlocked.push("candy-world");
   if (p.playerLevel >= 10 && defeated.has("candy-monster") && p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("ocean");
@@ -230,6 +242,7 @@ export function validateSave(input: unknown): PlayerProfile {
       claimed: (selectedSet.has(m.id) || preserveLegacy) && bool(entry.claimed, false) && num(entry.progress) >= m.target,
     };
   }
+  p.saveVersion = 13;
   return p;
 }
 export interface SaveStorage {
@@ -251,7 +264,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>11){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>13){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();
