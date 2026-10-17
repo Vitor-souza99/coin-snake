@@ -1001,6 +1001,17 @@ describe("snake and powers", () => {
     for (let i = 0; i < 300; i++) s.grow();
     expect(s.length).toBe(180);
   });
+  it("extends the tail from its current position when growing", () => {
+    const s = new Snake();
+    s.move(0.5, -Math.PI / 2, 230);
+    const previousTail = { ...s.body[s.length - 1] };
+    const newSegmentIndex = s.length;
+
+    s.grow();
+
+    expect(s.length).toBe(newSegmentIndex + 1);
+    expect(s.body[newSegmentIndex]).toEqual(previousTail);
+  });
   it("shield consumes once, gives grace, then exposes collision", () => {
     const p = new PowerUpSystem();
     expect(p.absorb()).toBe(false);

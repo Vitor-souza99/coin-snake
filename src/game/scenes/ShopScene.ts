@@ -108,25 +108,29 @@ export class ShopScene extends Phaser.Scene {
     };
 
     const renderPets = () => {
-      const ownedCount = pets.filter((pet) => profile.unlockedPets.includes(pet.id)).length;
+      const visiblePets = pets.filter((pet) => pet.id !== "lucky-leprechaun" || profile.unlockedPets.includes(pet.id));
+      const ownedCount = visiblePets.filter((pet) => profile.unlockedPets.includes(pet.id)).length;
       return `<section class="pet-shop-intro" aria-label="Resumo dos mascotes">
         <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes para liberar mascotes e colete Boss Coins que eles deixam cair para comprar novos companheiros.</p></div>
         <div class="pet-wallet"><span>◆ SALDO</span><strong>${profile.bossCoinBalance.toLocaleString("pt-BR")}</strong><small>Boss Coins</small></div>
       </section>
-      <div class="pet-collection-grid">${pets.map((pet) => {
+      <div class="pet-collection-grid">${visiblePets.map((pet) => {
         const unlocked = profile.unlockedPets.includes(pet.id);
         const available = profile.availablePets.includes(pet.id);
         const selected = profile.selectedPet === pet.id;
+        const permanent = pet.id === "lucky-leprechaun";
         const premium = pet.unlockType === "PREMIUM";
         const purchasable = available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
-        const stateClass = selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
-        const stateLabel = selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
-        const action = unlocked
+        const stateClass = permanent && unlocked || selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
+        const stateLabel = permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
+        const action = permanent && unlocked
+          ? `<button class="action secondary" disabled>EQUIPADO PERMANENTE</button>`
+          : unlocked
           ? `<button class="action ${selected ? "secondary" : ""}" data-equip-pet="${pet.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADO" : "EQUIPAR"}</button>`
           : purchasable
             ? `<button class="action" data-buy-pet="${pet.id}" ${profile.bossCoinBalance < pet.coinPrice! ? "disabled" : ""}>COMPRAR · ${pet.coinPrice} BOSS COINS</button>`
             : `<button class="action secondary" disabled>${premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
-        const detail = unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : purchasable ? pet.unlockedBy : pet.unlockedBy;
+        const detail = permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
         return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
           <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>

@@ -37,7 +37,12 @@ export class Snake {
     this.placeBody();
   }
   grow() {
-    this.length = Math.min(B.snake.max, this.length + 1);
+    if (this.length >= B.snake.max) return;
+    const previousTail = this.body[this.length - 1];
+    const newSegment = this.body[this.length];
+    newSegment.x = previousTail.x;
+    newSegment.y = previousTail.y;
+    this.length++;
   }
   move(
     dt: number,

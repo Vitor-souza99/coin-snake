@@ -133,11 +133,11 @@ export const pets: PetDefinition[] = [
   },
   {
     id: "lucky-leprechaun",
-    name: "Duende da Sorte",
+    name: "Trevo da Sorte",
     symbol: "🍀",
     rarity: "MYTHIC",
     description: "Mascote permanente: +2 pontos percentuais na chance de surgir uma vida extra e libera uma vaga para outro mascote.",
-    unlockedBy: "Encontre os quatro trevos luminosos no Jardim do Trevo Esquecido.",
+    unlockedBy: "Encontre 2 trevos no Jardim Secreto do Candy World com a Serpente Abissal e 2 no Jardim Submerso do Oceano com a Ghost Snake.",
     unlockType: "BOSS",
   },
   {

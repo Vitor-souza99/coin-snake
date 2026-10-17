@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 import { B } from "../data/balance";
 import { Snake } from "../entities/Snake";
 import { Coin } from "../entities/Coin";
@@ -38,7 +38,7 @@ import { analytics } from "../services/AnalyticsService";
 import { getBossSkinRewards, getSkin } from "../data/skins";
 import { reconcileWorldUnlocks, rememberWorld, traversableWorlds } from "../systems/WorldSystem";
 import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawnAllowed, candyFinalSpeed, inCandyRiver, stickySpeedMultiplier, type StickyZone } from "../data/candyWorld";
-import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, isOutsideKrakenArena, pearlCoinSpawnAllowed, bonusBubbleReward, containKrakenArenaPoint, krakenAttackTarget, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
+import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, isOutsideKrakenArena, pearlCoinSpawnAllowed, containKrakenArenaPoint, krakenAttackTarget, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
 import { applyWorldOrientation } from "../services/OrientationService";
 import { missionsForProfile } from "../data/missions";
 import { desertWorldConfig as DW, desertRegions, desertGusts, desertRouteGustAt, desertRouteAt, desertRareCoinSpots, inDesertOasis, containDesertArenaPoint, type SandGust } from "../data/desertWorld";
@@ -52,7 +52,6 @@ export class GameScene extends Phaser.Scene {
   private power?: PowerUp;
   private poison?: { x: number; y: number; life: number; image: Phaser.GameObjects.Image };
   private sprites: Phaser.GameObjects.Image[] = [];
-  private skinParticles?: Phaser.GameObjects.Particles.ParticleEmitter;
   private skinTrail!: Phaser.GameObjects.Graphics;
   private selectedCosmetic = getSkin("classic")!;
   private ring!: Phaser.GameObjects.Graphics;
@@ -99,7 +98,7 @@ export class GameScene extends Phaser.Scene {
   private bossPortal?: Phaser.GameObjects.Container;
   private bossIntroOpen = false;
   private bossPortalExpiresAt = 0;
-  private boss?: { definition: BossDefinition; health: number; krakenHealAttempted?: boolean; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "CANDY_FLEE" | "SUGAR_RUSH" | "IDLE" | "KRAKEN_HEAL" | "TELEGRAPH_SLAM" | "ATTACK_EXTEND" | "SLAM" | "EXPOSED" | "WHIRLPOOL"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[]; scorpionTail?: Phaser.GameObjects.Container };
+  private boss?: { definition: BossDefinition; health: number; krakenHealAttempted?: boolean; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "CANDY_FLEE" | "SUGAR_RUSH" | "IDLE" | "KRAKEN_HEAL" | "TELEGRAPH_SLAM" | "ATTACK_EXTEND" | "SLAM" | "EXPOSED" | "WHIRLPOOL" | "SCORPION_STING_TELEGRAPH" | "SCORPION_STING" | "SCORPION_LAND"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[]; scorpionTail?: Phaser.GameObjects.Container };
   private bossFight = new BossFightSystem();
   private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield" | "life-reward"; image: Phaser.GameObjects.Container }> = [];
   private bossMarkers: Phaser.GameObjects.GameObject[] = [];
@@ -127,12 +126,11 @@ export class GameScene extends Phaser.Scene {
   private candyWorldObjects: Phaser.GameObjects.GameObject[] = [];
   private oceanObjects: Phaser.GameObjects.GameObject[] = [];
   private oceanDecorations: Phaser.GameObjects.GameObject[] = [];
+  private worldArenaGraphics?: Phaser.GameObjects.Graphics;
   private oceanCurrents: CurrentZone[] = [];
   private oceanCorals: CoralObstacle[] = [];
   private currentGraphics?: Phaser.GameObjects.Graphics;
-  private bubbleObjects: Array<{ image: Phaser.GameObjects.Arc; life: number; bonus: boolean }> = [];
   private pearlTimer: number = OW.pearlCooldown;
-  private bubbleTimer: number = OW.bubbleCooldown;
   private currentZoneId?: string;
   private deepTrenchActive = false;
   private clam?: { x: number; y: number; state: "CLOSED" | "OPENING" | "OPEN" | "EMPTY"; image: Phaser.GameObjects.Container; timer: number; coin?: Coin };
@@ -247,9 +245,7 @@ export class GameScene extends Phaser.Scene {
     this.oceanDecorations = [];
     this.oceanCurrents = [];
     this.oceanCorals = [];
-    this.bubbleObjects = [];
     this.pearlTimer = OW.pearlCooldown;
-    this.bubbleTimer = OW.bubbleCooldown;
     this.currentZoneId = undefined;
     this.deepTrenchActive = false;
     this.desertObjects = [];
@@ -271,7 +267,7 @@ export class GameScene extends Phaser.Scene {
     this.overlay = undefined;
     this.cameras.main.setBackgroundColor(worldById(this.currentWorld).background);
     const a = B.arena,
-      g = this.add.graphics();
+      g = this.worldArenaGraphics = this.add.graphics().setDepth(-10);
     g.fillStyle(this.currentWorld === "silent-abyss" ? 0x09111e : this.currentWorld === "spider-lair" ? 0x171923 : this.currentWorld === "desert" ? 0x996136 : 0x9ac582).fillRoundedRect(
       a.left - 5,
       a.top - 5,
@@ -326,19 +322,6 @@ export class GameScene extends Phaser.Scene {
       );
     this.ring = this.add.graphics().setDepth(24);
     this.skinTrail = this.add.graphics().setDepth(23);
-    this.skinParticles?.destroy();
-    this.skinParticles = undefined;
-    if (this.selectedCosmetic.particleConfig.enabled)
-      this.skinParticles = this.add.particles(0, 0, "spark", {
-        emitting: true,
-        frequency: Math.max(140, 1000 / Math.max(1, this.selectedCosmetic.particleConfig.rate)),
-        speed: { min: 8, max: 28 },
-        lifespan: 700,
-        scale: { start: 0.65, end: 0 },
-        quantity: 1,
-        maxParticles: Math.min(32, this.selectedCosmetic.particleConfig.max),
-        tint: this.selectedCosmetic.particleConfig.color,
-      }).setDepth(22);
     this.ui = new ScreenUI(this, "game-ui");
     this.ui.root.classList.toggle(
       "left-handed",
@@ -346,7 +329,7 @@ export class GameScene extends Phaser.Scene {
     );
     if (this.rushMode) this.ui.root.classList.add("rush-mode");
     this.ui.html(
-      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">ϟ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
+      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">⚡ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
@@ -435,7 +418,7 @@ export class GameScene extends Phaser.Scene {
       this.pauseKind = "tutorial";
       this.overlay = this.ui.modal(
         "Encontre seu ritmo",
-        "Use o joystick para mover.\nPegue moedas.\nEvite obstáculos e o próprio corpo.",
+        "Use o joystick para mover.\nPegue moedas.\nEvite obstículos e o próprio corpo.",
         [
           {
             label: "Vamos jogar",
@@ -699,7 +682,6 @@ export class GameScene extends Phaser.Scene {
     const clamImage = this.add.container(clamX, clamY, [shell, top]).setDepth(7);
     this.oceanObjects.push(clamImage);
     this.clam = { x: clamX, y: clamY, state: "CLOSED", image: clamImage, timer: OW.pearlCooldown + Math.random() * OW.pearlCooldown };
-    this.addOceanBubble(false);
   }
   private buildSilentAbyss(g: Phaser.GameObjects.Graphics) {
     const a = B.arena, w = a.right - a.left, h = a.bottom - a.top;
@@ -773,7 +755,7 @@ export class GameScene extends Phaser.Scene {
     for (const gust of this.desertGustZones) {
       const marker = this.add.graphics().fillStyle(0xffd47a, 0.2).fillRoundedRect(-gust.width / 2, -gust.height / 2, gust.width, gust.height, 30)
         .lineStyle(3, 0xe8a84c, 0.3).strokeRoundedRect(-gust.width / 2, -gust.height / 2, gust.width, gust.height, 30);
-      const arrows = this.add.text(0, 0, gust.direction.x ? "›   ›   ›   ›   ›" : "⌄\n⌄\n⌄\n⌄", { fontSize: "25px", color: "#ffe5a5", fontStyle: "bold", align: "center" }).setOrigin(0.5).setAlpha(0.45);
+      const arrows = this.add.text(0, 0, gust.direction.x ? "↔   ↔   ↔   ↔   ↔" : "↑\n↑\n↑\n↑", { fontSize: "25px", color: "#ffe5a5", fontStyle: "bold", align: "center" }).setOrigin(0.5).setAlpha(0.45);
       const zone = this.add.container(gust.x, gust.y, [marker, arrows]).setDepth(4);
       this.desertObjects.push(zone);
     }
@@ -921,43 +903,9 @@ export class GameScene extends Phaser.Scene {
     const item = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((candidate) => candidate.id === region);
     return !!item && Math.abs(point.x - item.x) <= item.width / 2 && Math.abs(point.y - item.y) <= item.height / 2;
   }
-  private addOceanBubble(bonus: boolean) {
-    if (bonus && this.bubbleObjects.filter((bubble) => bubble.bonus).length >= OW.maxBonusBubbles) return;
-    const garden = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "bubble_garden")!;
-    for (let attempt = 0; attempt < 12; attempt++) {
-      const x = garden.x + Phaser.Math.Between(-garden.width * 0.35, garden.width * 0.35), y = garden.y + Phaser.Math.Between(-garden.height * 0.35, garden.height * 0.35);
-      if (distance({ x, y }, this.snake) < B.spawn.headClearance || this.oceanCorals.some((coral) => distance(coral, { x, y }) < coral.radius + 36)) continue;
-      const image = this.add.circle(x, y, bonus ? 14 : 8, bonus ? 0x9deaff : 0xdaf9ff, bonus ? 0.75 : 0.38).setStrokeStyle(2, 0xffffff, 0.8).setDepth(6);
-      this.bubbleObjects.push({ image, life: bonus ? OW.bubbleLifetime : 18, bonus });
-      this.oceanObjects.push(image);
-      return;
-    }
-  }
   private updateOcean(dt: number) {
     if (this.currentWorld !== "ocean") return;
     if (save.profile.bossesDefeated.includes("kraken") && !this.abyssPortal?.active) this.revealAbyssPortal();
-    this.bubbleTimer -= dt;
-    if (this.bubbleTimer <= 0) {
-      this.bubbleTimer = OW.bubbleCooldown;
-      if (Math.random() < OW.bubbleSpawnRate) this.addOceanBubble(Math.random() < OW.bonusBubbleChance);
-    }
-    for (const bubble of [...this.bubbleObjects]) {
-      bubble.life -= dt;
-      bubble.image.y -= dt * 5;
-      if (bubble.life <= 0) { bubble.image.destroy(); this.bubbleObjects.splice(this.bubbleObjects.indexOf(bubble), 1); continue; }
-      if (bubble.bonus && distance(bubble.image, this.snake) < 32) {
-        const reward = bonusBubbleReward(Math.random());
-        const combo = this.combo.collect();
-        this.run.matchCoins += reward.coins;
-        this.run.score += reward.coins * 10 * combo;
-        this.run.maxCombo = this.combo.max;
-        this.turbo.energy = Math.min(100, this.turbo.energy + reward.turbo);
-        if (reward.blue) { const blue = B.coins.find((coin) => coin.id === "blue")!; this.run.matchCoins += blue.value; this.run.score += blue.score * combo; this.run.maxCombo = this.combo.max; }
-        this.feedback(bubble.image.x, bubble.image.y, `POP! +${reward.coins}${reward.blue ? " +5" : ""}`, 0x9deaff);
-        audio.play("bubble_pop"); haptic("coin");
-        bubble.image.destroy(); this.bubbleObjects.splice(this.bubbleObjects.indexOf(bubble), 1);
-      }
-    }
     const current = this.oceanCurrents.find((zone) => this.snake.x >= zone.x - zone.width / 2 && this.snake.x <= zone.x + zone.width / 2 && this.snake.y >= zone.y - zone.height / 2 && this.snake.y <= zone.y + zone.height / 2);
     if (current && this.currentZoneId !== `${current.type}:${current.x}`) {
       this.currentZoneId = `${current.type}:${current.x}`;
@@ -1152,7 +1100,7 @@ export class GameScene extends Phaser.Scene {
         this.abyssChallengeTimer?.remove(); this.abyssChallengeTimer = undefined;
         this.abyssRewardPending = true;
         this.halted = true; this.pauseKind = "pause"; this.resetControls();
-        this.overlay = this.ui.modal("✨ A fenda silenciou", "Você sobreviveu por 90 segundos no Abismo Mudo. Serpente Abissal desbloqueada e salva na sua coleção.", [{ label: "Continuar", run: () => this.continue() }]);
+        this.overlay = this.ui.modal("A fenda silenciou", "Você sobreviveu por 90 segundos no Abismo Mudo. Serpente Abissal desbloqueada e salva na sua coleção.", [{ label: "Continuar", run: () => this.continue() }]);
         return;
       }
     }
@@ -1225,7 +1173,7 @@ export class GameScene extends Phaser.Scene {
         this.bossIntroOpen = true;
         this.resetControls();
         this.overlay = this.ui.modal(
-          `⚔️ ${definition.name}`,
+          `Desafio: ${definition.name}`,
           `${definition.entryHint}\n\nA luta é opcional. Sua Boss Energy só será usada quando começar.`,
           [{
             label: "Começar luta",
@@ -1463,7 +1411,6 @@ export class GameScene extends Phaser.Scene {
         image.setTint(this.selectedCosmetic.trailConfig.color);
       else image.clearTint();
     }
-    this.skinParticles?.setPosition(this.snake.x, this.snake.y);
     if (this.petSprite) {
       const tail = this.snake.body[Math.min(this.snake.length - 1, 5)];
       const phase = this.run.elapsed * 3;
@@ -1511,9 +1458,12 @@ export class GameScene extends Phaser.Scene {
     message: string,
     color: number,
     special = false,
+    particles = true,
   ) {
-    this.particles.setParticleTint(color);
-    this.particles.explode(special ? 24 : 8, x, y);
+    if (particles) {
+      this.particles.setParticleTint(color);
+      this.particles.explode(special ? 24 : 8, x, y);
+    }
     const t = text(
       this,
       x,
@@ -1735,7 +1685,8 @@ export class GameScene extends Phaser.Scene {
       coin.y,
       `+${coin.kind.value}`,
       coin.kind.color,
-        coin.kind.id === "golden" || coin.kind.id === "candy_coin" || coin.kind.id === "pearl_coin",
+      false,
+      false,
     );
     audio.play(coin.kind.id === "candy_coin" ? "candy_coin" : coin.kind.id === "pearl_coin" ? "pearl_coin" : `coin_${coin.kind.id}`, combo);
     haptic(coin.kind.id === "golden" ? "golden" : coin.kind.id === "candy_coin" || coin.kind.id === "pearl_coin" ? "power" : "coin");
@@ -1893,8 +1844,12 @@ export class GameScene extends Phaser.Scene {
     this.cameraX = entryX;
     this.cameraY = entryY;
     for (const decoration of this.oceanDecorations) this.tweens.killTweensOf(decoration);
-    for (const object of [...this.oceanObjects, ...this.oceanDecorations]) object.destroy();
-    this.oceanObjects = []; this.oceanDecorations = []; this.oceanCurrents = []; this.oceanCorals = []; this.bubbleObjects = []; this.currentGraphics = undefined; this.clam = undefined;
+    for (const object of new Set([...this.oceanObjects, ...this.oceanDecorations])) object.destroy();
+    this.oceanObjects = []; this.oceanDecorations = []; this.oceanCurrents = []; this.oceanCorals = []; this.currentGraphics = undefined;
+    if (this.clam) this.tweens.killTweensOf(this.clam.image);
+    this.clam?.image.destroy(); this.clam = undefined;
+    this.currentZoneId = undefined; this.deepTrenchActive = false;
+    this.pearlTimer = OW.pearlCooldown;
     for(const obstacle of this.obstacles) obstacle.destroy();
     this.obstacles=[];
     this.abyssMovingObstacles = [];
@@ -1915,6 +1870,19 @@ export class GameScene extends Phaser.Scene {
     this.run.portalsUsed++;
     awardAchievement(save.profile, "world-traveler");
     this.cameras.main.setBackgroundColor(world.background);
+    this.worldArenaGraphics?.destroy();
+    const arenaGraphics = this.worldArenaGraphics = this.add.graphics().setDepth(-10);
+    const arenaColor = world.id === "silent-abyss" ? 0x09111e : world.id === "spider-lair" ? 0x171923 : world.id === "desert" ? 0x996136 : 0x9ac582;
+    arenaGraphics.fillStyle(arenaColor).fillRoundedRect(arena.left - 5, arena.top - 5, arena.right - arena.left + 10, arena.bottom - arena.top + 10, 30);
+    arenaGraphics.fillStyle(world.ground).fillRoundedRect(arena.left, arena.top, arena.right - arena.left, arena.bottom - arena.top, 24);
+    if (world.id !== "silent-abyss" && world.id !== "spider-lair") this.drawWorldPassageMarkers(arenaGraphics);
+    for (let index = 0; index < 650; index++) {
+      const x = arena.left + 22 + ((index * 73) % (arena.right - arena.left - 44));
+      const y = arena.top + 22 + ((index * 137) % (arena.bottom - arena.top - 44));
+      const candy = world.id === "candy-world", ocean = world.id === "ocean", abyss = world.id === "silent-abyss", spider = world.id === "spider-lair", desert = world.id === "desert", clover = world.id === "clover-garden";
+      const color = clover ? (index % 3 ? 0x75a953 : 0xb5d866) : spider ? (index % 3 ? 0x55435f : 0xb98bd5) : abyss ? (index % 3 ? 0x31556a : 0x397e78) : desert ? (index % 3 ? 0xc58945 : 0xf1ca79) : ocean ? (index % 3 ? 0xb5dfe1 : 0xd3e5c8) : candy ? (index % 3 ? 0xf5b8d8 : 0xffd6a5) : (index % 3 ? 0xbbd09e : 0xcbdca9);
+      arenaGraphics.fillStyle(color, spider || abyss ? 0.2 : desert ? 0.42 : ocean ? 0.24 : 0.55).fillEllipse(x, y, 5 + index % 4, 3);
+    }
     if(world.id==="candy-world") this.buildCandyWorld(this.add.graphics().setDepth(1));
     if (world.id === "candy-world" && (this.scene.settings.data as { cloverReturn?: boolean } | undefined)?.cloverReturn) {
       this.currentWorld = "clover-garden";
@@ -1936,7 +1904,7 @@ export class GameScene extends Phaser.Scene {
     }
     if(world.id==="silent-abyss") {
       this.abyssChallengeElapsed = 0;
-      this.buildSilentAbyss(this.add.graphics().setDepth(1));
+      this.buildSilentAbyss(arenaGraphics);
       if (!save.profile.abyssChallengeCompleted) {
         this.abyssObstacleTimer = 5 + Math.random() * 4;
         this.spawnAbyssObstacles(16);
@@ -1968,18 +1936,18 @@ export class GameScene extends Phaser.Scene {
     analytics.track("portalEntered", { world: world.id });
     void save.save();
     const arrivalDetails: string[] = [];
-    if (world.id === "candy-world") arrivalDetails.push("🍬 Caramelo reduz sua velocidade.");
+      if (world.id === "candy-world") arrivalDetails.push("Caramelo reduz sua velocidade.");
     if (world.hazard === "sticky") arrivalDetails.push("Cuidado: zonas pegajosas reduzem sua velocidade por instantes.");
     if (world.hazard === "current" && save.profile.hints.ocean) arrivalDetails.push("Correntes oceânicas podem empurrar sua cobra.");
     if (world.id === "ocean" && !save.profile.hints.ocean) {
       save.profile.hints.ocean = true;
       void save.save();
-      arrivalDetails.push("🌊 As correntes podem empurrar sua cobra. Navegue com cuidado!");
+      arrivalDetails.push("As correntes podem empurrar sua cobra. Navegue com cuidado!");
     }
     if (world.id === "desert" && !save.profile.hints.desertGust) {
       save.profile.hints.desertGust = true;
       void save.save();
-      arrivalDetails.push("🌬️ Rajadas de areia desviam seu movimento; oásis reduzem levemente a velocidade e oferecem uma rota mais calma.");
+      arrivalDetails.push("Rajadas de areia desviam seu movimento; oásis reduzem levemente a velocidade e oferecem uma rota mais calma.");
     }
     if (world.id === "silent-abyss" && !save.profile.abyssChallengeCompleted) arrivalDetails.push("Desafio: sobreviva por 90 segundos para desbloquear a Serpente Abissal.");
     this.ui.worldArrival(world.id, world.name, arrivalDetails);
@@ -2000,6 +1968,7 @@ export class GameScene extends Phaser.Scene {
   }
   private spawnBossPortal(bossId: string) {
     if (this.bossPortal || this.dead) return;
+    if (this.run.bossEnergy < this.bossEnergyRequirement(bossId)) return;
     const arenaRegion = bossId === "kraken" ? oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "kraken_arena") : bossId === "scorpion-king" ? desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom).find((region) => region.id === "scorpion_arena") : undefined;
     const p = bossId === "kraken" || bossId === "scorpion-king"
       ? this.validPoint(100, 180, true, {
@@ -2078,7 +2047,7 @@ export class GameScene extends Phaser.Scene {
     this.ui.toast(definition.id === "king-snake"
       ? "Boss fight! Desvie da investida e pegue a coroa quando o King Snake ficar atordoado."
       : definition.id === "scorpion-king"
-        ? "Boss fight! Desvie da investida do Escorpião-Rei e pegue a gema quando ele ficar atordoado."
+        ? "Boss fight! Desvie da picada do Escorpião-Rei. Quando ele ficar atordoado, pegue a coroa para ativar a aura e ataque-o."
         : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
     if (!isKingSnake && !isCandyBee && !isKraken && !isScorpionKing) image.setSize(210, 210);
   }
@@ -2316,7 +2285,7 @@ export class GameScene extends Phaser.Scene {
       this.bossCoinsTimer -= dt;
       if (this.bossCoinsTimer <= 0 && this.bossPickups.filter((pickup) => pickup.kind === "boss-coin").length < 3) {
         this.bossCoinsTimer = 5;
-        this.spawnBossPickup("boss-coin", 25, "◆", 0xffd35a);
+        this.spawnBossPickup("boss-coin", 25, "●", 0xffd35a);
       }
     }
     const dx = this.snake.x - boss.image.x, dy = this.snake.y - boss.image.y;
@@ -2360,7 +2329,8 @@ export class GameScene extends Phaser.Scene {
           ? boss.state === "ATTACK_MODE" && aura.source === "candy-aura"
         : boss.definition.id === "kraken" ? boss.state === "EXPOSED" || boss.state === "KRAKEN_HEAL"
           : boss.definition.id === "spider-queen" ? boss.state === "EXPOSED"
-            : boss.state === "STUNNED" && aura.source === "crown-orb";
+            : boss.definition.id === "scorpion-king" ? boss.state === "STUNNED" && aura.source === "crown-orb"
+              : boss.state === "STUNNED" && aura.source === "crown-orb";
       const kingSnake = boss.definition.id === "king-snake";
       const kingChargeContact = kingSnake && boss.state === "CHARGE";
       if (kingChargeContact && this.bossCollisionGrace <= 0) {
@@ -2385,7 +2355,7 @@ export class GameScene extends Phaser.Scene {
           const interruptedHeal = boss.state === "KRAKEN_HEAL";
           boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.5;
           if (interruptedHeal) {
-            this.krakenHealExitTimer = 3;
+            this.krakenHealExitTimer = 5;
             this.krakenBarrierGate?.setVisible(false);
             if (this.krakenBarrier) this.tweens.add({ targets: this.krakenBarrier, alpha: 0.28, duration: 180, yoyo: true, repeat: 3 });
             this.feedback(boss.image.x, boss.image.y, "CURA INTERROMPIDA! SAIA DA ARENA!", 0x69e6ff, true);
@@ -2427,10 +2397,11 @@ export class GameScene extends Phaser.Scene {
       const kingSnake = boss.definition.id === "king-snake";
       const candy = boss.definition.id === "candy-monster";
       const spider = boss.definition.id === "spider-queen";
-      const ready = !kingSnake && !candy && !spider && this.bossFight.combat.attackCharge >= 100 ? " · ATTACK READY!" : "";
-      const aura = this.bossFight.combat.active ? ` · ${candy ? "ESCUDO ATIVO" : `AURA ∞/${this.bossFight.combat.remainingHits} hits`}` : "";
-      const attackCharge = kingSnake || spider ? "" : candy ? ` · BOSS COINS ${Math.floor(this.bossFight.combat.attackCharge)}%` : ` · ATTACK ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
-      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1}${attackCharge}${ready}${aura}`;
+      const ready = !kingSnake && !candy && !spider && this.bossFight.combat.attackCharge >= 100 ? " · ATAQUE PRONTO!" : "";
+      const aura = this.bossFight.combat.active ? ` · ${candy ? "ESCUDO ATIVO" : `AURA ×${this.bossFight.combat.remainingHits}`}` : "";
+      const attackCharge = kingSnake || spider ? "" : candy ? ` · BOSS COINS ${Math.floor(this.bossFight.combat.attackCharge)}%` : ` · ATAQUE ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
+      const krakenHealTimer = boss.definition.id === "kraken" && boss.state === "KRAKEN_HEAL" ? ` · INTERROMPA A CURA: ${Math.ceil(boss.stateTimer)}s` : "";
+      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1}${krakenHealTimer}${attackCharge}${ready}${aura}`;
     }
   }
   private updateSpiderBehavior(boss: NonNullable<GameScene["boss"]>) {
@@ -2451,7 +2422,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.powers.absorb()) {
           this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
           this.powers.invincible = Math.max(this.powers.invincible, boss.definition.combat.hitInvulnerability);
-          this.feedback(this.snake.x, this.snake.y, "TEIA! −1 SEGMENTO", 0xf08bda, true);
+        this.feedback(this.snake.x, this.snake.y, "TEIA! −1 SEGMENTO", 0xf08bda, true);
         } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
         this.bossCollisionGrace = boss.definition.combat.hitInvulnerability;
       }
@@ -2461,14 +2432,6 @@ export class GameScene extends Phaser.Scene {
       boss.hazard = this.add.container(boss.targetX, boss.targetY).setDepth(10);
       boss.hazard.add(this.add.graphics().fillStyle(0xdca9f2, 0.24).fillCircle(0, 0, 48).lineStyle(4, 0xe7c3ff, 0.8).strokeCircle(0, 0, 43));
       if (!this.bossPickups.some((pickup) => pickup.kind === "attack-pearl")) this.spawnBossPickupAt("attack-pearl", boss.targetX, boss.targetY, "✦", 0xdca9f2);
-      audio.play("power");
-    } else if (boss.state === "KRAKEN_HEAL" && boss.stateTimer <= 0) {
-      boss.health = Math.min(boss.definition.maxHealth, boss.health + 1);
-      boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.5;
-      this.krakenHealExitTimer = 3;
-      this.krakenBarrierGate?.setVisible(false);
-      if (this.krakenBarrier) this.tweens.add({ targets: this.krakenBarrier, alpha: 0.28, duration: 180, yoyo: true, repeat: 3 });
-      this.feedback(boss.image.x, boss.image.y, "+1 HP · CURA DO KRAKEN", 0x69e6ff, true);
       audio.play("power");
     } else if (boss.state === "EXPOSED" && boss.stateTimer <= 0) {
       boss.hazard?.destroy(); boss.hazard = undefined;
@@ -2509,7 +2472,7 @@ export class GameScene extends Phaser.Scene {
       const radius = 35 + Math.sqrt(Math.random()) * 145;
       const dropX = Phaser.Math.Clamp(x + Math.cos(angle) * radius, B.arena.left + 40, B.arena.right - 40);
       const dropY = Phaser.Math.Clamp(y + Math.sin(angle) * radius, B.arena.top + 40, B.arena.bottom - 40);
-      this.spawnBossPickupAt("loot-boss-coin", dropX, dropY, "◆", 0xffd35a);
+      this.spawnBossPickupAt("loot-boss-coin", dropX, dropY, "●", 0xffd35a);
     }
   }
   private updateBossPickups(dt: number) {
@@ -2556,7 +2519,7 @@ export class GameScene extends Phaser.Scene {
         this.feedback(pickup.x, pickup.y, "ESCUDO!", 0x70cfff, true);
       } else {
         const source = pickup.kind;
-        if (pickup.kind === "attack-pearl" && boss.definition.id === "spider-queen") this.bossFight.combat.addCharge(100);
+        if (pickup.kind === "attack-pearl" && (boss.definition.id === "spider-queen" || (boss.definition.id === "kraken" && boss.state === "KRAKEN_HEAL"))) this.bossFight.combat.addCharge(100);
         else this.bossFight.combat.addCharge(pickup.kind === "crown-orb" ? 100 : pickup.kind === "attack-pearl" ? 50 : 25);
         const activated = this.bossFight.combat.activateAttackAura({ maxHits: pickup.kind === "sugar-shield" ? 2 : boss.definition.combat.auraMaxHits, source, bossId: boss.definition.id });
         if (activated) {
@@ -2619,11 +2582,18 @@ export class GameScene extends Phaser.Scene {
   private updateScorpionKingVisual(boss: NonNullable<GameScene["boss"]>) {
     const tail = boss.scorpionTail;
     if (!tail) return;
-      const telegraphing = boss.state === "PREPARE_CHARGE";
+    const telegraphing = boss.state === "SCORPION_STING_TELEGRAPH";
     const fury = boss.health <= 2;
     const pulse = Math.sin(this.run.elapsed * (telegraphing || fury ? 12 : 2.4));
-    tail.rotation = telegraphing ? -0.2 + pulse * 0.08 : -0.08 + pulse * 0.055;
+    if (boss.state === "SCORPION_STING") {
+      // Pin the tail tip to the ground throughout the strike instead of sweeping at a point.
+      tail.rotation = 1.12;
+    } else {
+      tail.rotation = telegraphing ? -0.48 + pulse * 0.045 : -0.08 + pulse * 0.055;
+    }
     boss.image.setScale(1 + boss.phase * 0.035 + (telegraphing ? Math.max(0, pulse) * 0.035 : 0));
+    // Make the exposed/stunned window visually clear so players can time the aura hit.
+    boss.image.setAlpha(boss.state === "STUNNED" ? (Math.sin(this.run.elapsed * 18) > 0 ? 0.35 : 1) : 1);
     if (fury) tail.setAlpha(0.82 + Math.sin(this.run.elapsed * 15) * 0.18);
     else tail.setAlpha(1);
   }
@@ -2680,32 +2650,48 @@ export class GameScene extends Phaser.Scene {
     if (boss.state === "CHASE") {
       this.moveBossToward(boss, this.snake, boss.speed * (furious ? 1.35 : 0.92 + boss.phase * 0.12), dt);
       if (boss.stateTimer <= 0) {
-        boss.state = "PREPARE_CHARGE";
+        boss.state = "SCORPION_STING_TELEGRAPH";
         boss.stateTimer = bossAttackTiming(boss.definition.combat.telegraphDuration * (furious ? 0.78 : 1 - boss.phase * 0.1), preference, 0.65);
         const dx = this.snake.x - boss.image.x, dy = this.snake.y - boss.image.y, length = Math.hypot(dx, dy) || 1;
         boss.chargeX = dx / length; boss.chargeY = dy / length;
+        // The sting targets the player's current location anywhere in the arena.
+        boss.targetX = Phaser.Math.Clamp(this.snake.x, arena.left + 64, arena.right - 64);
+        boss.targetY = Phaser.Math.Clamp(this.snake.y, arena.top + 64, arena.bottom - 64);
         for (const marker of this.bossMarkers) marker.destroy();
-        const marker = this.add.graphics().lineStyle(10, 0xff6547, 0.7).lineBetween(boss.image.x, boss.image.y, boss.image.x + boss.chargeX * 520, boss.image.y + boss.chargeY * 520).setDepth(8);
+        const marker = this.add.graphics().fillStyle(0xff493c, 0.15).fillCircle(boss.targetX, boss.targetY, 96).lineStyle(8, 0xff6547, 0.88).strokeCircle(boss.targetX, boss.targetY, 84).lineStyle(3, 0xffdc58, 0.72).lineBetween(boss.image.x, boss.image.y, boss.targetX, boss.targetY).setDepth(8);
         this.bossMarkers.push(marker);
-        this.feedback(boss.image.x, boss.image.y, furious ? "INVESTIDA FURIOSA!" : "INVESTIDA!", 0xffa34b, true);
+        this.feedback(boss.targetX, boss.targetY, furious ? "PICADA FURIOSA! DESVIE!" : "PICADA! DESVIE!", 0xffa34b, true);
         audio.play("error"); haptic("coin");
       }
-    } else if (boss.state === "PREPARE_CHARGE") {
-      if (boss.stateTimer <= 0) { boss.state = "CHARGE"; boss.stateTimer = 1.15; audio.play("power"); }
-    } else if (boss.state === "CHARGE") {
-      const speed = boss.speed * (furious ? 6.1 : 5.2);
-      boss.image.x += boss.chargeX * speed * dt; boss.image.y += boss.chargeY * speed * dt;
-      if (boss.image.x < arena.left + 100 || boss.image.x > arena.right - 100 || boss.image.y < arena.top + 100 || boss.image.y > arena.bottom - 100 || boss.stateTimer <= 0) {
-        boss.image.x = Phaser.Math.Clamp(boss.image.x, arena.left + 100, arena.right - 100);
-        boss.image.y = Phaser.Math.Clamp(boss.image.y, arena.top + 100, arena.bottom - 100);
-        boss.state = "STUNNED"; boss.stateTimer = boss.definition.combat.stunDuration;
+    } else if (boss.state === "SCORPION_STING_TELEGRAPH") {
+      if (boss.stateTimer <= 0) {
         for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
-        this.spawnBossPickup("crown-orb", 100, "◆", 0xffc247);
-        this.particles.explode(16, boss.image.x, boss.image.y); audio.play("error"); haptic("power");
+        boss.state = "SCORPION_STING"; boss.stateTimer = 0.55;
+        audio.play("power"); haptic("power");
       }
-    } else if (boss.state === "STUNNED" && boss.phase >= 1 && !this.bossFight.combat.active && !this.bossPickups.some((pickup) => pickup.kind === "sugar-shield")) {
-      const pickup = this.bossSafePoint(130);
-      this.spawnBossPickupAt("sugar-shield", pickup.x, pickup.y, "✦", 0xffc247);
+    } else if (boss.state === "SCORPION_STING") {
+      if (boss.stateTimer <= 0) {
+        const hitHead = Math.hypot(this.snake.x - boss.targetX, this.snake.y - boss.targetY) < 84;
+        const hitBody = this.snake.body.slice(1, this.snake.length).some((segment) => Math.hypot(segment.x - boss.targetX, segment.y - boss.targetY) < 84);
+        if ((hitHead || hitBody) && this.bossCollisionGrace <= 0 && this.powers.invincible <= 0 && !this.powers.ghostActive) {
+          const shield = this.powers.shield;
+          if (!this.powers.absorb()) {
+            if (hitHead && !this.loseLife()) { this.die(); return; }
+            if (!hitHead) this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
+          } else if (shield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+          this.bossCollisionGrace = boss.definition.combat.hitInvulnerability;
+          this.feedback(boss.targetX, boss.targetY, "PICADA!", 0xff7867, true);
+        }
+        boss.state = "SCORPION_LAND"; boss.stateTimer = 0.45;
+        this.feedback(boss.image.x, boss.image.y, "VULNERÁVEL! PREPARE A AURA!", 0xffdc58, true);
+      }
+    } else if (boss.state === "SCORPION_LAND" && boss.stateTimer <= 0) {
+      boss.state = "STUNNED";
+      boss.stateTimer = 3;
+      if (this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((pickup) => pickup.kind === "crown-orb")) {
+        const pickup = this.bossSafePoint(130);
+        this.spawnBossPickupAt("crown-orb", pickup.x, pickup.y, "🦂", 0xffa34b);
+      }
     } else if (boss.state === "STUNNED" && boss.stateTimer <= 0) {
       boss.state = "RECOVER"; boss.stateTimer = 0.65;
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
@@ -2911,9 +2897,20 @@ export class GameScene extends Phaser.Scene {
           }
         }
         boss.state = attackHit ? "RECOVER" : "EXPOSED"; boss.stateTimer = attackHit ? 1.2 : 2.8;
-        if (!attackHit) { this.spawnBossPickup("attack-pearl", 50, "●", 0xa8faff); audio.play("pearl_coin"); }
+        if (!attackHit) { this.spawnBossPickup("attack-pearl", 50, "✧", 0xa8faff); audio.play("pearl_coin"); }
         else audio.play("current_flow");
       }
+    } else if (boss.state === "KRAKEN_HEAL" && boss.stateTimer <= 0) {
+      boss.health = Math.min(boss.definition.maxHealth, boss.health + 1);
+      boss.hazard?.destroy(); boss.hazard = undefined;
+      this.bossPickups.filter((pickup) => pickup.kind === "attack-pearl").forEach((pickup) => pickup.image.destroy());
+      this.bossPickups = this.bossPickups.filter((pickup) => pickup.kind !== "attack-pearl");
+      boss.state = "RECOVER"; boss.stateTimer = 1.5;
+      this.krakenHealExitTimer = 5;
+      this.krakenBarrierGate?.setVisible(false);
+      if (this.krakenBarrier) this.tweens.add({ targets: this.krakenBarrier, alpha: 0.28, duration: 180, yoyo: true, repeat: 3 });
+      this.feedback(boss.image.x, boss.image.y, "+1 HP · CURA DO KRAKEN", 0x69e6ff, true);
+      audio.play("power");
     } else if (boss.state === "EXPOSED" && boss.stateTimer <= 0) {
       boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.2;
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
@@ -2946,14 +2943,14 @@ export class GameScene extends Phaser.Scene {
           this.feedback(this.boss.image.x, this.boss.image.y, "FURIOSO!", 0xff554e, true);
           audio.play("power"); haptic("power");
         }
-        if (this.boss.definition.id === "king-snake") this.spawnBossPickup("crown-orb", 100, "♛", 0xffb52e);
+        if (this.boss.definition.id === "king-snake") this.spawnBossPickup("crown-orb", 100, "🐍", 0x70cf75);
         if (this.boss.definition.id === "kraken") {
           this.bossCurrent = undefined; this.bossWhirlpool?.clear();
         }
       }
       if (this.boss.definition.id === "kraken" && this.boss.health <= 2 && !this.boss.krakenHealAttempted) {
         this.boss.krakenHealAttempted = true;
-        this.boss.state = "KRAKEN_HEAL"; this.boss.stateTimer = 6;
+        this.boss.state = "KRAKEN_HEAL"; this.boss.stateTimer = 9;
         this.krakenHealExitTimer = 0;
         this.krakenBarrierGate?.setVisible(false);
         if (this.krakenBarrier) this.tweens.add({ targets: this.krakenBarrier, alpha: 0.22, duration: 240, ease: "Sine.easeOut" });
@@ -2967,6 +2964,7 @@ export class GameScene extends Phaser.Scene {
         const healAura = this.add.graphics().lineStyle(5, 0x69e6ff, 0.72).strokeCircle(0, 0, 128);
         this.boss.hazard.add(healAura);
         this.tweens.add({ targets: healAura, alpha: 0.15, scale: 1.3, duration: 550, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        this.spawnBossPickupAt("attack-pearl", this.boss.image.x, this.boss.image.y, "✦", 0x69e6ff);
         this.feedback(this.boss.image.x, this.boss.image.y, "INTERROMPA COM A AURA!", 0x69e6ff, true);
       }
       return;
@@ -3025,8 +3023,8 @@ export class GameScene extends Phaser.Scene {
     const nextWorld = worlds.find((world) => world.requiredBossId === defeated.id && world.isImplemented && worldRequirements(world, save.profile).unlocked && !save.profile.worldsUnlocked.includes(world.id));
     const portalGuidance = nextWorld
       ? save.profile.worldsUnlocked.includes(nextWorld.id)
-        ? `🌀 Portal para ${nextWorld.name} liberado! Ele está na borda da arena. Leve a cobrinha até a passagem e atravesse para viajar.`
-        : `🔒 Você derrotou o chefe, mas ainda precisa alcançar o nível ${nextWorld.requiredLevel} para liberar o portal de ${nextWorld.name}. Continue jogando para ganhar XP; ao atingir o nível, a passagem aparecerá na borda da arena.`
+        ? `îÇ Portal para ${nextWorld.name} liberado! Ele está na borda da arena. Leve a cobrinha até a passagem e atravesse para viajar.`
+        : `öÆ Você derrotou o chefe, mas ainda precisa alcançar o nível ${nextWorld.requiredLevel} para liberar o portal de ${nextWorld.name}. Continue jogando para ganhar XP; ao atingir o nível, a passagem aparecerá na borda da arena.`
       : "";
     this.run.bossDefeats++;
     const petRewards = [...new Set([defeated.petReward, ...(defeated.additionalPetRewards ?? []), ...pets.filter((pet) => pet.bossRewardId === defeated.id && pet.requiredBossIds?.every((bossId) => save.profile.bossesDefeated.includes(bossId))).map((pet) => pet.id)].filter((id): id is string => Boolean(id)))];
@@ -3040,17 +3038,17 @@ export class GameScene extends Phaser.Scene {
     const rewardLines = [
       portalGuidance,
       first && petRewards.length
-        ? `🐾 ${petRewards.map((id) => {
+        ? `É¥ ${petRewards.map((id) => {
             const pet = pets.find((entry) => entry.id === id);
             if (!pet) return id;
             return pet.coinPrice ? `${pet.name} disponível por ${pet.coinPrice} Boss Coins` : `${pet.name} liberado grátis`;
           }).join(" e ")}`
         : "",
       first && rewardedSkins.length
-        ? `✨ Skin${rewardedSkins.length > 1 ? "s" : ""} desbloqueada${rewardedSkins.length > 1 ? "s" : ""}: ${rewardedSkins.map((skin) => skin.name).join(", ")}`
+        ? ` Skin${rewardedSkins.length > 1 ? "s" : ""} desbloqueada${rewardedSkins.length > 1 ? "s" : ""}: ${rewardedSkins.map((skin) => skin.name).join(", ")}`
         : "",
-      first ? `🪙 +${defeated.rewardCoins} moedas · +${defeated.rewardXP} XP` : "",
-      `◆ ${defeated.bossCoinDrop} Boss Coins caíram no chão`,
+      first ? `¬Ö +${defeated.rewardCoins} moedas · +${defeated.rewardXP} XP` : "",
+      `● ${defeated.bossCoinDrop} Boss Coins caíram no chão`,
     ].filter(Boolean);
     if (first && newlyUnlocked.length) this.ui.toast(`Mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}.`);
     if (first) {
@@ -3058,7 +3056,7 @@ export class GameScene extends Phaser.Scene {
       this.pauseKind = "pause";
       this.resetControls();
       this.overlay = this.ui.modal(
-        `🏆 ${defeated.name} derrotado!`,
+        `Åå ${defeated.name} derrotado!`,
         `Parabéns, vitória incrível!${rewardLines.length ? `\n\n${rewardLines.join("\n")}` : ""}`,
         [{ label: "OK · Continuar", run: () => this.continue() }],
       );
@@ -3128,7 +3126,6 @@ export class GameScene extends Phaser.Scene {
       ["Escudo", () => this.powers.activate("shield")],
       ...(this.currentWorld === "ocean" ? [
         ["Ocean: gerar Pearl", () => { const slot = this.coins.find((coin) => !coin.active); const point = this.validPoint(B.spawn.bodyClearance, 150); if (slot && point) slot.spawnPearl(point.x, point.y); }] as [string, () => void],
-        ["Ocean: Bonus Bubble", () => this.addOceanBubble(true)] as [string, () => void],
         ["Ocean: Strong Current", () => { const zone = this.oceanCurrents.find((item) => item.type === "STRONG"); if (zone) { this.snake.reset(zone.x, zone.y); this.steering.reset(this.snake.angle); } }] as [string, () => void],
       ] : []),
     ];
