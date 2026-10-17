@@ -41,7 +41,7 @@ import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawn
 import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, isOutsideKrakenArena, pearlCoinSpawnAllowed, containKrakenArenaPoint, krakenAttackTarget, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
 import { applyWorldOrientation } from "../services/OrientationService";
 import { missionsForProfile } from "../data/missions";
-import { desertWorldConfig as DW, desertRegions, desertGusts, desertRouteGustAt, desertRouteAt, desertRareCoinSpots, inDesertOasis, containDesertArenaPoint, type SandGust } from "../data/desertWorld";
+import { desertWorldConfig as DW, desertRegions, desertGusts, desertRouteGustAt, desertRouteAt, desertRareCoinSpots, inDesertOasis, containDesertArenaPoint, blockDesertArenaCrossing, isDesertArenaPickupAccessible, type SandGust } from "../data/desertWorld";
 export class GameScene extends Phaser.Scene {
   snake!: Snake;
   run!: RunState;
@@ -98,7 +98,9 @@ export class GameScene extends Phaser.Scene {
   private bossPortal?: Phaser.GameObjects.Container;
   private bossIntroOpen = false;
   private bossPortalExpiresAt = 0;
-  private boss?: { definition: BossDefinition; health: number; krakenHealAttempted?: boolean; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "CANDY_FLEE" | "SUGAR_RUSH" | "IDLE" | "KRAKEN_HEAL" | "TELEGRAPH_SLAM" | "ATTACK_EXTEND" | "SLAM" | "EXPOSED" | "WHIRLPOOL" | "SCORPION_STING_TELEGRAPH" | "SCORPION_STING" | "SCORPION_LAND"; stateTimer: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[]; scorpionTail?: Phaser.GameObjects.Container };
+  private boss?: { definition: BossDefinition; health: number; krakenHealAttempted?: boolean; scorpionPoisonSequence?: boolean; scorpionJumpAttackPending?: boolean; scorpionJumpAttackActive?: boolean; scorpionJumpStartX?: number; scorpionJumpStartY?: number; scorpionPoisonAttacks?: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "CANDY_FLEE" | "SUGAR_RUSH" | "IDLE" | "KRAKEN_HEAL" | "TELEGRAPH_SLAM" | "ATTACK_EXTEND" | "SLAM" | "EXPOSED" | "WHIRLPOOL" | "SCORPION_STING_TELEGRAPH" | "SCORPION_STING" | "SCORPION_LAND" | "SCORPION_POISON_JUMP" | "SCORPION_POISON_TELEGRAPH" | "SCORPION_POISON_STRIKE" | "SCORPION_POISON" | "SCORPION_POISON_RETURN" | "SCORPION_JUMP_TELEGRAPH" | "SCORPION_JUMP" | "SCORPION_JUMP_LAND"; stateTimer: number; stateTargetX?: number; stateTargetY?: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[]; scorpionTail?: Phaser.GameObjects.Container; scorpionStinger?: Phaser.GameObjects.Graphics; scorpionStingerRetracting?: boolean };
+  private kingSnakeCrown?: Phaser.GameObjects.Container;
+  private scorpionPoisonPuddles: Array<{ x: number; y: number; life: number; image: Phaser.GameObjects.Graphics }> = [];
   private bossFight = new BossFightSystem();
   private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield" | "life-reward"; image: Phaser.GameObjects.Container }> = [];
   private bossMarkers: Phaser.GameObjects.GameObject[] = [];
@@ -200,8 +202,9 @@ export class GameScene extends Phaser.Scene {
     });
     this.bossIntroOpen = false;
     this.bossPortalExpiresAt = 0;
+    this.kingSnakeCrown?.destroy(); this.kingSnakeCrown = undefined;
+    this.boss?.image.destroy();
     this.boss = undefined;
-    this.bossFight.destroy();
     this.bossPickups = [];
     this.bossMarkers = [];
     this.bossCurrent = undefined;
@@ -258,6 +261,7 @@ export class GameScene extends Phaser.Scene {
     this.power = undefined;
     this.poison?.image.destroy();
     this.poison = undefined;
+    this.clearScorpionPoisonPuddles();
     this.sprites = [];
     this.aim = null;
     this.countdown = powerUpSpawnInterval(this.gameDifficulty);
@@ -1059,6 +1063,7 @@ export class GameScene extends Phaser.Scene {
         : this.currentWorld === "desert" ? (this.turbo.active ? B.power.turboSpeed : 1) * (inDesertOasis(this.snake, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) ? DW.oasisSlowMultiplier : 1)
         : this.turbo.active ? B.power.turboSpeed : 1);
     const steeringTarget = this.steering.update(target, dt);
+    const previousSnakePosition = { x: this.snake.x, y: this.snake.y };
     if (this.currentWorld === "ocean" || this.currentWorld === "silent-abyss" || this.currentWorld === "desert") {
       const force = this.currentWorld === "desert" ? desertRouteGustAt(this.snake, this.run.elapsed, this.desertGustZones, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) : currentForceAt(this.snake, this.oceanCurrents);
       const speedCap = this.currentWorld === "desert" ? DW.maxEffectiveSpeed : OW.maxEffectiveSpeed;
@@ -1082,7 +1087,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (this.currentWorld === "ocean") this.containSnakeInKrakenArena();
-    if (this.currentWorld === "desert") this.containSnakeInScorpionArena();
+    if (this.currentWorld === "desert") this.containSnakeInScorpionArena(previousSnakePosition);
+    this.updateScorpionPoisonPuddles(dt);
     this.updateAbyssObstacles(dt);
     if (this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted) {
       this.abyssChallengeElapsed += dt;
@@ -2032,8 +2038,9 @@ export class GameScene extends Phaser.Scene {
           this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5),
         ]).setDepth(19);
     const bodySegments = isKingSnake
-      ? Array.from({ length: 4 }, (_, index) => this.add.image(initialX - 30 * (index + 1), initialY, "king-snake-body").setScale(0.86 - index * 0.07).setDepth(18))
+      ? Array.from({ length: 6 }, (_, index) => this.add.image(initialX - 30 * (index + 1), initialY, "king-snake-body").setScale(0.9 - index * 0.045).setDepth(18))
       : [];
+    if (isKingSnake) this.kingSnakeCrown = this.createKingSnakeCrown().setPosition(initialX, initialY).setDepth(21);
     const trail = Array.from({ length: 33 }, (_, index) => ({ x: initialX - index * 12, y: initialY }));
     const initialState = definition.id === "kraken" || isSpiderQueen ? "IDLE" : "CHASE";
     const preference = this.gameDifficulty;
@@ -2090,11 +2097,24 @@ export class GameScene extends Phaser.Scene {
     this.desertArenaBarrier = this.add.container(arena.x, arena.y, [field, rim]).setDepth(4);
     this.tweens.add({ targets: rim, alpha: 0.58, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
-  private containSnakeInScorpionArena() {
+  private containSnakeInScorpionArena(previous: Point) {
     if (!this.boss || this.boss.definition.id !== "scorpion-king" || !this.desertArenaBarrier) return;
+    const arenaClosed = this.boss.scorpionPoisonSequence
+      || this.boss.scorpionJumpAttackPending
+      || this.boss.scorpionJumpAttackActive
+      || this.boss.state === "SCORPION_POISON_JUMP"
+      || this.boss.state === "SCORPION_POISON_TELEGRAPH"
+      || this.boss.state === "SCORPION_POISON_STRIKE"
+      || this.boss.state === "SCORPION_POISON"
+      || this.boss.state === "SCORPION_POISON_RETURN"
+      || this.boss.state === "SCORPION_JUMP_TELEGRAPH"
+      || this.boss.state === "SCORPION_JUMP"
+      || this.boss.state === "SCORPION_JUMP_LAND";
+    if (!arenaClosed) return;
     const center = this.desertArenaBarrier;
     const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * DW.scorpionArena.radius;
-    const contained = containDesertArenaPoint(this.snake, center, radius, B.snake.radius + 8);
+    const contained = blockDesertArenaCrossing(previous, this.snake, center, radius, B.snake.radius + 8)
+      ?? containDesertArenaPoint(this.snake, center, radius, B.snake.radius + 8);
     if (!contained) return;
     const angle = Math.atan2(this.snake.y - center.y, this.snake.x - center.x);
     this.snake.x = contained.x; this.snake.y = contained.y; this.snake.angle = angle;
@@ -2105,6 +2125,61 @@ export class GameScene extends Phaser.Scene {
       this.desertBarrierCooldown = 0.65;
       this.feedback(this.snake.x, this.snake.y, "ARENA DO ESCORPIÃO-REI!", 0xffd47a);
       this.cameras.main.shake(120, 0.0015); audio.play("current_flow"); haptic("coin");
+    }
+  }
+  private clearScorpionPoisonPuddles() {
+    for (const puddle of this.scorpionPoisonPuddles) puddle.image.destroy();
+    this.scorpionPoisonPuddles = [];
+  }
+  private updateScorpionPoisonPuddles(_dt: number) {
+    if (!this.scorpionPoisonPuddles.length) return;
+    for (const puddle of [...this.scorpionPoisonPuddles]) {
+      puddle.image.setAlpha(0.72 + Math.sin(this.run.elapsed * 7 + puddle.x) * 0.16);
+      const headTouched = Math.hypot(this.snake.x - puddle.x, this.snake.y - puddle.y) < 48;
+      const bodyTouched = this.snake.body.slice(1, this.snake.length).some((segment) => Math.hypot(segment.x - puddle.x, segment.y - puddle.y) < 48);
+      if (headTouched && this.bossCollisionGrace <= 0 && this.powers.invincible <= 0 && !this.powers.ghostActive) {
+        if (!this.powers.absorb()) {
+          if (!this.loseLife()) { this.die(); return; }
+          this.feedback(this.snake.x, this.snake.y, `VENENO! −1 VIDA · ♥ ${this.powers.lives}`, 0x9dff58, true);
+        } else if (this.powers.shield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+        this.bossCollisionGrace = this.boss?.definition.combat.hitInvulnerability ?? 0.8;
+        break;
+      }
+      if (bodyTouched && this.bossCollisionGrace <= 0 && this.powers.invincible <= 0 && !this.powers.ghostActive) {
+        this.powers.applyPoison();
+      }
+    }
+  }
+  private spawnScorpionPoisonPuddles(count = 24, lifetime = 45, safeDistance = 110) {
+    const arena = B.arena;
+    const puddlePositions: Point[] = this.scorpionPoisonPuddles.map(({ x, y }) => ({ x, y }));
+    const snakeSegments = [{ x: this.snake.x, y: this.snake.y }, ...this.snake.body.slice(1, this.snake.length)];
+    for (let index = 0; index < count; index++) {
+      let point: Point | undefined;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const candidate = {
+          x: Phaser.Math.Between(arena.left + 70, arena.right - 70),
+          y: Phaser.Math.Between(arena.top + 70, arena.bottom - 70),
+        };
+        const clearOfSnake = snakeSegments.every((segment) => Math.hypot(candidate.x - segment.x, candidate.y - segment.y) >= safeDistance);
+        if (clearOfSnake && puddlePositions.every((placed) => Math.hypot(candidate.x - placed.x, candidate.y - placed.y) >= 105)) {
+          point = candidate;
+          break;
+        }
+      }
+      if (!point) continue;
+      puddlePositions.push(point);
+      const { x, y } = point;
+      const puddle = this.add.graphics().setPosition(x, y).setDepth(7);
+      puddle.fillStyle(0x6d9e21, 0.28).fillEllipse(0, 0, 108, 68);
+      puddle.fillStyle(0x79d832, 0.78).fillEllipse(0, 0, 82, 48);
+      puddle.fillStyle(0xd9ff78, 0.9).fillCircle(-15, -4, 7).fillCircle(13, 8, 5);
+      puddle.lineStyle(4, 0xbaff47, 0.88).strokeEllipse(0, 0, 84, 50);
+      this.scorpionPoisonPuddles.push({ x, y, life: lifetime, image: puddle });
+    }
+    while (this.scorpionPoisonPuddles.length > 8) {
+      const oldest = this.scorpionPoisonPuddles.shift();
+      oldest?.image.destroy();
     }
   }
   private containSnakeInKrakenArena() {
@@ -2176,15 +2251,25 @@ export class GameScene extends Phaser.Scene {
     const scorpion = this.add.container(x, y).setDepth(19);
     const tail = this.add.container(0, 0);
 
-    // Raised, segmented tail and a glowing desert-stinger silhouette.
+    // Coiled, articulated tail with a pronounced scorpion stinger.
     const tailShape = this.add.graphics();
-    tailShape.lineStyle(25, 0x57331f, 1).beginPath().moveTo(25, 18).lineTo(63, -9).lineTo(82, -48).lineTo(61, -82).strokePath();
-    tailShape.lineStyle(16, 0xc87932, 1).beginPath().moveTo(25, 18).lineTo(63, -9).lineTo(82, -48).lineTo(61, -82).strokePath();
-    tailShape.fillStyle(0xf5c35c, 1).fillCircle(25, 18, 11).fillCircle(63, -9, 10).fillCircle(82, -48, 9);
+    tailShape.lineStyle(27, 0x57331f, 1).beginPath()
+      .moveTo(22, 18).lineTo(48, 26).lineTo(72, 15).lineTo(89, -7)
+      .lineTo(92, -34).lineTo(77, -55).lineTo(53, -62).lineTo(35, -49).strokePath();
+    tailShape.lineStyle(17, 0xc87932, 1).beginPath()
+      .moveTo(22, 18).lineTo(48, 26).lineTo(72, 15).lineTo(89, -7)
+      .lineTo(92, -34).lineTo(77, -55).lineTo(53, -62).lineTo(35, -49).strokePath();
+    tailShape.lineStyle(4, 0xffd275, 0.78).beginPath()
+      .moveTo(30, 17).lineTo(49, 22).lineTo(70, 12).lineTo(84, -8)
+      .lineTo(87, -33).lineTo(74, -50).lineTo(54, -56).strokePath();
+    tailShape.fillStyle(0xf5c35c, 1)
+      .fillCircle(22, 18, 12).fillCircle(48, 26, 11).fillCircle(72, 15, 10)
+      .fillCircle(89, -7, 10).fillCircle(92, -34, 9).fillCircle(77, -55, 8).fillCircle(53, -62, 7);
+    tailShape.fillStyle(0xffe18a, 0.9).fillCircle(48, 22, 3).fillCircle(72, 11, 3).fillCircle(89, -11, 3);
     const stinger = this.add.graphics();
-    stinger.fillStyle(0x533020, 1).fillTriangle(61, -93, 44, -70, 72, -72);
-    stinger.fillStyle(0xffb347, 1).fillTriangle(61, -89, 51, -72, 67, -74);
-    stinger.fillStyle(0xffe27b, 0.8).fillCircle(61, -79, 5);
+    stinger.fillStyle(0x533020, 1).fillTriangle(35, -49, 22, -35, 47, -38);
+    stinger.fillStyle(0xffb347, 1).fillTriangle(35, -46, 28, -37, 42, -39);
+    stinger.fillStyle(0xffe27b, 0.9).fillCircle(37, -43, 4);
     tail.add([tailShape, stinger]);
 
     const legs = this.add.graphics();
@@ -2322,6 +2407,16 @@ export class GameScene extends Phaser.Scene {
         }
       }
       this.bossCollisionGrace = Math.max(0, this.bossCollisionGrace - dt);
+    } else if (boss.definition.id === "scorpion-king" && boss.state === "CHASE" && collisionDistance < collisionRadius) {
+      if (this.bossCollisionGrace <= 0 && !this.powers.ghostActive && this.powers.invincible <= 0) {
+        const hadShield = this.powers.shield;
+        if (!this.powers.absorb()) {
+          if (!this.loseLife()) { this.die(); return; }
+          this.feedback(this.snake.x, this.snake.y, `ESCORPIÃO! −1 VIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
+        } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+        this.bossCollisionGrace = cfg.hitInvulnerability;
+      }
+      this.bossCollisionGrace = Math.max(0, this.bossCollisionGrace - dt);
     } else if (contact) {
       const aura = this.bossFight.combat;
       const vulnerable = boss.definition.id === "king-snake"
@@ -2443,13 +2538,26 @@ export class GameScene extends Phaser.Scene {
   }
   private bossSafePoint(minDistance = 180) {
     const arena = B.arena;
+    const scorpionArena = this.boss?.definition.id === "scorpion-king" && this.desertArenaBarrier
+      ? {
+          center: this.desertArenaBarrier,
+          radius: Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * DW.scorpionArena.radius,
+        }
+      : undefined;
     for (let attempt = 0; attempt < 40; attempt++) {
       const point = { x: Phaser.Math.Between(arena.left + 100, arena.right - 100), y: Phaser.Math.Between(arena.top + 100, arena.bottom - 100) };
+      if (scorpionArena && !isDesertArenaPickupAccessible(point, scorpionArena.center, scorpionArena.radius, B.snake.radius + 8)) continue;
       if (distance(point, this.snake) < minDistance) continue;
       if (this.boss && distance(point, this.boss.image) < 150) continue;
       if (this.obstacles.some((obstacle) => distance(point, obstacle) < 100)) continue;
       if (this.bossPickups.some((pickup) => distance(point, pickup) < 75)) continue;
       return point;
+    }
+    if (scorpionArena) {
+      const fallback = { x: arena.left + 120, y: arena.top + 120 };
+      if (isDesertArenaPickupAccessible(fallback, scorpionArena.center, scorpionArena.radius, B.snake.radius + 8)) return fallback;
+      const alternate = { x: arena.right - 120, y: arena.top + 120 };
+      if (isDesertArenaPickupAccessible(alternate, scorpionArena.center, scorpionArena.radius, B.snake.radius + 8)) return alternate;
     }
     return { x: Phaser.Math.Clamp(this.snake.x + 220, arena.left + 80, arena.right - 80), y: Phaser.Math.Clamp(this.snake.y + 180, arena.top + 80, arena.bottom - 80) };
   }
@@ -2536,6 +2644,19 @@ export class GameScene extends Phaser.Scene {
     const step = Math.min(length, speed * dt);
     boss.image.x += dx / length * step; boss.image.y += dy / length * step;
   }
+  private createKingSnakeCrown() {
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0x704616, 0.32).fillRoundedRect(-23, -42, 46, 19, 4);
+    graphics.fillStyle(0xf4b83f, 1)
+      .fillRoundedRect(-24, -47, 48, 18, 4)
+      .fillTriangle(-22, -45, -18, -67, -7, -46)
+      .fillTriangle(-8, -45, 0, -73, 8, -45)
+      .fillTriangle(7, -46, 19, -67, 23, -45);
+    graphics.lineStyle(3, 0xffe58a, 0.95).strokeRoundedRect(-19, -44, 38, 10, 3);
+    graphics.fillStyle(0xfff1a8).fillCircle(0, -58, 5);
+    graphics.fillStyle(0xf15b61).fillCircle(0, -40, 4);
+    return this.add.container(0, 0, [graphics]);
+  }
   private updateKingSnakeVisual(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const dx = boss.image.x - boss.lastVisualX, dy = boss.image.y - boss.lastVisualY;
     if (Math.hypot(dx, dy) >= 8) {
@@ -2550,6 +2671,11 @@ export class GameScene extends Phaser.Scene {
     }
     const stunnedWobble = boss.state === "STUNNED" ? Math.sin(this.run.elapsed * 18) * 0.12 : 0;
     boss.image.rotation = boss.visualAngle + stunnedWobble;
+    if (this.kingSnakeCrown) {
+      const bob = Math.sin(this.run.elapsed * (boss.state === "CHARGE" ? 17 : 4)) * (boss.state === "CHARGE" ? 2.5 : 1.5);
+      this.kingSnakeCrown.setPosition(boss.image.x, boss.image.y + bob).setRotation(boss.image.rotation * 0.82);
+      this.kingSnakeCrown.setScale(1 + Math.sin(this.run.elapsed * 5) * 0.025);
+    }
     for (let index = 0; index < boss.bodySegments.length; index++) {
       const trailIndex = (index + 1) * 6;
       const point = boss.trail[Math.min(trailIndex, boss.trail.length - 1)];
@@ -2557,6 +2683,7 @@ export class GameScene extends Phaser.Scene {
       const segment = boss.bodySegments[index];
       segment.setPosition(point.x, point.y);
       segment.rotation = Math.atan2(next.y - point.y, next.x - point.x);
+      segment.setAlpha(0.96 + Math.sin(this.run.elapsed * 5 - index * 0.7) * 0.04);
     }
   }
   private updateKrakenVisual(boss: NonNullable<GameScene["boss"]>) {
@@ -2583,20 +2710,80 @@ export class GameScene extends Phaser.Scene {
   private updateScorpionKingVisual(boss: NonNullable<GameScene["boss"]>) {
     const tail = boss.scorpionTail;
     if (!tail) return;
-    const telegraphing = boss.state === "SCORPION_STING_TELEGRAPH";
+    const specialSting = !!boss.scorpionPoisonSequence;
+    const telegraphing = boss.state === "SCORPION_STING_TELEGRAPH" || (specialSting && boss.state === "SCORPION_POISON_TELEGRAPH");
+    const strikeVisible = boss.state === "SCORPION_STING" || boss.state === "SCORPION_LAND" || (specialSting && boss.state === "SCORPION_POISON_STRIKE") || boss.state === "STUNNED" || boss.state === "RECOVER";
     const fury = boss.health <= 2;
     const pulse = Math.sin(this.run.elapsed * (telegraphing || fury ? 12 : 2.4));
-    if (boss.state === "SCORPION_STING") {
+    const jumping = boss.state === "SCORPION_POISON_JUMP" || boss.state === "SCORPION_POISON_RETURN" || boss.state === "SCORPION_JUMP";
+    const jumpProgress = boss.state === "SCORPION_JUMP" ? Phaser.Math.Clamp(1 - boss.stateTimer / 0.85, 0, 1) : 0;
+    const landing = boss.state === "SCORPION_JUMP_LAND";
+    const poisonJumpProgress = boss.state === "SCORPION_POISON_JUMP" || boss.state === "SCORPION_POISON_RETURN"
+      ? Phaser.Math.Clamp(1 - boss.stateTimer / Math.max(boss.stateTimer + 0.35, 0.9), 0, 1)
+      : 0;
+    const pinnedTail = boss.state === "SCORPION_STING" || boss.state === "SCORPION_LAND" || (specialSting && boss.state === "SCORPION_POISON_STRIKE") || boss.state === "STUNNED" || (boss.state === "RECOVER" && !!boss.scorpionStinger);
+    if (boss.state === "SCORPION_STING" || (specialSting && boss.state === "SCORPION_POISON_STRIKE")) {
       // Pin the tail tip to the ground throughout the strike instead of sweeping at a point.
       tail.rotation = 1.12;
     } else {
       tail.rotation = telegraphing ? -0.48 + pulse * 0.045 : -0.08 + pulse * 0.055;
     }
-    boss.image.setScale(1 + boss.phase * 0.035 + (telegraphing ? Math.max(0, pulse) * 0.035 : 0));
+    const jumpTelegraphPulse = boss.state === "SCORPION_JUMP_TELEGRAPH" ? Math.max(0, Math.sin(this.run.elapsed * 12)) * 0.14 : 0;
+    boss.image.setScale(1 + boss.phase * 0.035 + (telegraphing ? Math.max(0, pulse) * 0.035 : 0) + jumpTelegraphPulse + (boss.state === "SCORPION_JUMP" ? Math.sin(jumpProgress * Math.PI) * 0.55 : jumping ? Math.sin(poisonJumpProgress * Math.PI) * 0.45 : 0) + (landing ? 0.12 : 0));
     // Make the exposed/stunned window visually clear so players can time the aura hit.
     boss.image.setAlpha(boss.state === "STUNNED" ? (Math.sin(this.run.elapsed * 18) > 0 ? 0.35 : 1) : 1);
+    if (boss.state === "SCORPION_JUMP_TELEGRAPH") boss.image.setAlpha(0.7 + (Math.sin(this.run.elapsed * 12) + 1) * 0.15);
+    tail.setVisible(!pinnedTail);
     if (fury) tail.setAlpha(0.82 + Math.sin(this.run.elapsed * 15) * 0.18);
     else tail.setAlpha(1);
+    if (boss.scorpionStinger) {
+      boss.scorpionStinger.setVisible(strikeVisible);
+      if ((boss.state === "RECOVER" || (specialSting && boss.state === "SCORPION_POISON_RETURN")) && !boss.scorpionStingerRetracting) {
+        const stinger = boss.scorpionStinger;
+        boss.scorpionStingerRetracting = true;
+        this.tweens.add({
+          targets: stinger,
+          scaleX: 0,
+          alpha: 0,
+          duration: 400,
+          ease: "Sine.easeIn",
+          onComplete: () => {
+            stinger.destroy();
+            if (boss.scorpionStinger === stinger) {
+              boss.scorpionStinger = undefined;
+              boss.scorpionStingerRetracting = false;
+            }
+          },
+        });
+      }
+      if (strikeVisible && boss.state !== "RECOVER") {
+        const attackDx = boss.targetX - boss.image.x, attackDy = boss.targetY - boss.image.y;
+        const attackLength = Math.hypot(attackDx, attackDy) || 1;
+        const directionX = attackDx / attackLength, directionY = attackDy / attackLength;
+        // The tail emerges from behind the shell, not from the center of the boss.
+        const rearX = boss.image.x - directionX * 38 - directionY * 10;
+        const rearY = boss.image.y - directionY * 38 + directionX * 10;
+        const dx = boss.targetX - rearX, dy = boss.targetY - rearY;
+        const length = Math.hypot(dx, dy), scale = 0.55;
+        const wave = 20;
+        const p0 = { x: 0, y: 0 }, p1 = { x: length * 0.22, y: -wave * 0.35 };
+        const p2 = { x: length * 0.47, y: wave * 0.55 }, p3 = { x: length * 0.72, y: -wave * 0.6 };
+        const p4 = { x: length, y: 0 };
+        boss.scorpionStinger.setPosition(rearX, rearY).setRotation(Math.atan2(dy, dx));
+        boss.scorpionStinger.clear();
+        boss.scorpionStinger.lineStyle(30 * scale, 0x57331f, 1).beginPath().moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).lineTo(p2.x, p2.y).lineTo(p3.x, p3.y).lineTo(p4.x, p4.y).strokePath();
+        boss.scorpionStinger.lineStyle(19 * scale, 0xc87932, 1).beginPath().moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).lineTo(p2.x, p2.y).lineTo(p3.x, p3.y).lineTo(p4.x, p4.y).strokePath();
+        boss.scorpionStinger.lineStyle(4 * scale, 0xffd275, 0.9).beginPath().moveTo(p0.x + 5, p0.y - 3).lineTo(p1.x, p1.y - 5).lineTo(p2.x, p2.y - 5).lineTo(p3.x, p3.y - 5).strokePath();
+        for (const point of [p1, p2, p3]) {
+          boss.scorpionStinger.fillStyle(0xf5c35c, 1).fillCircle(point.x, point.y, 10 * scale);
+          boss.scorpionStinger.fillStyle(0xffe18a, 0.95).fillCircle(point.x - 2, point.y - 3, 3 * scale);
+        }
+        boss.scorpionStinger.fillStyle(0x533020, 1).fillTriangle(p4.x, p4.y, p4.x + 22 * scale, p4.y - 7 * scale, p4.x + 13 * scale, p4.y + 12 * scale);
+        boss.scorpionStinger.fillStyle(0xffb347, 1).fillTriangle(p4.x + 2 * scale, p4.y, p4.x + 15 * scale, p4.y - 5 * scale, p4.x + 10 * scale, p4.y + 7 * scale);
+        boss.scorpionStinger.fillStyle(0xffe27b, 0.9).fillCircle(p4.x + 2 * scale, p4.y, 3 * scale);
+        boss.scorpionStinger.setAlpha(boss.state === "STUNNED" ? (Math.sin(this.run.elapsed * 18) > 0 ? 0.35 : 1) : 1);
+      }
+    }
   }
   private updateKingBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const arena = B.arena;
@@ -2648,7 +2835,160 @@ export class GameScene extends Phaser.Scene {
   private updateScorpionBehavior(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const arena = B.arena, preference = this.gameDifficulty;
     const furious = boss.phase >= 2;
-    if (boss.state === "CHASE") {
+    if (boss.state === "SCORPION_POISON_JUMP") {
+      const center = this.desertArenaBarrier ?? { x: arena.left + (arena.right - arena.left) * DW.scorpionArena.x, y: arena.top + (arena.bottom - arena.top) * DW.scorpionArena.y };
+      this.moveBossToward(boss, center, 420, dt);
+      if (Math.hypot(boss.image.x - center.x, boss.image.y - center.y) <= 24 || boss.stateTimer <= 0) {
+        boss.image.setPosition(center.x, center.y).setScale(1 + boss.phase * 0.035);
+        boss.scorpionPoisonSequence = true;
+        boss.scorpionPoisonAttacks = 0;
+        boss.state = "SCORPION_POISON_TELEGRAPH";
+        boss.stateTimer = 0.9;
+        boss.targetX = center.x;
+        boss.targetY = center.y + 150;
+        this.feedback(center.x, center.y, "CAUDA CARREGANDO!", 0xffd275, true);
+        audio.play("error"); haptic("coin");
+      }
+    } else if (boss.state === "SCORPION_POISON_TELEGRAPH") {
+      if (boss.stateTimer <= 0) {
+        boss.state = "SCORPION_POISON_STRIKE";
+        boss.stateTimer = 0.45;
+        if (boss.scorpionTail && !boss.scorpionStinger) {
+          const stinger = this.add.graphics();
+          stinger.setPosition(boss.image.x, boss.image.y).setDepth(20);
+          boss.scorpionStinger = stinger;
+          boss.scorpionStingerRetracting = false;
+        }
+        this.feedback(boss.image.x, boss.image.y, "GOLPE DE VENENO! DESVIE!", 0xbaff47, true);
+        audio.play("power"); haptic("power");
+      }
+    } else if (boss.state === "SCORPION_POISON_STRIKE") {
+      if (boss.stateTimer <= 0) {
+        boss.state = "SCORPION_POISON";
+        boss.stateTimer = 0.35;
+        this.spawnScorpionPoisonPuddles();
+        this.cameras.main.shake(220, 0.003);
+        this.particles.explode(28, boss.image.x, boss.image.y);
+        this.feedback(boss.image.x, boss.image.y, "VENENO ESPALHADO!", 0xbaff47, true);
+      }
+    } else if (boss.state === "SCORPION_POISON") {
+      if (boss.stateTimer <= 0) {
+        if ((boss.scorpionPoisonAttacks ?? 0) >= 3) {
+          const center = this.desertArenaBarrier ?? { x: arena.left + (arena.right - arena.left) * DW.scorpionArena.x, y: arena.top + (arena.bottom - arena.top) * DW.scorpionArena.y };
+          const radius = Math.min(arena.right - arena.left, arena.bottom - arena.top) * DW.scorpionArena.radius;
+          const dx = boss.image.x - center.x, dy = boss.image.y - center.y, length = Math.hypot(dx, dy) || 1;
+          boss.targetX = Phaser.Math.Clamp(center.x + dx / length * (radius + 150), arena.left + 70, arena.right - 70);
+          boss.targetY = Phaser.Math.Clamp(center.y + dy / length * (radius + 150), arena.top + 70, arena.bottom - 70);
+          boss.state = "SCORPION_POISON_RETURN";
+          boss.stateTimer = Math.hypot(boss.targetX - boss.image.x, boss.targetY - boss.image.y) / Math.max(boss.speed * 2.4, 220) + 0.15;
+          this.feedback(center.x, center.y, "O ESCORPIÃO VAI SALTAR PARA FORA!", 0xffa34b, true);
+          return;
+        }
+        boss.state = "SCORPION_STING_TELEGRAPH";
+        boss.stateTimer = bossAttackTiming(boss.definition.combat.telegraphDuration * (furious ? 0.78 : 0.9), preference, 0.65);
+        const dx = this.snake.x - boss.image.x, dy = this.snake.y - boss.image.y, length = Math.hypot(dx, dy) || 1;
+        boss.chargeX = dx / length; boss.chargeY = dy / length;
+        boss.targetX = Phaser.Math.Clamp(this.snake.x, arena.left + 64, arena.right - 64);
+        boss.targetY = Phaser.Math.Clamp(this.snake.y, arena.top + 64, arena.bottom - 64);
+        for (const marker of this.bossMarkers) marker.destroy();
+        const marker = this.add.graphics().fillStyle(0xff493c, 0.15).fillCircle(boss.targetX, boss.targetY, 96).lineStyle(8, 0xff6547, 0.88).strokeCircle(boss.targetX, boss.targetY, 84).lineStyle(3, 0xffdc58, 0.72).lineBetween(boss.image.x, boss.image.y, boss.targetX, boss.targetY).setDepth(8);
+        this.bossMarkers.push(marker);
+        this.feedback(boss.targetX, boss.targetY, `PICADA DE VENENO! ${(boss.scorpionPoisonAttacks ?? 0) + 1}/3 · DESVIE!`, 0xffa34b, true);
+        audio.play("error"); haptic("coin");
+      }
+    } else if (boss.state === "SCORPION_POISON_RETURN") {
+      this.moveBossToward(boss, { x: boss.targetX, y: boss.targetY }, Math.max(boss.speed * 2.4, 220), dt);
+      if (boss.stateTimer <= 0) {
+        boss.image.setPosition(boss.targetX, boss.targetY).setScale(1 + boss.phase * 0.035);
+        const jumpAfterPoison = boss.scorpionJumpAttackPending;
+        boss.scorpionPoisonSequence = false;
+        boss.scorpionPoisonAttacks = 0;
+        boss.scorpionJumpAttackPending = false;
+        const jumpAttack = jumpAfterPoison || boss.health <= 2;
+        boss.scorpionJumpAttackActive = jumpAttack;
+        boss.state = jumpAttack ? "SCORPION_JUMP_TELEGRAPH" : "CHASE";
+        boss.stateTimer = jumpAttack
+          ? bossAttackTiming(boss.definition.combat.telegraphDuration, preference, 0.9)
+          : bossAttackTiming(boss.definition.combat.attackCooldown, preference, 1.4);
+        if (jumpAttack) {
+          boss.scorpionJumpStartX = boss.image.x;
+          boss.scorpionJumpStartY = boss.image.y;
+          boss.stateTargetX = Phaser.Math.Clamp(this.snake.x, arena.left + 80, arena.right - 80);
+          boss.stateTargetY = Phaser.Math.Clamp(this.snake.y, arena.top + 80, arena.bottom - 80);
+          const marker = this.add.graphics().fillStyle(0xff493c, 0.2).fillCircle(boss.stateTargetX, boss.stateTargetY, 118)
+            .lineStyle(9, 0xff6547, 0.95).strokeCircle(boss.stateTargetX, boss.stateTargetY, 104)
+            .lineStyle(4, 0xffdc58, 0.85).strokeCircle(boss.stateTargetX, boss.stateTargetY, 88).setDepth(8);
+          this.bossMarkers.push(marker);
+          this.feedback(boss.stateTargetX, boss.stateTargetY, "SALTO! DESVIE!", 0xffa34b, true);
+          audio.play("error"); haptic("coin");
+        }
+      }
+    } else if (boss.state === "SCORPION_JUMP_TELEGRAPH") {
+      if (boss.stateTimer <= 0) {
+        for (const marker of this.bossMarkers) marker.destroy();
+        this.bossMarkers = [];
+        boss.targetX = boss.stateTargetX ?? this.snake.x;
+        boss.targetY = boss.stateTargetY ?? this.snake.y;
+        boss.state = "SCORPION_JUMP";
+        boss.stateTimer = 0.85;
+        boss.scorpionJumpStartX = boss.image.x;
+        boss.scorpionJumpStartY = boss.image.y;
+        audio.play("power"); haptic("power");
+      }
+    } else if (boss.state === "SCORPION_JUMP") {
+      const jumpDuration = 0.85;
+      const progress = Phaser.Math.Clamp(1 - boss.stateTimer / jumpDuration, 0, 1);
+      const startX = boss.scorpionJumpStartX ?? boss.image.x;
+      const startY = boss.scorpionJumpStartY ?? boss.image.y;
+      boss.image.setPosition(Phaser.Math.Linear(startX, boss.targetX, progress), Phaser.Math.Linear(startY, boss.targetY, progress));
+      if (boss.stateTimer <= 0) {
+        boss.image.setPosition(boss.targetX, boss.targetY).setScale(1 + boss.phase * 0.035);
+        const hitHead = Math.hypot(this.snake.x - boss.targetX, this.snake.y - boss.targetY) < 118;
+        const hitBody = this.snake.body.slice(1, this.snake.length).some((segment) => Math.hypot(segment.x - boss.targetX, segment.y - boss.targetY) < 118);
+        this.spawnScorpionPoisonPuddles(2, Number.POSITIVE_INFINITY, 150);
+        if ((hitHead || hitBody) && this.bossCollisionGrace <= 0 && this.powers.invincible <= 0 && !this.powers.ghostActive) {
+          const shield = this.powers.shield;
+          const absorbed = this.powers.absorb();
+          if (!absorbed && hitHead) {
+            if (!this.loseLife()) { this.die(); return; }
+            this.feedback(this.snake.x, this.snake.y, `ESMAGADO! −1 VIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
+          } else if (!absorbed && hitBody) {
+            this.snake.length = Math.max(B.snake.initial, this.snake.length - 5);
+            this.feedback(this.snake.x, this.snake.y, "ESMAGADO! −5 SEGMENTOS", 0xff7867, true);
+          } else if (shield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+          this.bossCollisionGrace = boss.definition.combat.hitInvulnerability;
+        }
+        this.cameras.main.shake(350, 0.006);
+        this.particles.explode(32, boss.image.x, boss.image.y);
+        audio.play("error"); haptic("power");
+        boss.state = "SCORPION_JUMP_LAND";
+        boss.stateTimer = 0.45;
+        this.feedback(boss.image.x, boss.image.y, "ATERRISSOU! VULNERÁVEL!", 0xffdc58, true);
+      }
+    } else if (boss.state === "SCORPION_JUMP_LAND" && boss.stateTimer <= 0) {
+      boss.scorpionJumpAttackActive = false;
+      boss.state = "STUNNED";
+      boss.stateTimer = 3;
+      this.feedback(boss.image.x, boss.image.y, "VULNERÁVEL! ATAQUE COM A AURA!", 0xffdc58, true);
+      if (this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((pickup) => pickup.kind === "crown-orb")) {
+        const pickup = this.bossSafePoint(130);
+        this.spawnBossPickupAt("crown-orb", pickup.x, pickup.y, "🦂", 0xffa34b);
+      }
+    } else if (boss.state === "CHASE") {
+      if (boss.health <= 2 && boss.stateTimer <= 0) {
+        boss.scorpionJumpAttackActive = true;
+        boss.state = "SCORPION_JUMP_TELEGRAPH";
+        boss.stateTimer = bossAttackTiming(boss.definition.combat.telegraphDuration, preference, 0.9);
+        boss.stateTargetX = Phaser.Math.Clamp(this.snake.x, arena.left + 80, arena.right - 80);
+        boss.stateTargetY = Phaser.Math.Clamp(this.snake.y, arena.top + 80, arena.bottom - 80);
+        const marker = this.add.graphics().fillStyle(0xff493c, 0.2).fillCircle(boss.stateTargetX, boss.stateTargetY, 118)
+          .lineStyle(9, 0xff6547, 0.95).strokeCircle(boss.stateTargetX, boss.stateTargetY, 104)
+          .lineStyle(4, 0xffdc58, 0.85).strokeCircle(boss.stateTargetX, boss.stateTargetY, 88).setDepth(8);
+        this.bossMarkers.push(marker);
+        this.feedback(boss.stateTargetX, boss.stateTargetY, "SALTO! DESVIE!", 0xffa34b, true);
+        audio.play("error"); haptic("coin");
+        return;
+      }
       this.moveBossToward(boss, this.snake, boss.speed * (furious ? 1.35 : 0.92 + boss.phase * 0.12), dt);
       if (boss.stateTimer <= 0) {
         boss.state = "SCORPION_STING_TELEGRAPH";
@@ -2668,6 +3008,12 @@ export class GameScene extends Phaser.Scene {
       if (boss.stateTimer <= 0) {
         for (const marker of this.bossMarkers) marker.destroy(); this.bossMarkers = [];
         boss.state = "SCORPION_STING"; boss.stateTimer = 0.55;
+        if (boss.scorpionTail && !boss.scorpionStinger) {
+          const stinger = this.add.graphics();
+          stinger.setPosition(boss.image.x, boss.image.y).setDepth(20);
+          boss.scorpionStinger = stinger;
+          boss.scorpionStingerRetracting = false;
+        }
         audio.play("power"); haptic("power");
       }
     } else if (boss.state === "SCORPION_STING") {
@@ -2676,15 +3022,39 @@ export class GameScene extends Phaser.Scene {
         const hitBody = this.snake.body.slice(1, this.snake.length).some((segment) => Math.hypot(segment.x - boss.targetX, segment.y - boss.targetY) < 84);
         if ((hitHead || hitBody) && this.bossCollisionGrace <= 0 && this.powers.invincible <= 0 && !this.powers.ghostActive) {
           const shield = this.powers.shield;
-          if (!this.powers.absorb()) {
-            if (hitHead && !this.loseLife()) { this.die(); return; }
-            if (!hitHead) this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
+          const absorbed = this.powers.absorb();
+          if (hitHead) {
+            if (!absorbed) {
+              if (!this.loseLife()) { this.die(); return; }
+              this.feedback(this.snake.x, this.snake.y, `PICADA! −1 VIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
+            } else if (shield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+          } else if (!absorbed) {
+            this.snake.length = Math.max(B.snake.initial, this.snake.length - 3);
+            this.feedback(this.snake.x, this.snake.y, "PICADA! −3 SEGMENTOS", 0xff7867, true);
           } else if (shield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
           this.bossCollisionGrace = boss.definition.combat.hitInvulnerability;
-          this.feedback(boss.targetX, boss.targetY, "PICADA!", 0xff7867, true);
+          if (!hitHead) this.feedback(boss.targetX, boss.targetY, "PICADA!", 0xff7867, true);
         }
-        boss.state = "SCORPION_LAND"; boss.stateTimer = 0.45;
-        this.feedback(boss.image.x, boss.image.y, "VULNERÁVEL! PREPARE A AURA!", 0xffdc58, true);
+        if (boss.scorpionPoisonSequence) {
+          boss.scorpionPoisonAttacks = (boss.scorpionPoisonAttacks ?? 0) + 1;
+          if (boss.scorpionPoisonAttacks >= 3) {
+            const center = this.desertArenaBarrier ?? { x: arena.left + (arena.right - arena.left) * DW.scorpionArena.x, y: arena.top + (arena.bottom - arena.top) * DW.scorpionArena.y };
+            const radius = Math.min(arena.right - arena.left, arena.bottom - arena.top) * DW.scorpionArena.radius;
+            const dx = boss.image.x - center.x, dy = boss.image.y - center.y, length = Math.hypot(dx, dy) || 1;
+            boss.targetX = Phaser.Math.Clamp(center.x + dx / length * (radius + 150), arena.left + 70, arena.right - 70);
+            boss.targetY = Phaser.Math.Clamp(center.y + dy / length * (radius + 150), arena.top + 70, arena.bottom - 70);
+            boss.state = "SCORPION_POISON_RETURN";
+            boss.stateTimer = Math.hypot(boss.targetX - boss.image.x, boss.targetY - boss.image.y) / Math.max(boss.speed * 2.4, 220) + 0.15;
+            this.feedback(center.x, center.y, "O ESCORPIÃO VAI SALTAR PARA FORA!", 0xffa34b, true);
+          } else {
+            boss.state = "SCORPION_POISON";
+            boss.stateTimer = 3;
+            this.feedback(boss.image.x, boss.image.y, `FERROADA ${boss.scorpionPoisonAttacks}/3!`, 0xff7867, true);
+          }
+        } else {
+          boss.state = "SCORPION_LAND"; boss.stateTimer = 0.45;
+          this.feedback(boss.image.x, boss.image.y, "VULNERÁVEL! PREPARE A AURA!", 0xffdc58, true);
+        }
       }
     } else if (boss.state === "SCORPION_LAND" && boss.stateTimer <= 0) {
       boss.state = "STUNNED";
@@ -2925,6 +3295,7 @@ export class GameScene extends Phaser.Scene {
   }
   private damageBoss() {
     if (!this.boss) return;
+    const previousHealth = this.boss.health;
     this.boss.health--;
     if (this.boss.health > 0) {
       const thresholds = this.boss.definition.phases;
@@ -2949,6 +3320,23 @@ export class GameScene extends Phaser.Scene {
           this.bossCurrent = undefined; this.bossWhirlpool?.clear();
         }
       }
+      const crossedPoisonThreshold = previousHealth > 5 && this.boss.health <= 5 || previousHealth > 2 && this.boss.health <= 2;
+      if (this.boss.definition.id === "scorpion-king" && crossedPoisonThreshold) {
+        this.boss.scorpionJumpAttackPending = previousHealth > 2 && this.boss.health <= 2;
+        const arena = B.arena;
+        const radius = Math.min(arena.right - arena.left, arena.bottom - arena.top) * DW.scorpionArena.radius;
+        const center = this.desertArenaBarrier ?? { x: arena.left + (arena.right - arena.left) * DW.scorpionArena.x, y: arena.top + (arena.bottom - arena.top) * DW.scorpionArena.y };
+        const dx = this.boss.image.x - center.x, dy = this.boss.image.y - center.y;
+        const distance = Math.hypot(dx, dy) || 1;
+        this.boss.targetX = center.x + dx / distance * (radius + 150);
+        this.boss.targetY = center.y + dy / distance * (radius + 150);
+        this.boss.state = "SCORPION_POISON_JUMP";
+        this.boss.stateTimer = Math.hypot(dx, dy) / 420 + 0.35;
+        this.boss.scorpionJumpStartX = this.boss.image.x;
+        this.boss.scorpionJumpStartY = this.boss.image.y;
+        this.feedback(center.x, center.y, "O ESCORPIÃO VAI SALTAR!", 0xffa34b, true);
+        audio.play("error"); haptic("coin");
+      }
       if (this.boss.definition.id === "kraken" && this.boss.health <= 2 && !this.boss.krakenHealAttempted) {
         this.boss.krakenHealAttempted = true;
         this.boss.state = "KRAKEN_HEAL"; this.boss.stateTimer = 9;
@@ -2971,10 +3359,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const defeated = this.boss.definition;
+    this.clearScorpionPoisonPuddles();
     const defeatedX = this.boss.image.x, defeatedY = this.boss.image.y;
     this.particles.explode(30, defeatedX, defeatedY);
     for (const segment of this.boss.bodySegments) segment.destroy();
-    this.boss.image.destroy(); this.boss = undefined;
+    this.boss.scorpionStinger?.destroy();
+    this.boss.image.destroy(); this.kingSnakeCrown?.destroy(); this.kingSnakeCrown = undefined; this.boss = undefined;
     this.krakenBarrier?.destroy(); this.krakenBarrier = undefined;
     this.desertArenaBarrier?.destroy(); this.desertArenaBarrier = undefined;
     this.krakenBarrierCooldown = 0;

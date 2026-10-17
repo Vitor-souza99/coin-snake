@@ -26,7 +26,7 @@ import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegr
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
-import { containDesertArenaPoint, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis } from "../src/game/data/desertWorld";
+import { containDesertArenaPoint, blockDesertArenaCrossing, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { addXP } from "../src/game/systems/EconomySystem";
@@ -658,6 +658,11 @@ describe("Desert world mechanics", () => {
     expect(containDesertArenaPoint({ x: 650, y: 400 }, center, radius, 10)).toBeNull();
     const contained = containDesertArenaPoint({ x: 530, y: 440 }, center, radius, 10)!;
     expect(Math.hypot(contained.x - center.x, contained.y - center.y)).toBeCloseTo(110);
+    expect(blockDesertArenaCrossing({ x: 650, y: 400 }, { x: 350, y: 400 }, center, radius, 10)).toEqual({ x: 650, y: 400 });
+    expect(blockDesertArenaCrossing({ x: 530, y: 400 }, { x: 650, y: 400 }, center, radius, 10)).toEqual({ x: 610, y: 400 });
+    expect(blockDesertArenaCrossing({ x: 650, y: 400 }, { x: 640, y: 400 }, center, radius, 10)).toBeNull();
+    expect(isDesertArenaPickupAccessible(center, center, radius, 22)).toBe(false);
+    expect(isDesertArenaPickupAccessible({ x: 622, y: 400 }, center, radius, 22)).toBe(true);
     expect(desertRegions(0, 0, 1000, 800).find((region) => region.id === "scorpion_arena")?.x).toBe(760);
   });
 });

@@ -69,6 +69,35 @@ export function containDesertArenaPoint(point: Point, center: Point, radius: num
   return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 
+/** Blocks a movement step that would cross into or through the Scorpion arena. */
+export function blockDesertArenaCrossing(from: Point, to: Point, center: Point, radius: number, clearance: number): Point | null {
+  const limit = radius + clearance;
+  const fromX = from.x - center.x, fromY = from.y - center.y;
+  const fromDistance = Math.hypot(fromX, fromY);
+  if (fromDistance < limit) {
+    const toX = to.x - center.x, toY = to.y - center.y;
+    const toDistance = Math.hypot(toX, toY) || 1;
+    return { x: center.x + toX / toDistance * limit, y: center.y + toY / toDistance * limit };
+  }
+
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const travelSquared = dx * dx + dy * dy;
+  if (travelSquared === 0) return null;
+  const closestT = Math.max(0, Math.min(1, -((from.x - center.x) * dx + (from.y - center.y) * dy) / travelSquared));
+  const closestX = from.x + dx * closestT - center.x;
+  const closestY = from.y + dy * closestT - center.y;
+  if (Math.hypot(closestX, closestY) >= limit) return null;
+
+  // Keep the snake at its previous position; this also prevents a fast step
+  // from tunneling all the way through and ending outside on the far side.
+  return { x: from.x, y: from.y };
+}
+
+/** Boss pickups must spawn beyond the blocked rim so the snake can reach them. */
+export function isDesertArenaPickupAccessible(point: Point, center: Point, radius: number, clearance: number): boolean {
+  return Math.hypot(point.x - center.x, point.y - center.y) >= radius + clearance;
+}
+
 export function inDesertOasis(point: Point, regions: DesertRegion[]): boolean {
   const oasis = regions.find((region) => region.id === "oasis");
   return !!oasis && Math.abs(point.x - oasis.x) <= oasis.width / 2 && Math.abs(point.y - oasis.y) <= oasis.height / 2;
