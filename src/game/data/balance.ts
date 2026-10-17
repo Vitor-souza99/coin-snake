@@ -108,7 +108,7 @@ export const B = {
     maxObstacles: 16,
     warningSeconds: 2,
   },
-  boss: { greenValleyEnergyRequired: 350, candyWorldEnergyRequired: 400, desertEnergyRequired: 450, defaultEnergyRequired: 500 },
+  boss: { greenValleyEnergyRequired: 350, candyWorldEnergyRequired: 400, oceanEnergyRequired: 450, desertEnergyRequired: 500, defaultEnergyRequired: 500 },
   xp: { perRun: 25, scoreDivisor: 20, perMission: 75, firstLevel: 175, perLevelIncrease: 75 },
   prices: [0, 500, 1000, 2000, 5000],
   spawn: { attempts: 120, edge: 34, bodyClearance: 44, headClearance: 200 },

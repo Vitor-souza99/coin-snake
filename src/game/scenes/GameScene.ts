@@ -1993,6 +1993,7 @@ export class GameScene extends Phaser.Scene {
       ? B.boss.greenValleyEnergyRequired
       : bossId === "candy-monster"
         ? B.boss.candyWorldEnergyRequired
+        : bossId === "kraken" ? B.boss.oceanEnergyRequired
         : bossId === "scorpion-king" ? B.boss.desertEnergyRequired
         : B.boss.defaultEnergyRequired;
   }

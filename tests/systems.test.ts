@@ -412,6 +412,8 @@ describe("combo and balance", () => {
   it("requires 400 Boss Energy for Candy and preserves the other boss thresholds", () => {
     expect(B.boss.candyWorldEnergyRequired).toBe(400);
     expect(B.boss.greenValleyEnergyRequired).toBe(350);
+    expect(B.boss.oceanEnergyRequired).toBe(450);
+    expect(B.boss.desertEnergyRequired).toBe(500);
     expect(B.boss.defaultEnergyRequired).toBe(500);
   });
   it("caps difficulty and limits angular velocity", () => {
