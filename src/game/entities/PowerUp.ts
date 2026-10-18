@@ -17,14 +17,15 @@ export class PowerUp {
       ? powerups.filter((power) => power.id === "life")
       : powerups.filter((power) => power.id !== "life");
     this.kind = weighted(options);
-    this.image = s.add.image(x, y, `power-${this.kind.id}`);
+    this.image = s.add.image(x, y, `power-${this.kind.id}`).setDepth(12);
     this.label = s.add
       .text(x, y, this.kind.symbol, {
         fontSize: "26px",
         fontStyle: "bold",
         color: "#163f36",
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(13);
   }
   destroy() {
     this.image.destroy();

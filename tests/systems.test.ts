@@ -259,6 +259,22 @@ describe("boss entry hints", () => {
   });
 });
 describe("boss attack aura", () => {
+  it("charges the Spider Queen stalactite aura with four Boss Coins and consumes one hit", () => {
+    const combat = new BossCombatSystem();
+    const spider = bosses.find((boss) => boss.id === "spider-queen")!;
+
+    for (let coin = 0; coin < 4; coin++) {
+      combat.addCharge(spider.combat.attackChargePerBossCoin);
+    }
+
+    expect(combat.attackCharge).toBe(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "spider-stalactite", bossId: spider.id })).toBe(true);
+    expect(combat.consumeHit("king-snake")).toBe(false);
+    expect(combat.consumeHit(spider.id)).toBe(true);
+    expect(combat.consumeHit(spider.id)).toBe(false);
+    expect(combat.active).toBe(false);
+  });
+
   it("activates Candy aura as a pursuit state and clears a pending attack", () => {
     const combat = new BossCombatSystem();
     combat.addCharge(100);

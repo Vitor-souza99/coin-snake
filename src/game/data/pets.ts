@@ -20,7 +20,7 @@ export const pets: PetDefinition[] = [
     name: "Escorpiãozinho",
     symbol: "🦂",
     rarity: "EPIC",
-    description: "+5% na duração do Turbo.",
+    description: "No Covil da Aranha, ataca e elimina um filhote a cada 4 segundos.",
     unlockedBy: "Derrote o Escorpião-Rei.",
     unlockType: "BOSS",
     bossRewardId: "scorpion-king",

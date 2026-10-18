@@ -94,6 +94,7 @@ export class GameScene extends Phaser.Scene {
   private worldPortal?: Phaser.GameObjects.Container;
   private worldPassages: Phaser.GameObjects.Container[] = [];
   private secretSpiderPassage?: Phaser.GameObjects.Container;
+  private spiderExitWeb?: Phaser.GameObjects.Graphics;
   private cloverPassage?: Phaser.GameObjects.Container;
   private bossPortal?: Phaser.GameObjects.Container;
   private bossIntroOpen = false;
@@ -117,6 +118,8 @@ export class GameScene extends Phaser.Scene {
   private portalSystem = new PortalSystem();
   private worldSpeedMultiplier = 1;
   private stickyZones: StickyZone[] = [];
+  private spiderWebZones: Array<{ zone: StickyZone; graphic: Phaser.GameObjects.Graphics; expiresAt: number }> = [];
+  private spiderWebSlow = 1;
   private stickyGraphics?: Phaser.GameObjects.Graphics;
   private stickySpeed = 1;
   private stickyFeedbackAt = 0;
@@ -148,6 +151,19 @@ export class GameScene extends Phaser.Scene {
   private cloverObjects: Phaser.GameObjects.Container[] = [];
   private desertArenaBarrier?: Phaser.GameObjects.Container;
   private desertBarrierCooldown = 0;
+  private spiderArena?: Phaser.GameObjects.Container;
+  private spiderStalactite?: Phaser.GameObjects.Container;
+  private spiderStalactiteBaseY = 0;
+  private spiderStalactiteReady = false;
+  private spiderStalactiteFalling = false;
+  private spiderWebTimer = 0;
+  private spiderBossCoinTimer = 0;
+  private spiderArenaCooldown = 0;
+  private spiderlings: Array<{ image: Phaser.GameObjects.Container; x: number; y: number; speed: number }> = [];
+  private spiderlingTimer = 9;
+  private spiderlingWave = 0;
+  private scorpionlingCooldown = 0;
+  private scorpionlingAttack?: { target: Phaser.GameObjects.Container; startX: number; startY: number; phase: "outbound" | "returning"; elapsed: number };
   private masteryCredited = false;
   constructor() {
     super("Game");
@@ -183,6 +199,7 @@ export class GameScene extends Phaser.Scene {
     this.worldPortal = undefined;
     this.worldPassages = [];
     this.secretSpiderPassage?.destroy(); this.secretSpiderPassage = undefined;
+    this.spiderExitWeb = undefined;
     this.cloverPassage?.destroy(); this.cloverPassage = undefined;
     this.cloverObjects = [];
     this.worldTransitioning = false;
@@ -203,6 +220,15 @@ export class GameScene extends Phaser.Scene {
     this.bossPortalExpiresAt = 0;
     this.boss?.image.destroy();
     this.boss = undefined;
+    this.spiderArena?.destroy(); this.spiderArena = undefined;
+    this.spiderStalactite?.destroy(); this.spiderStalactite = undefined;
+    this.spiderArenaCooldown = 0;
+    this.spiderStalactiteReady = false; this.spiderStalactiteFalling = false;
+    this.spiderWebTimer = 0; this.spiderBossCoinTimer = 0;
+    this.spiderlings.forEach(({ image }) => image.destroy()); this.spiderlings = [];
+    this.spiderArenaCooldown = 0; this.spiderlingTimer = 9; this.spiderlingWave = 0;
+    this.scorpionlingCooldown = 0;
+    this.scorpionlingAttack = undefined;
     this.bossPickups = [];
     this.bossMarkers = [];
     this.bossCurrent = undefined;
@@ -335,10 +361,47 @@ export class GameScene extends Phaser.Scene {
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
-      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xff7043 : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0xb875ed : 0xe783d0;
-      petGraphic.fillStyle(petColor).fillCircle(0, 0, 12);
-      petGraphic.lineStyle(2, 0xffffff).strokeCircle(0, 0, 12);
+      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xff7043 : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0xb875ed : save.profile.selectedPet === "scorpionling" ? 0xf5a642 : 0xe783d0;
+      if (save.profile.selectedPet !== "scorpionling") {
+        petGraphic.fillStyle(petColor).fillCircle(0, 0, 12);
+        petGraphic.lineStyle(2, 0xffffff).strokeCircle(0, 0, 12);
+      }
       if (["bee", "firefly"].includes(save.profile.selectedPet ?? "")) petGraphic.lineStyle(2, 0xffffff).lineBetween(-17, -8, -9, -3).lineBetween(9, -3, 17, -8);
+      if (save.profile.selectedPet === "scorpionling") {
+        // Miniature of the Scorpion King's silhouette: broad armored shell,
+        // forward claws, six side legs, and a large curled tail overhead.
+        petGraphic.lineStyle(2, 0x57331f, 1);
+        for (const side of [-1, 1]) {
+          for (let leg = 0; leg < 3; leg++) {
+            const startY = -1 + leg * 4;
+            petGraphic.beginPath().moveTo(side * 5, startY).lineTo(side * 10, startY + 2).lineTo(side * 13, startY + 6).strokePath();
+            petGraphic.fillStyle(0xe6a34c, 1).fillCircle(side * 10, startY + 2, 1.2);
+          }
+        }
+        const tailPoints = [[2, 6], [7, 8], [11, 5], [13, 1], [12, -4], [9, -8], [5, -9]];
+        petGraphic.lineStyle(4, 0x57331f, 1).beginPath().moveTo(tailPoints[0][0], tailPoints[0][1]);
+        for (const [x, y] of tailPoints.slice(1)) petGraphic.lineTo(x, y);
+        petGraphic.strokePath();
+        petGraphic.lineStyle(2.5, 0xc87932, 1).beginPath().moveTo(tailPoints[0][0], tailPoints[0][1]);
+        for (const [x, y] of tailPoints.slice(1)) petGraphic.lineTo(x, y);
+        petGraphic.strokePath();
+        petGraphic.fillStyle(0xf5c35c, 1);
+        for (const [x, y] of tailPoints) petGraphic.fillCircle(x, y, 1.8);
+        petGraphic.fillStyle(0x57331f, 1).fillEllipse(0, 3, 20, 15);
+        petGraphic.fillStyle(0xb9672c, 1).fillEllipse(0, 2, 17, 12);
+        petGraphic.fillStyle(0xe39a3f, 1).fillEllipse(0, 0, 13, 9);
+        petGraphic.fillStyle(0xffd275, 0.8).fillEllipse(-3, -2, 5, 2.5);
+        petGraphic.lineStyle(1, 0x8c4928, 1).lineBetween(-5, 1, -2, 3).lineBetween(0, 0, 2, 3).lineBetween(5, 1, 3, 4);
+        petGraphic.lineStyle(3, 0x57331f, 1).beginPath().moveTo(-5, -1).lineTo(-10, 1).lineTo(-13, -2).strokePath()
+          .beginPath().moveTo(5, -1).lineTo(10, 1).lineTo(13, -2).strokePath();
+        petGraphic.lineStyle(1.5, 0xf5c35c, 1).beginPath().moveTo(-10, 1).lineTo(-13, 4).moveTo(-10, 1).lineTo(-14, 0)
+          .moveTo(10, 1).lineTo(13, 4).moveTo(10, 1).lineTo(14, 0).strokePath();
+        petGraphic.fillStyle(0xffe992, 1).fillCircle(-3, -2, 1.2).fillCircle(3, -2, 1.2);
+        petGraphic.fillStyle(0x3b251d, 1).fillCircle(-3, -2, 0.6).fillCircle(3, -2, 0.6);
+        petGraphic.fillStyle(0x533020, 1).fillTriangle(5, -9, 2, -6, 7, -6);
+        petGraphic.fillStyle(0xffb347, 1).fillTriangle(5, -8, 3, -6, 6, -6);
+        petGraphic.lineStyle(1.5, 0xffffff, 0.9).strokeEllipse(0, 1, 31, 31);
+      }
       this.petSprite = this.add.container(this.snake.x, this.snake.y + 28, [petGraphic]).setDepth(25);
     }
     this.ui.on("#pause", () => this.requestPause());
@@ -461,7 +524,10 @@ export class GameScene extends Phaser.Scene {
           ...this.worldPassages.map(({ x, y }) => ({ x, y })),
           { x: a.left + 90, y: a.top + (a.bottom - a.top) * 0.5 },
         ];
-        if (cavePoints.some((point) => distance(p, point) < 150)) continue;
+        const center = { x: (a.left + a.right) / 2, y: (a.top + a.bottom) / 2 };
+        const spiderArenaRadius = Math.min(a.right - a.left, a.bottom - a.top) * 0.2;
+        if (cavePoints.some((point) => distance(p, point) < 150)
+          || distance(p, center) < spiderArenaRadius + 135) continue;
       }
       if (this.currentWorld === "green-valley" && this.secretSpiderPassage?.active
         && distance(p, this.secretSpiderPassage) < 150) continue;
@@ -487,6 +553,10 @@ export class GameScene extends Phaser.Scene {
     return null;
   }
   private fillCoins(count: number) {
+    if (this.currentWorld === "spider-lair") {
+      this.fillSpiderLairCoins(count);
+      return;
+    }
     let active = this.coins.filter((c) => c.active).length;
     for (const coin of this.coins) {
       if (active >= count) break;
@@ -511,6 +581,48 @@ export class GameScene extends Phaser.Scene {
         coin.image.setTexture(`coin-${selected.id}`);
         coin.label.setText(selected.label);
       }
+      active++;
+    }
+  }
+  private fillSpiderLairCoins(count: number) {
+    const arena = B.arena;
+    const width = arena.right - arena.left;
+    const height = arena.bottom - arena.top;
+    const center = { x: (arena.left + arena.right) / 2, y: (arena.top + arena.bottom) / 2 };
+    const safeRadius = Math.min(width, height) * 0.2 + 150;
+    const cavePoints = [
+      ...this.worldPassages.map(({ x, y }) => ({ x, y })),
+      { x: arena.left + 90, y: arena.top + height * 0.5 },
+    ];
+    const candidates = [
+      { x: arena.left + width * 0.12, y: arena.top + height * 0.22 },
+      { x: arena.left + width * 0.5, y: arena.top + height * 0.2 },
+      { x: arena.left + width * 0.88, y: arena.top + height * 0.22 },
+      { x: arena.left + width * 0.12, y: arena.top + height * 0.78 },
+      { x: arena.left + width * 0.5, y: arena.top + height * 0.8 },
+      { x: arena.left + width * 0.88, y: arena.top + height * 0.78 },
+      { x: arena.left + width * 0.2, y: arena.top + height * 0.5 },
+      { x: arena.left + width * 0.8, y: arena.top + height * 0.5 },
+      { x: arena.left + width * 0.35, y: arena.top + height * 0.12 },
+      { x: arena.left + width * 0.65, y: arena.top + height * 0.88 },
+    ];
+    const canUse = (point: Point) =>
+      Math.hypot(point.x - center.x, point.y - center.y) >= safeRadius
+      && cavePoints.every((cave) => Math.hypot(point.x - cave.x, point.y - cave.y) >= 150)
+      && Math.hypot(point.x - this.snake.x, point.y - this.snake.y) >= 100
+      && !this.snake.body.some((segment) => Math.hypot(point.x - segment.x, point.y - segment.y) < B.spawn.bodyClearance)
+      && !this.obstacles.some((obstacle) => Math.hypot(point.x - obstacle.x, point.y - obstacle.y) < obstacle.radius + 55)
+      && !this.coins.some((coin) => coin.active && Math.hypot(point.x - coin.x, point.y - coin.y) < 65)
+      && (!this.boss || Math.hypot(point.x - this.boss.image.x, point.y - this.boss.image.y) >= 120);
+
+    let active = this.coins.filter((coin) => coin.active).length;
+    for (const coin of this.coins) {
+      if (active >= count) break;
+      if (coin.active) continue;
+      let point: Point | null = candidates.find(canUse) ?? null;
+      if (!point) point = this.validPoint(B.spawn.bodyClearance, 100);
+      if (!point) break;
+      coin.spawn(point.x, point.y, ["firefly", "bee"].includes(save.profile.selectedPet ?? "") ? "firefly" : false, this.powers.luckyStar > 0);
       active++;
     }
   }
@@ -612,7 +724,6 @@ export class GameScene extends Phaser.Scene {
       if (index >= 0) this.obstacles.splice(index, 1);
     }
     this.abyssMovingObstacles = [];
-    if (this.currentWorld === "silent-abyss") this.abyssObstacleTimer = Number.POSITIVE_INFINITY;
   }
   private addLollipop(x: number, y: number, scale: number) {
     const g = this.add.graphics().setPosition(x, y).setDepth(5);
@@ -982,16 +1093,175 @@ export class GameScene extends Phaser.Scene {
     }
     this.renderStickyZones();
   }
-  private renderStickyZones(){const g=this.stickyGraphics;if(!g)return;g.clear();for(const z of this.stickyZones)g.fillStyle(0xd77cbb,0.38).fillEllipse(z.x,z.y,z.radius*2,z.radius*1.25).lineStyle(4,0xa9468a,0.7).strokeEllipse(z.x,z.y,z.radius*2,z.radius*1.25);}
+  private renderStickyZones(){const g=this.stickyGraphics;if(!g)return;g.clear();for(const z of this.stickyZones){if(this.currentWorld==="spider-lair")continue;g.fillStyle(0xd77cbb,0.38).fillEllipse(z.x,z.y,z.radius*2,z.radius*1.25).lineStyle(4,0xa9468a,0.7).strokeEllipse(z.x,z.y,z.radius*2,z.radius*1.25);}}
   private updateSpiderWebs(dt: number) {
     const boss = this.boss;
     if (!boss) return;
+    if (boss.health <= 4) {
+      this.spiderWebTimer -= dt;
+      if (this.spiderWebTimer <= 0) {
+        this.spiderWebTimer = 4.5;
+        const arena = B.arena;
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.min(arena.right - arena.left, arena.bottom - arena.top) * 0.17;
+        const x = Phaser.Math.Clamp(this.spiderArena!.x + Math.cos(angle) * radius, arena.left + 105, arena.right - 105);
+        const y = Phaser.Math.Clamp(this.spiderArena!.y + Math.sin(angle) * radius, arena.top + 105, arena.bottom - 105);
+        this.spawnSpiderWeb(x, y, 132);
+      }
+    }
     const inside = this.stickyZones.some((zone) => Math.hypot(this.snake.x - zone.x, this.snake.y - zone.y) < zone.radius);
     const wasSticky = this.stickySpeed < 0.99;
     this.stickySpeed = stickySpeedMultiplier(this.stickySpeed, inside, dt);
     if (inside && !wasSticky && this.run.elapsed >= this.stickyFeedbackAt) {
       this.stickyFeedbackAt = this.run.elapsed + CW.sticky.feedbackCooldown;
       this.feedback(this.snake.x, this.snake.y, "TEIA! VELOCIDADE REDUZIDA", 0xdca9f2);
+    }
+  }
+  private spawnSpiderWeb(x: number, y: number, webRadius: number) {
+    const marker = this.add.graphics().setPosition(x, y).setDepth(8)
+      .fillStyle(0xdca9f2, 0.12).fillCircle(0, 0, webRadius)
+      .lineStyle(4, 0xe7c3ff, 0.85).strokeCircle(0, 0, webRadius * 0.82);
+    this.tweens.add({ targets: marker, alpha: 0.22, scale: 1.08, duration: 380, yoyo: true,
+      onComplete: () => {
+        if (!marker.active) return;
+        marker.destroy();
+        if (!this.boss || this.boss.definition.id !== "spider-queen") return;
+        const web = this.add.graphics().setPosition(x, y).setDepth(7).lineStyle(3, 0xf0c8ff, 0.85);
+        for (let ring = 1; ring <= 5; ring++) web.strokeCircle(0, 0, webRadius * ring / 5);
+        for (let spoke = 0; spoke < 12; spoke++) {
+          const angle = spoke * Math.PI / 6;
+          web.lineBetween(0, 0, Math.cos(angle) * webRadius, Math.sin(angle) * webRadius);
+        }
+        const zone: StickyZone = { x, y, radius: webRadius };
+        const maxWebs = this.boss.health <= 4 ? 7 : 4;
+        while (this.spiderWebZones.length >= maxWebs) {
+          const oldest = this.spiderWebZones.shift()!;
+          oldest.graphic.destroy();
+          const index = this.stickyZones.indexOf(oldest.zone);
+          if (index >= 0) this.stickyZones.splice(index, 1);
+        }
+        this.spiderWebZones.push({ zone, graphic: web, expiresAt: this.time.now + 15000 });
+        this.stickyZones.push(zone);
+        this.tweens.add({ targets: web, alpha: 0.62, duration: 900, yoyo: true, repeat: -1 });
+        this.renderStickyZones();
+      },
+    });
+  }
+  private updateSpiderlings(dt: number) {
+    if (this.currentWorld !== "spider-lair" || this.boss?.definition.id !== "spider-queen") {
+      for (const spiderling of this.spiderlings) spiderling.image.destroy();
+      this.spiderlings = [];
+      this.scorpionlingAttack = undefined;
+      return;
+    }
+    const attack = this.scorpionlingAttack;
+    if (attack && this.petSprite) {
+      attack.elapsed += dt;
+      if (attack.phase === "outbound") {
+        const progress = Math.min(1, attack.elapsed / 0.32);
+        this.petSprite.setPosition(
+          Phaser.Math.Linear(attack.startX, attack.target.x, progress),
+          Phaser.Math.Linear(attack.startY, attack.target.y, progress),
+        );
+        if (progress >= 1) {
+          if (this.spiderlings.some((spiderling) => spiderling.image === attack.target)) {
+            attack.target.destroy();
+            this.spiderlings = this.spiderlings.filter((spiderling) => spiderling.image !== attack.target);
+            this.feedback(attack.target.x, attack.target.y, "ESCORPIÃOZINHO ATACA!", 0xffc35e, true);
+            audio.play("shield_break"); haptic("power");
+          }
+          attack.phase = "returning";
+          attack.elapsed = 0;
+        }
+      } else {
+        const tail = this.snake.body[Math.min(this.snake.length - 1, 5)];
+        const phase = this.run.elapsed * 3;
+        const returnX = tail.x + Math.cos(phase) * 13;
+        const returnY = tail.y + 26 + Math.sin(phase) * 5;
+        const progress = Math.min(1, attack.elapsed / 0.38);
+        this.petSprite.setPosition(
+          Phaser.Math.Linear(attack.startX, returnX, progress),
+          Phaser.Math.Linear(attack.startY, returnY, progress),
+        );
+        if (progress >= 1) this.scorpionlingAttack = undefined;
+      }
+    }
+    if (!this.scorpionlingAttack && save.profile.selectedPet === "scorpionling" && this.scorpionlingCooldown <= 0 && this.spiderlings.length > 0 && this.petSprite) {
+      const target = [...this.spiderlings]
+        .sort((a, b) => distance(a, this.petSprite!) - distance(b, this.petSprite!))[0];
+      this.scorpionlingAttack = {
+        target: target.image,
+        startX: this.petSprite.x,
+        startY: this.petSprite.y,
+        phase: "outbound",
+        elapsed: 0,
+      };
+      this.scorpionlingCooldown = 4;
+      return;
+    }
+    for (const spiderling of [...this.spiderlings]) {
+      const dx = this.snake.x - spiderling.x, dy = this.snake.y - spiderling.y;
+      const length = Math.hypot(dx, dy) || 1;
+      spiderling.x += dx / length * spiderling.speed * dt;
+      spiderling.y += dy / length * spiderling.speed * dt;
+      spiderling.image.setPosition(spiderling.x, spiderling.y).setRotation(Math.atan2(dy, dx));
+      if (length < B.snake.radius + 12) {
+        if (this.powers.blocksAttack()) {
+          this.feedback(this.snake.x, this.snake.y, this.powers.shield ? "ESCUDO!" : "PROTEGIDO!", 0x70cfff, true);
+        } else if (this.snake.length <= B.snake.initial) {
+          if (!this.loseLife()) { this.die(); return; }
+          this.feedback(this.snake.x, this.snake.y, `FILHOTE! −1 VIDA · ♥ ${this.powers.lives}`, 0xff5b78, true);
+        } else {
+          this.snake.length = Math.max(B.snake.initial, this.snake.length - 5);
+          this.feedback(this.snake.x, this.snake.y, "FILHOTE! −5 SEGMENTOS", 0xdca9f2, true);
+        }
+        spiderling.image.destroy();
+        this.spiderlings.splice(this.spiderlings.indexOf(spiderling), 1);
+      }
+    }
+  }
+  private spawnSpiderling() {
+    this.spiderlingTimer = 12;
+    this.spiderlingWave++;
+    const waveCount = this.spiderlingWave >= 3 ? 5 : 3;
+    const speed = Math.min(110, 74 + (this.spiderlingWave - 1) * 6);
+    const startAngle = Math.random() * Math.PI * 2;
+    for (let index = 0; index < waveCount; index++) {
+      const angle = startAngle + Math.PI * 2 * index / waveCount;
+      const x = Phaser.Math.Clamp(this.snake.x + Math.cos(angle) * 420, B.arena.left + 55, B.arena.right - 55);
+      const y = Phaser.Math.Clamp(this.snake.y + Math.sin(angle) * 420, B.arena.top + 55, B.arena.bottom - 55);
+      const image = this.add.container(x, y).setDepth(19);
+      const graphic = this.add.graphics().fillStyle(0x201526).fillCircle(0, 0, 13)
+        .fillStyle(0xdfa6ef).fillCircle(-5, -4, 2).fillCircle(5, -4, 2)
+        .lineStyle(3, 0x9c70b4).beginPath();
+      for (const side of [-1, 1]) for (let leg = 0; leg < 3; leg++) {
+        const yy = -4 + leg * 5;
+        graphic.moveTo(side * 5, yy).lineTo(side * 13, yy - 5).lineTo(side * 17, yy + 1);
+      }
+      graphic.strokePath(); image.add(graphic);
+      this.spiderlings.push({ image, x, y, speed });
+    }
+    this.feedback(this.snake.x, this.snake.y, `ONDA ${this.spiderlingWave} · ${waveCount} FILHOTES!`, 0xdca9f2, true);
+  }
+  private containSnakeInSpiderArena(previous: Point) {
+    const boss = this.boss;
+    if (!boss || boss.definition.id !== "spider-queen" || !this.spiderArena) return;
+    const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * 0.2;
+    const dx = this.snake.x - this.spiderArena.x, dy = this.snake.y - this.spiderArena.y;
+    const length = Math.hypot(dx, dy);
+    if (length >= radius + B.snake.radius + 8) return;
+    const angle = length > 0.001 ? Math.atan2(dy, dx) : Math.atan2(previous.y - this.spiderArena.y, previous.x - this.spiderArena.x);
+    const safeRadius = radius + B.snake.radius + 9;
+    this.snake.x = this.spiderArena.x + Math.cos(angle) * safeRadius;
+    this.snake.y = this.spiderArena.y + Math.sin(angle) * safeRadius;
+    this.snake.angle = angle;
+    this.snake.body[0].x = this.snake.x; this.snake.body[0].y = this.snake.y;
+    this.snake.moveVector(0, angle, 0, { x: 0, y: 0 });
+    this.steering.reset(angle); this.aim = null;
+    if (this.spiderArenaCooldown <= 0) {
+      this.spiderArenaCooldown = 0.7;
+      this.feedback(this.snake.x, this.snake.y, "ARENA DA ARANHA!", 0xdca9f2);
+      audio.play("current_flow"); haptic("coin");
     }
   }
   update(_time: number, delta: number) {
@@ -1067,7 +1337,7 @@ export class GameScene extends Phaser.Scene {
     const playerSpeed = d.speed * this.worldSpeedMultiplier * (this.powers.slowed > 0 ? B.hazard.slowMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionSpeed : 1) *
       (this.currentWorld === "candy-world"
         ? candyFinalSpeed(1, this.turbo.active ? B.power.turboSpeed : 1, this.stickySpeed) * (inCandyRiver(this.snake, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom) ? CW.river.slowMultiplier : 1)
-        : this.currentWorld === "spider-lair" ? (this.turbo.active ? B.power.turboSpeed : 1) * this.stickySpeed
+        : this.currentWorld === "spider-lair" ? (this.turbo.active ? B.power.turboSpeed : 1) * this.spiderWebSlow
         : this.currentWorld === "desert" ? (this.turbo.active ? B.power.turboSpeed : 1) * (inDesertOasis(this.snake, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) ? DW.oasisSlowMultiplier : 1)
         : this.turbo.active ? B.power.turboSpeed : 1);
     const steeringTarget = this.steering.update(target, dt);
@@ -1095,6 +1365,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (this.currentWorld === "ocean") this.containSnakeInKrakenArena();
+    if (this.currentWorld === "spider-lair") this.containSnakeInSpiderArena(previousSnakePosition);
     if (this.currentWorld === "desert") this.containSnakeInScorpionArena(previousSnakePosition);
     this.updateScorpionPoisonPuddles(dt);
     this.updateAbyssObstacles(dt);
@@ -1125,7 +1396,19 @@ export class GameScene extends Phaser.Scene {
         const standingInHoney = this.candyHoneyZones.some((zone) => Math.hypot(this.snake.x - zone.x, this.snake.y - zone.y) < zone.radius);
         if (standingInHoney && this.candyAttackSlow > 0) this.candyAttackSlow = Math.max(this.candyAttackSlow, dt + 0.01);
       }
-      const insideSticky = this.stickyZones.some((zone) => Math.hypot(this.snake.x-zone.x,this.snake.y-zone.y)<zone.radius);
+      for (let i = this.spiderWebZones.length - 1; i >= 0; i--) {
+        const web = this.spiderWebZones[i];
+        if (web.expiresAt <= this.time.now) {
+          web.graphic.destroy();
+          this.spiderWebZones.splice(i, 1);
+          const zoneIndex = this.stickyZones.indexOf(web.zone);
+          if (zoneIndex >= 0) this.stickyZones.splice(zoneIndex, 1);
+          this.renderStickyZones();
+        }
+      }
+      const insideSpiderWeb = this.currentWorld === "spider-lair" && this.spiderWebZones.some(({ zone }) => Math.hypot(this.snake.x - zone.x, this.snake.y - zone.y) < zone.radius);
+      this.spiderWebSlow += ((insideSpiderWeb ? 0.38 : 1) - this.spiderWebSlow) * (1 - Math.exp(-dt / 0.35));
+      const insideSticky = this.currentWorld === "candy-world" && this.stickyZones.some((zone) => Math.hypot(this.snake.x-zone.x,this.snake.y-zone.y)<zone.radius);
       const wasSticky = this.stickySpeed < 0.99;
       this.stickySpeed = stickySpeedMultiplier(this.stickySpeed, insideSticky, dt);
       if (insideSticky && !wasSticky && this.run.elapsed >= this.stickyFeedbackAt) {
@@ -1134,7 +1417,7 @@ export class GameScene extends Phaser.Scene {
         audio.play("power"); haptic("coin");
       }
       if (this.currentWorld === "candy-world" && Math.floor(this.run.elapsed/CW.sticky.spawnInterval)!==Math.floor((this.run.elapsed-dt)/CW.sticky.spawnInterval) && Math.random()<0.65) this.spawnStickyZones(1);
-      if (this.currentWorld === "spider-lair" && Math.floor(this.run.elapsed/CW.sticky.spawnInterval)!==Math.floor((this.run.elapsed-dt)/CW.sticky.spawnInterval) && Math.random()<0.5) this.spawnStickyZones(1);
+      // The lair uses fixed cave walls instead of recurring sticky hazards.
       if (this.currentWorld === "spider-lair" && this.boss?.definition.id === "spider-queen") this.updateSpiderWebs(dt);
       this.candyCoinTimer-=dt;
       if(!this.candyCoinSpawned&&this.candyCoinTimer<=0&&candyCoinSpawnAllowed(this.currentWorld,Math.random(),CW.candyCoin.chance)){const slot=this.coins.find(c=>!c.active),p=this.validPoint(B.spawn.bodyClearance,110);if(slot&&p){slot.spawnCandy(p.x,p.y);this.candyCoinSpawned=true;}}
@@ -1149,12 +1432,17 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (!this.boss && this.currentWorld === "green-valley" && this.secretSpiderPassage?.visible && distance(this.snake, this.secretSpiderPassage) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
-      // The entrance is on Green Valley's right side; enterWorld places the snake
-      // on the opposite (left) edge, so face inward rather than into the wall.
+      // The entrance is on Green Valley's upper-right; enterWorld places the snake
+      // just inside the opposite (left) edge of the lair, facing inward.
       this.enterWorld("spider-lair", "right", this.secretSpiderPassage.y, 0);
       return;
     }
     if (this.currentWorld === "spider-lair" && !this.worldTransitioning && this.passageCooldown <= 0) {
+      if (this.worldPortal?.visible && distance(this.snake, this.worldPortal) < 72
+        && this.worldPortal.getData("blockedByWeb")) {
+        this.ui.toast(this.worldPortal.getData("entryHint") as string);
+        this.passageCooldown = 1.5;
+      }
       const cave = this.worldPassages.find((item) => Math.hypot(this.snake.x - item.x, this.snake.y - item.y) <= B.snake.radius + 6);
       if (cave) {
         const destinations = this.worldPassages.filter((item) => item !== cave);
@@ -1189,7 +1477,7 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
-    if (!this.boss && this.currentWorld === "spider-lair" && this.worldPortal?.visible && distance(this.snake, this.worldPortal) < 58 && !this.worldTransitioning && this.passageCooldown <= 0) {
+    if (!this.boss && this.currentWorld === "spider-lair" && this.worldPortal?.visible && !this.worldPortal.getData("blockedByWeb") && distance(this.snake, this.worldPortal) < 58 && !this.worldTransitioning && this.passageCooldown <= 0) {
       this.enterWorld("green-valley", "left", B.arena.top + 140, 0);
       return;
     }
@@ -1427,7 +1715,7 @@ export class GameScene extends Phaser.Scene {
       Math.floor((this.run.elapsed - dt) * 2)
     ) {
       this.fillCoins(d.coins);
-      if (this.obstacles.length < d.obstacles) this.spawnObstacle();
+      if (this.currentWorld !== "spider-lair" && this.obstacles.length < d.obstacles) this.spawnObstacle();
     }
   }
   private renderSnake() {
@@ -1475,13 +1763,18 @@ export class GameScene extends Phaser.Scene {
             && distance(coin, this.snake) <= 185)
           .sort((a, b) => distance(a, this.petSprite!) - distance(b, this.petSprite!))[0]
         : undefined;
-      const targetX = nearbyCoin?.x ?? tail.x + Math.cos(phase) * 13;
-      const targetY = nearbyCoin?.y ?? tail.y + 26 + Math.sin(phase) * 5;
+      const interceptedSpiderling = this.scorpionlingAttack?.phase === "outbound"
+        ? this.spiderlings.find((spiderling) => spiderling.image === this.scorpionlingAttack?.target)
+        : undefined;
+      const targetX = interceptedSpiderling?.x ?? nearbyCoin?.x ?? tail.x + Math.cos(phase) * 13;
+      const targetY = interceptedSpiderling?.y ?? nearbyCoin?.y ?? tail.y + 26 + Math.sin(phase) * 5;
       const follow = Math.min(1, (this.game.loop.delta / 1000) * 5);
-      this.petSprite.setPosition(
-        Phaser.Math.Linear(this.petSprite.x, targetX, follow),
-        Phaser.Math.Linear(this.petSprite.y, targetY, follow),
-      );
+      if (!this.scorpionlingAttack) {
+        this.petSprite.setPosition(
+          Phaser.Math.Linear(this.petSprite.x, targetX, follow),
+          Phaser.Math.Linear(this.petSprite.y, targetY, follow),
+        );
+      }
       this.petSprite.setScale(1 + Math.sin(phase) * 0.06);
     }
     this.ring.clear();
@@ -1717,7 +2010,7 @@ export class GameScene extends Phaser.Scene {
     this.snake.grow();
     if (coin.kind.id !== "pearl_coin") this.turbo.charge(coin.kind.id);
     if (this.boss) {
-      if (this.boss.definition.id !== "candy-monster") {
+      if (this.boss.definition.id !== "candy-monster" && this.boss.definition.id !== "spider-queen") {
         const charge = this.boss.definition.combat.attackChargePerBossCoin;
         this.bossFight.combat.addCharge(coin.kind.id === "golden" || coin.kind.id === "mythic" ? charge * 2 : charge);
       }
@@ -1769,23 +2062,15 @@ export class GameScene extends Phaser.Scene {
         .fillTriangle(x - 44, a.top + 20, x + 42, a.top + 20, x + (i % 2 ? 22 : -18), a.top + topDepth)
         .fillTriangle(x - 40, a.bottom - 20, x + 44, a.bottom - 20, x + (i % 2 ? -20 : 16), a.bottom - bottomDepth);
     }
-    // Five cave mouths are scattered outside the central chamber.
+    // Four fixed cave mouths are distributed across the upper and lower map bands,
+    // clear of both the central spider arena and the rock shelves.
     const caveMouths: Point[] = [
-      { x: a.left + w * 0.28, y: a.top + h * 0.32 },
-      { x: a.left + w * 0.72, y: a.top + h * 0.68 },
+      { x: a.left + w * 0.28, y: a.top + h * 0.30 },
+      { x: a.left + w * 0.72, y: a.top + h * 0.30 },
+      { x: a.left + w * 0.28, y: a.top + h * 0.70 },
+      { x: a.left + w * 0.72, y: a.top + h * 0.70 },
     ];
     const center = { x: a.left + w / 2, y: a.top + h / 2 };
-    const minimumCenterDistance = Math.min(w, h) * 0.22;
-    const minimumCaveDistance = 230;
-    for (let attempt = 0; caveMouths.length < 5 && attempt < 1000; attempt++) {
-      const candidate = {
-        x: Phaser.Math.Between(a.left + 190, a.right - 190),
-        y: Phaser.Math.Between(a.top + 190, a.bottom - 190),
-      };
-      if (distance(candidate, center) < minimumCenterDistance) continue;
-      if (caveMouths.some((mouth) => distance(candidate, mouth) < minimumCaveDistance)) continue;
-      caveMouths.push(candidate);
-    }
     caveMouths.forEach((mouth) => {
       const radius = 14;
       g.fillStyle(0x090a10, 1).fillCircle(mouth.x, mouth.y + 4, radius - 5);
@@ -1795,12 +2080,74 @@ export class GameScene extends Phaser.Scene {
         this.add.container(mouth.x, mouth.y).setDepth(2).setSize((radius - 5) * 2, (radius - 5) * 2).setData("destination", "cave-pair"),
       );
     });
+    // Fixed rock shelves create a cave silhouette while leaving clear travel
+    // lanes from the central chamber to every cave mouth and the world exit.
+    const shelves = [
+      { x: a.left + w * 0.17, y: a.top + h * 0.13, width: 250, height: 42, flip: false },
+      { x: a.left + w * 0.83, y: a.top + h * 0.13, width: 220, height: 38, flip: true },
+      { x: a.left + w * 0.16, y: a.top + h * 0.87, width: 230, height: 40, flip: true },
+      { x: a.left + w * 0.84, y: a.top + h * 0.87, width: 250, height: 42, flip: false },
+      { x: a.left + w * 0.50, y: a.top + h * 0.08, width: 300, height: 34, flip: false },
+      { x: a.left + w * 0.49, y: a.top + h * 0.92, width: 280, height: 38, flip: true },
+    ];
+    const safeWallPoints = [
+      ...caveMouths,
+      { x: a.left + 90, y: a.top + h * 0.5 },
+      center,
+    ];
+    shelves.forEach(({ x, y, width, height, flip }, index) => {
+      const half = width / 2;
+      const points = flip
+        ? [new Phaser.Geom.Point(-half, -height / 2), new Phaser.Geom.Point(-half * 0.68, height / 2), new Phaser.Geom.Point(half * 0.18, height * 0.32), new Phaser.Geom.Point(half, -height / 2)]
+        : [new Phaser.Geom.Point(-half, height / 2), new Phaser.Geom.Point(-half * 0.55, -height / 2), new Phaser.Geom.Point(half * 0.25, -height * 0.32), new Phaser.Geom.Point(half, height / 2)];
+      g.fillStyle(0x171720, 0.55).fillEllipse(x, y + height * 0.35, width * 1.08, height * 0.9)
+        .fillStyle(index % 2 ? 0x45424c : 0x393741, 0.98)
+        .fillPoints(points.map((point) => new Phaser.Geom.Point(x + point.x, y + point.y)), true)
+        .lineStyle(2, 0x716b78, 0.68)
+        .lineBetween(x - half * 0.55, y - height * 0.25, x + half * 0.2, y - height * 0.3);
+      // Collision is represented by fixed rock segments only where the
+      // shelf cannot obstruct a cave exit, the return portal, or the chamber.
+      for (const segment of [-1, 0, 1]) {
+        const rockX = x + segment * 58;
+        if (safeWallPoints.some((point) => Math.hypot(rockX - point.x, y - point.y) < 190)) continue;
+        const rock = this.add.image(rockX, y, "rock").setVisible(false);
+        this.obstacles.push(new Obstacle(rockX, y, rock, true, 30));
+      }
+    });
     const label = this.add.text(a.left + w * 0.5, a.top + h * 0.16, "COVIL DA ARANHA · CAVERNA SUBTERRÂNEA", { fontSize: "20px", color: "#dfc7f1", fontStyle: "bold", backgroundColor: "#171923bb", padding: { x: 10, y: 6 } }).setOrigin(0.5).setDepth(3);
     this.desertObjects.push(g, label);
-    const exit = this.add.graphics().fillStyle(0x080b10, 1).fillEllipse(0, 3, 74, 38).lineStyle(6, 0x77717f, 0.95).strokeEllipse(0, 0, 82, 44).lineStyle(3, 0xc5a6e3, 0.8).strokeEllipse(0, -3, 70, 35);
-    const exitLabel = this.add.text(0, 32, "SAÍDA · GREEN VALLEY", { fontSize: "12px", color: "#e6d4f5", fontStyle: "bold", backgroundColor: "#171923bb", padding: { x: 5, y: 3 } }).setOrigin(0.5);
-    this.worldPortal = this.add.container(a.left + 90, a.top + h * 0.5, [exit, exitLabel]).setDepth(9);
+    const exit = this.add.graphics().fillStyle(0xffffff, 0.96).fillEllipse(0, 3, 74, 38)
+      .lineStyle(6, 0xffffff, 1).strokeEllipse(0, 0, 82, 44)
+      .lineStyle(3, 0xe5d9f5, 0.95).strokeEllipse(0, -3, 70, 35);
+    const exitLabel = this.add.text(0, 32, "SAÍDA · GREEN VALLEY", { fontSize: "12px", color: "#f7f1ff", fontStyle: "bold", backgroundColor: "#171923dd", padding: { x: 5, y: 3 } }).setOrigin(0.5);
+    this.worldPortal = this.add.container(a.left + 90, a.top + 90, [exit, exitLabel]).setDepth(9);
     this.worldPortal.setData("destination", "green-valley");
+    if (!save.profile.bossesDefeated.includes("spider-queen")) {
+      this.spiderExitWeb = this.add.graphics().setPosition(this.worldPortal.x, this.worldPortal.y).setDepth(10);
+      this.drawSpiderExitWeb();
+      this.tweens.add({ targets: this.spiderExitWeb, alpha: 0.48, duration: 620, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.worldPortal.setData("blockedByWeb", true);
+      this.worldPortal.setData("entryHint", "A teia bloqueia a saída. Derrote a Aranha Real para escapar do Covil!");
+    }
+  }
+  private drawSpiderExitWeb() {
+    const web = this.spiderExitWeb;
+    if (!web) return;
+    web.clear();
+    web.lineStyle(4, 0xe9d8f5, 0.95);
+    for (let spoke = 0; spoke < 8; spoke++) {
+      const angle = spoke * Math.PI / 4;
+      web.lineBetween(0, 0, Math.cos(angle) * 39, Math.sin(angle) * 19);
+    }
+    for (const radius of [0.35, 0.65, 1]) {
+      web.beginPath();
+      for (let point = 0; point <= 48; point++) {
+        const angle = point * Math.PI * 2 / 48;
+        const x = Math.cos(angle) * 39 * radius, y = Math.sin(angle) * 19 * radius;
+        if (point === 0) web.moveTo(x, y); else web.lineTo(x, y);
+      }
+      web.strokePath();
+    }
   }
   private buildSpiderEntrance() {
     const a = B.arena;
@@ -1814,6 +2161,7 @@ export class GameScene extends Phaser.Scene {
       .fillTriangle(-67, -5, -44, -51, -22, -8).fillTriangle(45, -4, 65, -48, 82, 2)
       .fillStyle(0x8a8b7a, 1).fillTriangle(-47, -8, -28, -38, -13, -9).fillTriangle(52, -9, 65, -37, 74, -7)
       .setDepth(7);
+    cave.setPosition(0, 0);
     const label = this.add.text(0, 52, "COVIL DA ARANHA", { fontSize: "13px", color: "#f0e6c8", fontStyle: "bold", backgroundColor: "#20241dcc", padding: { x: 7, y: 4 } }).setOrigin(0.5);
     this.secretSpiderPassage = this.add.container(x, y, [cave, label]).setDepth(9).setSize(112, 76);
     for (const obstacle of [...this.obstacles]) {
@@ -1914,11 +2262,22 @@ export class GameScene extends Phaser.Scene {
   }
   private enterWorld(id: string, sourceSide: "left" | "right", sourceY: number, direction: number) {
     if (this.worldTransitioning) return;
+    if (this.currentWorld === "spider-lair" && id === "green-valley"
+      && !save.profile.bossesDefeated.includes("spider-queen")) {
+      this.ui.toast("A teia bloqueia a saída. Derrote a Aranha Real para escapar do Covil!");
+      return;
+    }
     if (id === "clover-garden") { this.ui.toast("Entre pelo portal secreto no Candy World."); return; }
     this.worldTransitioning = true;
-    this.cloverPassage?.destroy(); this.cloverPassage = undefined;
     for (const clover of this.cloverObjects) clover.destroy(); this.cloverObjects = [];
     const world = worldById(id);
+    if (this.currentWorld === "spider-lair" || world.id === "spider-lair") {
+      for (const obstacle of this.obstacles) obstacle.destroy();
+      this.obstacles = [];
+      for (const web of this.spiderWebZones) web.graphic.destroy();
+      this.spiderWebZones = [];
+      this.spiderWebSlow = 1;
+    }
     if (this.currentWorld !== "silent-abyss") { this.worldPortal?.destroy(); this.worldPortal = undefined; }
     this.abyssPortal?.destroy(); this.abyssPortal = undefined;
     for (const passage of this.worldPassages) passage.destroy();
@@ -1939,8 +2298,15 @@ export class GameScene extends Phaser.Scene {
     const arena = B.arena;
     const entrySide = sourceSide === "left" ? "right" : "left";
     const spiderReturn = id === "green-valley" && this.currentWorld === "spider-lair";
-    const entryX = spiderReturn ? arena.right - 140 : entrySide === "left" ? arena.left + 48 : arena.right - 48;
-    const entryY = spiderReturn ? arena.top + 140 : Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
+    const spiderArrival = id === "spider-lair";
+    const spiderWeb = this.spiderExitWeb;
+    if (spiderReturn && spiderWeb) {
+      this.tweens.killTweensOf(spiderWeb);
+      spiderWeb.destroy();
+      this.spiderExitWeb = undefined;
+    }
+    const entryX = spiderReturn ? arena.right - 140 : spiderArrival ? arena.left + 90 : entrySide === "left" ? arena.left + 48 : arena.right - 48;
+    const entryY = spiderReturn ? arena.top + 140 : spiderArrival ? arena.top + 180 : Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
     this.snake.reset(entryX, entryY, direction);
     this.steering.reset(direction);
     this.resetControls();
@@ -2028,19 +2394,10 @@ export class GameScene extends Phaser.Scene {
     if (world.id === "spider-lair") {
       this.worldPassages = [];
       this.buildSpiderLair(this.add.graphics().setDepth(1));
-      const caveClearancePoints = [
-        ...this.worldPassages.map(({ x, y }) => ({ x, y })),
-        { x: arena.left + 90, y: arena.top + (arena.bottom - arena.top) * 0.5 },
-      ];
-      for (const obstacle of [...this.obstacles]) {
-        if (!caveClearancePoints.some((point) => distance(obstacle, point) < 150)) continue;
-        obstacle.destroy();
-        this.obstacles.splice(this.obstacles.indexOf(obstacle), 1);
-      }
       this.stickyGraphics = this.add.graphics().setDepth(4);
       this.stickyZones = [];
       this.stickySpeed = 1;
-      this.spawnStickyZones(3);
+      for (const coin of this.coins) coin.hide();
     }
     else for(const obstacle of [...this.obstacles]) if(this.candyWorldObjects.some((object)=>object===obstacle.image)){obstacle.destroy();this.obstacles.splice(this.obstacles.indexOf(obstacle),1);}
     if (world.id !== "ocean") for (const coin of this.coins) if (coin.active && coin.kind.id === "pearl_coin") coin.hide();
@@ -2065,7 +2422,7 @@ export class GameScene extends Phaser.Scene {
       arrivalDetails.push("Rajadas de areia desviam seu movimento; oásis reduzem levemente a velocidade e oferecem uma rota mais calma.");
     }
     if (world.id === "silent-abyss" && !save.profile.abyssChallengeCompleted) arrivalDetails.push("Desafio: sobreviva por 90 segundos para desbloquear a Serpente Abissal.");
-    this.ui.worldArrival(world.id, world.name, arrivalDetails);
+    if (world.id !== "spider-lair") this.ui.worldArrival(world.id, world.name, arrivalDetails);
     this.worldPortal?.destroy(); this.worldPortal = undefined;
     this.refreshWorldPassages({ side: entrySide, y: entryY });
     this.refreshSecretSpiderPassage();
@@ -2080,7 +2437,21 @@ export class GameScene extends Phaser.Scene {
     this.worldTransitioning = false;
     if (world.id !== "spider-lair" && world.bossId && bosses.some((boss) => boss.id === world.bossId))
       this.spawnBossPortal(world.bossId);
-    if (world.id === "spider-lair" && world.bossId && bosses.some((boss) => boss.id === world.bossId)) this.startBoss(bosses.find((boss) => boss.id === world.bossId)!);
+    if (world.id === "spider-lair") {
+      this.halted = true;
+      this.resetControls();
+      this.overlay = this.ui.modal(
+        "Bem-vinda ao Covil da Aranha!",
+        "Este é um mapa secreto: a Aranha Real está no centro, protegida por uma arena. Desvie das teias anunciadas e dos filhotes que perseguem sua cabeça. Ao fim de cada ataque, colete a pérola de ataque e alcance o alvo brilhante na borda da arena para ferir a aranha. A saída branca fica bloqueada por uma teia até você derrotá-la.",
+        [{ label: "Continuar", run: () => {
+          this.continue();
+          if (this.currentWorld === "spider-lair" && !this.boss && world.bossId) {
+            const spiderBoss = bosses.find((boss) => boss.id === world.bossId);
+            if (spiderBoss) this.startBoss(spiderBoss);
+          }
+        } }],
+      );
+    }
   }
   private spawnBossPortal(bossId: string) {
     if (this.bossPortal || this.dead) return;
@@ -2124,11 +2495,12 @@ export class GameScene extends Phaser.Scene {
     this.bossCollisionGrace = 0;
     const initialX = isKraken
       ? B.arena.left + (B.arena.right - B.arena.left) * OW.krakenArena.x
-      : isScorpionKing || isSpiderQueen ? B.arena.left + (B.arena.right - B.arena.left) * 0.72
+      : isScorpionKing ? B.arena.left + (B.arena.right - B.arena.left) * 0.72
+      : isSpiderQueen ? B.arena.left + (B.arena.right - B.arena.left) * 0.5
       : this.snake.x + 240;
     const initialY = isKraken
       ? B.arena.top + (B.arena.bottom - B.arena.top) * OW.krakenArena.y
-      : isScorpionKing || isSpiderQueen ? B.arena.top + (B.arena.bottom - B.arena.top) * 0.55
+      : isScorpionKing || isSpiderQueen ? B.arena.top + (B.arena.bottom - B.arena.top) * 0.5
       : this.snake.y;
     const isKingSnake = definition.id === "king-snake";
     const isCandyBee = definition.id === "candy-monster";
@@ -2155,17 +2527,26 @@ export class GameScene extends Phaser.Scene {
     const preference = this.gameDifficulty;
     const attackCooldown = bossAttackTiming(definition.combat.attackCooldown, preference, 1.5);
     const boss = this.boss = { definition, health: definition.maxHealth, phase: 0, attack: attackCooldown, speed: bossMovementSpeed(definition.movementSpeed, preference), image, bodySegments, trail, visualAngle: 0, lastVisualX: initialX, lastVisualY: initialY, state: initialState, stateTimer: attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0, krakenTentacles: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("tentacles") as Phaser.GameObjects.Graphics[] : undefined, scorpionTail: isScorpionKing && image instanceof Phaser.GameObjects.Container ? image.getData("scorpionTail") as Phaser.GameObjects.Container : undefined };
+    if (isSpiderQueen) this.createSpiderArena();
     this.bossHud!.hidden = false;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = true;
     this.bossHud!.textContent = `${definition.name} · ${boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" ? "" : " · ATTACK 0/100"}`;
     this.bossFight.active = true;
     this.bossCoinsTimer = 2;
-    if (isSpiderQueen) this.bossCoinsTimer = Number.POSITIVE_INFINITY;
+    if (isSpiderQueen) {
+      this.bossCoinsTimer = Number.POSITIVE_INFINITY;
+      this.spiderBossCoinTimer = 1.2;
+      this.spiderWebTimer = 5;
+      this.spiderStalactiteFalling = false;
+      this.spiderStalactiteReady = false;
+    }
     this.ui.toast(definition.id === "king-snake"
       ? "Boss fight! Desvie da investida e pegue a coroa quando o King Snake ficar atordoado."
       : definition.id === "scorpion-king"
         ? "Boss fight! Desvie da picada do Escorpião-Rei. Quando ele ficar atordoado, pegue a coroa para ativar a aura e ataque-o."
-        : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
+        : isSpiderQueen
+          ? "Colete 4 Boss Coins para ativar a aura roxa; toque a estalactite no alto para derrubá-la sobre a Aranha Real."
+          : "Boss fight! Colete Boss Coins e aproveite as janelas de ataque.");
     if (!isKingSnake && !isCandyBee && !isKraken && !isScorpionKing) image.setSize(210, 210);
   }
   private createKrakenBarrier() {
@@ -2195,6 +2576,102 @@ export class GameScene extends Phaser.Scene {
     this.krakenBarrier = this.add.container(arena.x, arena.y, [water, rim, gate]).setDepth(4);
     this.tweens.add({ targets: water, alpha: 0.5, duration: 850, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     this.tweens.add({ targets: rim, alpha: 0.78, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+  }
+  private createSpiderArena() {
+    this.spiderArena?.destroy();
+    const { left, right, top, bottom } = B.arena;
+    const centerX = left + (right - left) * 0.5, centerY = top + (bottom - top) * 0.5;
+    const radius = Math.min(right - left, bottom - top) * 0.2;
+    const ground = this.add.graphics().fillStyle(0x271c30, 0.38).fillCircle(0, 0, radius - 14);
+    const ring = this.add.graphics().lineStyle(26, 0x321e3d, 0.94).strokeCircle(0, 0, radius)
+      .lineStyle(9, 0xb46acb, 0.9).strokeCircle(0, 0, radius - 12)
+      .lineStyle(3, 0xf0b9ff, 0.85).strokeCircle(0, 0, radius - 22);
+    const silk = this.add.graphics().lineStyle(2, 0xdca9f2, 0.28);
+    for (let spoke = 0; spoke < 12; spoke++) {
+      const angle = spoke * Math.PI / 6;
+      silk.lineBetween(0, 0, Math.cos(angle) * (radius - 20), Math.sin(angle) * (radius - 20));
+    }
+    const body = this.add.graphics().fillStyle(0x281a32).fillEllipse(0, 12, 132, 100)
+      .fillStyle(0x8e54a4).fillEllipse(0, -3, 112, 86)
+      .fillStyle(0xe0b8eb).fillEllipse(-20, -20, 34, 14)
+      .fillStyle(0xffcedc).fillCircle(-21, -4, 5).fillCircle(21, -4, 5)
+      .fillStyle(0x2b162f).fillCircle(-21, -4, 2).fillCircle(21, -4, 2);
+    for (let leg = 0; leg < 4; leg++) {
+      const y = -18 + leg * 14;
+      body.lineStyle(12, 0x57355f, 1).beginPath()
+        .moveTo(-42, y).lineTo(-77, y - 22).lineTo(-96, y - 34)
+        .moveTo(42, y).lineTo(77, y - 22).lineTo(96, y - 34).strokePath();
+      body.lineStyle(6, 0xc07cce, 1).beginPath()
+        .moveTo(-42, y).lineTo(-77, y - 22).lineTo(-96, y - 34)
+        .moveTo(42, y).lineTo(77, y - 22).lineTo(96, y - 34).strokePath();
+    }
+    const arenaArt = this.add.container(centerX, centerY, [ground, silk, ring, body]).setDepth(4);
+    this.boss!.image.setPosition(centerX, centerY);
+    if (this.boss!.image instanceof Phaser.GameObjects.Container) {
+      this.boss!.image.add(body);
+      arenaArt.setDepth(4);
+    }
+    this.spiderArena = arenaArt;
+    this.spiderStalactiteBaseY = top + 76;
+    const rock = this.add.graphics()
+      .fillStyle(0x382b43, 0.98).fillPoints([
+        new Phaser.Geom.Point(-37, -52), new Phaser.Geom.Point(37, -52),
+        new Phaser.Geom.Point(28, -17), new Phaser.Geom.Point(12, 9),
+        new Phaser.Geom.Point(0, 48), new Phaser.Geom.Point(-14, 8),
+        new Phaser.Geom.Point(-29, -20),
+      ], true)
+      .lineStyle(4, 0x886b9a, 0.95).strokePoints([
+        new Phaser.Geom.Point(-37, -52), new Phaser.Geom.Point(37, -52),
+        new Phaser.Geom.Point(28, -17), new Phaser.Geom.Point(12, 9),
+        new Phaser.Geom.Point(0, 48), new Phaser.Geom.Point(-14, 8),
+        new Phaser.Geom.Point(-29, -20),
+      ], true);
+    const glow = this.add.graphics().lineStyle(3, 0xdca9f2, 0).strokeCircle(0, 0, 54);
+    this.spiderStalactite = this.add.container(centerX, this.spiderStalactiteBaseY, [glow, rock]).setDepth(18);
+    this.spiderStalactite.setData("glow", glow);
+    this.spiderStalactite.setData("rock", rock);
+  }
+  private updateSpiderStalactite(dt: number, boss: NonNullable<GameScene["boss"]>) {
+    const stalactite = this.spiderStalactite;
+    if (!stalactite) return;
+    const aura = this.bossFight.combat;
+    const glow = stalactite.getData("glow") as Phaser.GameObjects.Graphics;
+    glow.clear();
+    this.spiderStalactiteReady = aura.active && aura.bossId === boss.definition.id;
+    if (this.spiderStalactiteReady && !this.spiderStalactiteFalling) {
+      const pulse = 0.55 + (Math.sin(this.run.elapsed * 8) + 1) * 0.2;
+      glow.fillStyle(0xb958ee, pulse * 0.16).fillCircle(0, 0, 58);
+      glow.lineStyle(5, 0xd58bff, pulse).strokeCircle(0, 0, 52 + Math.sin(this.run.elapsed * 8) * 5);
+      glow.lineStyle(2, 0xf1d5ff, pulse * 0.8).strokeCircle(0, 0, 42);
+      const inRange = Math.hypot(this.snake.x - stalactite.x, this.snake.y - stalactite.y) < B.snake.radius + 50;
+      if (inRange && aura.consumeHit(boss.definition.id)) {
+        this.spiderStalactiteFalling = true;
+        const impactX = boss.image.x, impactY = boss.image.y;
+        this.tweens.add({ targets: stalactite, x: impactX, y: impactY - 22, duration: 520, ease: "Cubic.In",
+          onComplete: () => {
+            if (!this.boss || this.boss !== boss) return;
+            this.particles.explode(18, impactX, impactY);
+            this.feedback(impactX, impactY, "ESTALACTITE! −1 HP", 0xd58bff, true);
+            boss.hazard?.destroy(); boss.hazard = undefined;
+            boss.state = "RECOVER"; boss.stateTimer = 1.1;
+            this.damageBoss();
+            audio.play("power"); haptic("power");
+            if (this.boss === boss) {
+              stalactite.setAlpha(0);
+              this.time.delayedCall(900, () => {
+                if (!this.boss || this.boss !== boss || !stalactite.active) return;
+                stalactite.setPosition(B.arena.left + (B.arena.right - B.arena.left) * 0.5, this.spiderStalactiteBaseY)
+                  .setAlpha(1);
+                this.spiderStalactiteFalling = false;
+              });
+            }
+          },
+        });
+      }
+    }
+    if (this.spiderStalactiteFalling) return;
+    const x = B.arena.left + (B.arena.right - B.arena.left) * 0.5;
+    stalactite.setPosition(x, Phaser.Math.Linear(stalactite.y, this.spiderStalactiteBaseY + Math.sin(this.run.elapsed * 2) * (this.spiderStalactiteReady ? 3 : 0), dt * 8));
   }
   private createDesertArenaBarrier() {
     this.desertArenaBarrier?.destroy();
@@ -2464,6 +2941,18 @@ export class GameScene extends Phaser.Scene {
   private updateBoss(dt: number) {
     const boss = this.boss!;
     const cfg = boss.definition.combat;
+    if (boss.definition.id === "spider-queen") {
+      this.spiderBossCoinTimer -= dt;
+      if (this.spiderBossCoinTimer <= 0 && this.bossPickups.filter((pickup) => pickup.kind === "boss-coin").length < 4) {
+        this.spiderBossCoinTimer = 2.4;
+        this.spawnBossPickup("boss-coin", 25, "●", 0xffd35a);
+      }
+      this.scorpionlingCooldown = Math.max(0, this.scorpionlingCooldown - dt);
+      this.spiderlingTimer -= dt;
+      if (this.spiderlingTimer <= 0) this.spawnSpiderling();
+      this.updateSpiderlings(dt);
+    }
+    this.spiderArenaCooldown = Math.max(0, this.spiderArenaCooldown - dt);
     boss.stateTimer -= dt;
     if (boss.definition.id === "spider-queen") this.updateSpiderBehavior(boss);
     else if (boss.definition.id === "king-snake") this.updateKingBehavior(boss, dt);
@@ -2471,11 +2960,12 @@ export class GameScene extends Phaser.Scene {
     else if (boss.definition.id === "kraken") this.updateKrakenBehavior(boss, dt);
     else this.updateScorpionBehavior(boss, dt);
     if (!this.boss) return;
+    if (boss.definition.id === "spider-queen") this.updateSpiderStalactite(dt, boss);
     if (boss.definition.id === "king-snake") this.updateKingSnakeVisual(boss, dt);
     else if (boss.definition.id === "kraken") this.updateKrakenVisual(boss);
     else if (boss.definition.id === "scorpion-king") this.updateScorpionKingVisual(boss);
-
-    if (boss.definition.id !== "king-snake" && boss.definition.id !== "spider-queen") {
+    if (this.boss) {
+      if (this.boss.definition.id !== "candy-monster") {
       this.bossCoinsTimer -= dt;
       if (this.bossCoinsTimer <= 0 && this.bossPickups.filter((pickup) => pickup.kind === "boss-coin").length < 3) {
         this.bossCoinsTimer = 5;
@@ -2487,7 +2977,8 @@ export class GameScene extends Phaser.Scene {
     const collisionDistance = Math.hypot(dx, dy);
     const collisionRadius = boss.definition.id === "kraken" ? 84 : boss.definition.id === "scorpion-king" ? 78 : 58 + B.snake.radius;
     const canHitKraken = boss.definition.id === "kraken" && (boss.state === "EXPOSED" || boss.state === "KRAKEN_HEAL") && boss.hazard && Math.hypot(this.snake.x - boss.hazard.x, this.snake.y - boss.hazard.y) < 62;
-    const canHitSpider = boss.definition.id === "spider-queen" && boss.state === "EXPOSED" && Math.hypot(this.snake.x - boss.image.x, this.snake.y - boss.image.y) < collisionRadius;
+    const canHitSpider = boss.definition.id === "spider-queen" && boss.state === "EXPOSED"
+      && boss.hazard && Math.hypot(this.snake.x - boss.hazard.x, this.snake.y - boss.hazard.y) < 62;
     const canHitScorpion = boss.definition.id === "scorpion-king" && boss.state === "STUNNED";
     const contact = boss.definition.id === "kraken" ? canHitKraken : boss.definition.id === "spider-queen" ? canHitSpider : boss.definition.id === "scorpion-king" ? canHitScorpion && collisionDistance < collisionRadius : collisionDistance < collisionRadius;
     if (boss.definition.id === "candy-monster") {
@@ -2527,12 +3018,12 @@ export class GameScene extends Phaser.Scene {
       this.bossCollisionGrace = Math.max(0, this.bossCollisionGrace - dt);
     } else if (contact) {
       const aura = this.bossFight.combat;
-      const vulnerable = boss.definition.id === "king-snake"
+      const vulnerable = boss.definition.id === "spider-queen" ? false
+        : boss.definition.id === "king-snake"
         ? boss.state === "STUNNED" && aura.source === "crown-orb"
         : boss.definition.id === "candy-monster"
           ? boss.state === "ATTACK_MODE" && aura.source === "candy-aura"
         : boss.definition.id === "kraken" ? boss.state === "EXPOSED" || boss.state === "KRAKEN_HEAL"
-          : boss.definition.id === "spider-queen" ? boss.state === "EXPOSED"
             : boss.definition.id === "scorpion-king" ? boss.state === "STUNNED" && aura.source === "crown-orb"
               : boss.state === "STUNNED" && aura.source === "crown-orb";
       const kingSnake = boss.definition.id === "king-snake";
@@ -2554,10 +3045,11 @@ export class GameScene extends Phaser.Scene {
         }
       } else if (kingSnake && boss.state === "STUNNED" && !aura.active) {
         // The King Snake is harmless while stunned, but cannot be damaged without aura.
-      } else if (aura.active && vulnerable && (boss.definition.id === "spider-queen" ? aura.source === "attack-pearl" && aura.consumeHit(boss.definition.id) : aura.consumeHit(boss.definition.id))) {
+      } else if (boss.definition.id === "spider-queen") {
+        // The Spider Queen is damaged only when the charged aura hits the stalactite.
+      } else if (aura.active && vulnerable && aura.consumeHit(boss.definition.id)) {
         if (boss.definition.id === "kraken") {
           const interruptedHeal = boss.state === "KRAKEN_HEAL";
-          boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.5;
           if (interruptedHeal) {
             this.krakenHealExitTimer = 5;
             this.krakenBarrierGate?.setVisible(false);
@@ -2566,7 +3058,6 @@ export class GameScene extends Phaser.Scene {
           }
         }
         else if (boss.definition.id === "scorpion-king") { boss.state = "RECOVER"; boss.stateTimer = 1.1; }
-        else if (boss.definition.id === "spider-queen") { boss.hazard?.destroy(); boss.hazard = undefined; boss.state = "RECOVER"; boss.stateTimer = 1.1; }
         this.damageBoss();
         if (!this.boss) return;
         this.feedback(boss.image.x, boss.image.y, "−1", 0xffb344, true);
@@ -2584,6 +3075,7 @@ export class GameScene extends Phaser.Scene {
           this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
         }
         this.bossCollisionGrace = cfg.hitInvulnerability;
+      }
       }
     } else this.bossCollisionGrace = Math.max(0, this.bossCollisionGrace - dt);
 
@@ -2629,7 +3121,13 @@ export class GameScene extends Phaser.Scene {
         }
       }
     } else this.bossAuraGraphics?.clear();
-    if (this.bossHud) {
+    if (boss.definition.id === "spider-queen" && this.spiderStalactite) {
+      const ready = this.bossFight.combat.active && this.bossFight.combat.bossId === boss.definition.id;
+      const charge = Math.floor(this.bossFight.combat.attackCharge);
+      const chargeLabel = ready ? "AURA PRONTA · ATINJA A ESTALACTITE" : `BOSS COINS ${charge}%`;
+      if (this.bossHud) this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · ${chargeLabel}`;
+    }
+    if (this.bossHud && boss.definition.id !== "spider-queen") {
       const kingSnake = boss.definition.id === "king-snake";
       const candy = boss.definition.id === "candy-monster";
       const spider = boss.definition.id === "spider-queen";
@@ -2653,27 +3151,51 @@ export class GameScene extends Phaser.Scene {
     } else if (boss.state === "TELEGRAPH_SLAM" && boss.stateTimer <= 0) {
       this.bossMarkers.forEach((marker) => marker.destroy()); this.bossMarkers = [];
       const distanceToTarget = Math.hypot(this.snake.x - boss.targetX, this.snake.y - boss.targetY);
-      if (distanceToTarget < 95 && this.bossCollisionGrace <= 0 && !this.powers.ghostActive) {
-        const hadShield = this.powers.shield;
-        if (!this.powers.absorb()) {
-          this.snake.length = Math.max(B.snake.initial, this.snake.length - 1);
-          this.powers.invincible = Math.max(this.powers.invincible, boss.definition.combat.hitInvulnerability);
-        this.feedback(this.snake.x, this.snake.y, "TEIA! −1 SEGMENTO", 0xf08bda, true);
-        } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
-        this.bossCollisionGrace = boss.definition.combat.hitInvulnerability;
+      if (distanceToTarget < 95) this.feedback(boss.targetX, boss.targetY, "DESVIE DA TEIA!", 0xdca9f2);
+      const finalPhase = boss.health <= 4;
+      const webRadius = finalPhase ? 124 : 92;
+      const web = this.add.graphics().setPosition(boss.targetX, boss.targetY).setDepth(7);
+      web.lineStyle(3, 0xf0c8ff, 0.85);
+      for (let ring = 1; ring <= 5; ring++) {
+        const radius = webRadius * ring / 5;
+        web.strokeCircle(0, 0, radius);
       }
-      if (Math.random() < 0.65) this.stickyZones.push({ x: boss.targetX, y: boss.targetY, radius: CW.sticky.minRadius });
+      for (let spoke = 0; spoke < 12; spoke++) {
+        const angle = spoke * Math.PI / 6;
+        web.lineBetween(0, 0, Math.cos(angle) * webRadius, Math.sin(angle) * webRadius);
+      }
+      const webZone: StickyZone = { x: boss.targetX, y: boss.targetY, radius: webRadius };
+      if (this.spiderWebZones.length >= (finalPhase ? 7 : 4)) {
+        const oldest = this.spiderWebZones.shift()!;
+        oldest.graphic.destroy();
+        const oldestZoneIndex = this.stickyZones.indexOf(oldest.zone);
+        if (oldestZoneIndex >= 0) this.stickyZones.splice(oldestZoneIndex, 1);
+      }
+      this.spiderWebZones.push({ zone: webZone, graphic: web, expiresAt: this.time.now + 12000 });
+      this.stickyZones.push(webZone);
+      this.tweens.add({ targets: web, alpha: 0.62, duration: 900, yoyo: true, repeat: -1 });
       this.renderStickyZones();
       boss.state = "EXPOSED"; boss.stateTimer = bossAttackTiming(boss.definition.combat.stunDuration, preference, 1.8);
+      const attackAngle = Math.random() * Math.PI * 2;
+      const edgeRadius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * 0.2 + 76;
+      boss.targetX = this.spiderArena!.x + Math.cos(attackAngle) * edgeRadius;
+      boss.targetY = this.spiderArena!.y + Math.sin(attackAngle) * edgeRadius;
       boss.hazard = this.add.container(boss.targetX, boss.targetY).setDepth(10);
-      boss.hazard.add(this.add.graphics().fillStyle(0xdca9f2, 0.24).fillCircle(0, 0, 48).lineStyle(4, 0xe7c3ff, 0.8).strokeCircle(0, 0, 43));
-      if (!this.bossPickups.some((pickup) => pickup.kind === "attack-pearl")) this.spawnBossPickupAt("attack-pearl", boss.targetX, boss.targetY, "✦", 0xdca9f2);
+      const targetRing = this.add.graphics().fillStyle(0xdca9f2, 0.24).fillCircle(0, 0, 58)
+        .lineStyle(4, 0xe7c3ff, 0.8).strokeCircle(0, 0, 54);
+      boss.hazard.add(targetRing);
+      boss.hazard.setData("webZone", { x: boss.targetX, y: boss.targetY, radius: 58 });
+      if (finalPhase) {
+        const spread = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * 0.11;
+        this.spawnSpiderWeb(Phaser.Math.Clamp(boss.targetX - spread, B.arena.left + 130, B.arena.right - 130), boss.targetY, 100);
+        this.spawnSpiderWeb(Phaser.Math.Clamp(boss.targetX + spread, B.arena.left + 130, B.arena.right - 130), boss.targetY, 100);
+      }
       audio.play("power");
     } else if (boss.state === "EXPOSED" && boss.stateTimer <= 0) {
       boss.hazard?.destroy(); boss.hazard = undefined;
       boss.state = "RECOVER"; boss.stateTimer = 1.1;
     } else if (boss.state === "RECOVER" && boss.stateTimer <= 0) {
-      boss.state = "IDLE"; boss.stateTimer = bossAttackTiming(Math.max(2.5, boss.definition.combat.attackCooldown - boss.phase * 0.4), preference, 1.5);
+      boss.state = "IDLE"; boss.stateTimer = bossAttackTiming(Math.max(3.5, boss.definition.combat.attackCooldown - boss.phase * 0.35), preference, 1.5);
     }
   }
   private bossSafePoint(minDistance = 180) {
@@ -2740,6 +3262,11 @@ export class GameScene extends Phaser.Scene {
         audio.play("coin_golden"); haptic("coin");
         this.feedback(pickup.x, pickup.y, boss ? "+1 BOSS COIN · AURA" : "+1 BOSS COIN", 0xffd35a, true);
         void save.save();
+        if (boss?.definition.id === "spider-queen" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active) {
+          this.bossFight.combat.activateAttackAura({ maxHits: 1, source: "spider-stalactite", bossId: boss.definition.id });
+          this.feedback(this.spiderStalactite?.x ?? pickup.x, this.spiderStalactite?.y ?? pickup.y, "AURA PRONTA · ATINJA A ESTALACTITE!", 0xd58bff, true);
+          audio.play("power"); haptic("power");
+        }
         if (boss?.definition.id === "candy-monster" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((item) => item.kind === "candy-aura"))
           this.spawnBossPickup("candy-aura", 0, "✦", 0xff76d7);
         continue;
@@ -2768,9 +3295,11 @@ export class GameScene extends Phaser.Scene {
         this.feedback(pickup.x, pickup.y, "ESCUDO!", 0x70cfff, true);
       } else {
         const source = pickup.kind;
-        if (pickup.kind === "attack-pearl" && (boss.definition.id === "spider-queen" || (boss.definition.id === "kraken" && boss.state === "KRAKEN_HEAL"))) this.bossFight.combat.addCharge(100);
+        if (pickup.kind === "attack-pearl" && boss.definition.id === "kraken" && boss.state === "KRAKEN_HEAL") this.bossFight.combat.addCharge(100);
         else this.bossFight.combat.addCharge(pickup.kind === "crown-orb" ? 100 : pickup.kind === "attack-pearl" ? 50 : 25);
-        const activated = this.bossFight.combat.activateAttackAura({ maxHits: pickup.kind === "sugar-shield" ? 2 : boss.definition.combat.auraMaxHits, source, bossId: boss.definition.id });
+        const activated = boss.definition.id === "spider-queen" && pickup.kind === "attack-pearl"
+          ? false
+          : this.bossFight.combat.activateAttackAura({ maxHits: pickup.kind === "sugar-shield" ? 2 : boss.definition.combat.auraMaxHits, source, bossId: boss.definition.id });
         if (activated) {
           if (pickup.kind === "sugar-shield" && boss.definition.id !== "candy-monster") boss.state = "ATTACK_MODE";
           audio.play("power"); haptic("power");
@@ -3482,6 +4011,8 @@ export class GameScene extends Phaser.Scene {
     const defeated = this.boss.definition;
     this.clearScorpionPoisonPuddles();
     const defeatedX = this.boss.image.x, defeatedY = this.boss.image.y;
+    this.spiderStalactite?.destroy(); this.spiderStalactite = undefined;
+    this.spiderStalactiteReady = false; this.spiderStalactiteFalling = false;
     this.particles.explode(30, defeatedX, defeatedY);
     for (const segment of this.boss.bodySegments) segment.destroy();
     this.boss.scorpionStinger?.destroy();

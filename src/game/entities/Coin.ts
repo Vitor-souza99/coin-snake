@@ -9,7 +9,7 @@ export class Coin {
   image: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   constructor(s: Phaser.Scene) {
-    this.image = s.add.image(0, 0, "coin-normal").setVisible(false);
+    this.image = s.add.image(0, 0, "coin-normal").setDepth(12).setVisible(false);
     this.label = s.add
       .text(0, 0, "1", {
         fontFamily: "Arial",
@@ -18,6 +18,7 @@ export class Coin {
         color: "#273f36",
       })
       .setOrigin(0.5)
+      .setDepth(13)
       .setVisible(false);
   }
   spawn(x: number, y: number, beeEquipped: boolean | "firefly" = false, luckyStar = false, candyWorld = false) {
