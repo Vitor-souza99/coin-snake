@@ -99,7 +99,6 @@ export class GameScene extends Phaser.Scene {
   private bossIntroOpen = false;
   private bossPortalExpiresAt = 0;
   private boss?: { definition: BossDefinition; health: number; krakenHealAttempted?: boolean; scorpionPoisonSequence?: boolean; scorpionJumpAttackPending?: boolean; scorpionJumpAttackActive?: boolean; scorpionJumpStartX?: number; scorpionJumpStartY?: number; scorpionPoisonAttacks?: number; phase: number; attack: number; speed: number; image: Phaser.GameObjects.Image | Phaser.GameObjects.Container; bodySegments: Phaser.GameObjects.Image[]; trail: Point[]; visualAngle: number; lastVisualX: number; lastVisualY: number; state: "CHASE" | "PREPARE_CHARGE" | "CHARGE" | "STUNNED" | "RECOVER" | "DROP_ATTACK" | "ATTACK_MODE" | "CANDY_FLEE" | "SUGAR_RUSH" | "IDLE" | "KRAKEN_HEAL" | "TELEGRAPH_SLAM" | "ATTACK_EXTEND" | "SLAM" | "EXPOSED" | "WHIRLPOOL" | "SCORPION_STING_TELEGRAPH" | "SCORPION_STING" | "SCORPION_LAND" | "SCORPION_POISON_JUMP" | "SCORPION_POISON_TELEGRAPH" | "SCORPION_POISON_STRIKE" | "SCORPION_POISON" | "SCORPION_POISON_RETURN" | "SCORPION_JUMP_TELEGRAPH" | "SCORPION_JUMP" | "SCORPION_JUMP_LAND"; stateTimer: number; stateTargetX?: number; stateTargetY?: number; targetX: number; targetY: number; chargeX: number; chargeY: number; doubleCharge: number; hazard?: Phaser.GameObjects.Container; krakenTentacles?: Phaser.GameObjects.Graphics[]; scorpionTail?: Phaser.GameObjects.Container; scorpionStinger?: Phaser.GameObjects.Graphics; scorpionStingerRetracting?: boolean };
-  private kingSnakeCrown?: Phaser.GameObjects.Container;
   private scorpionPoisonPuddles: Array<{ x: number; y: number; life: number; image: Phaser.GameObjects.Graphics }> = [];
   private bossFight = new BossFightSystem();
   private bossPickups: Array<{ x: number; y: number; life: number; kind: "boss-coin" | "loot-boss-coin" | "crown-orb" | "sugar-shield" | "attack-pearl" | "candy-aura" | "candy-shield" | "life-reward"; image: Phaser.GameObjects.Container }> = [];
@@ -202,7 +201,6 @@ export class GameScene extends Phaser.Scene {
     });
     this.bossIntroOpen = false;
     this.bossPortalExpiresAt = 0;
-    this.kingSnakeCrown?.destroy(); this.kingSnakeCrown = undefined;
     this.boss?.image.destroy();
     this.boss = undefined;
     this.bossPickups = [];
@@ -457,6 +455,16 @@ export class GameScene extends Phaser.Scene {
         (nearby && distance(p, this.snake) > 360)
       )
         continue;
+      if (this.currentWorld === "spider-lair") {
+        const a = B.arena;
+        const cavePoints = [
+          ...this.worldPassages.map(({ x, y }) => ({ x, y })),
+          { x: a.left + 90, y: a.top + (a.bottom - a.top) * 0.5 },
+        ];
+        if (cavePoints.some((point) => distance(p, point) < 150)) continue;
+      }
+      if (this.currentWorld === "green-valley" && this.secretSpiderPassage?.active
+        && distance(p, this.secretSpiderPassage) < 150) continue;
       let valid = true;
       for (let i = 0; i < this.snake.length; i++)
         if (distance(p, this.snake.body[i]) < clearance) {
@@ -1141,7 +1149,48 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (!this.boss && this.currentWorld === "green-valley" && this.secretSpiderPassage?.visible && distance(this.snake, this.secretSpiderPassage) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
-      this.enterWorld("spider-lair", "left", this.secretSpiderPassage.y, Math.PI);
+      // The entrance is on Green Valley's right side; enterWorld places the snake
+      // on the opposite (left) edge, so face inward rather than into the wall.
+      this.enterWorld("spider-lair", "right", this.secretSpiderPassage.y, 0);
+      return;
+    }
+    if (this.currentWorld === "spider-lair" && !this.worldTransitioning && this.passageCooldown <= 0) {
+      const cave = this.worldPassages.find((item) => Math.hypot(this.snake.x - item.x, this.snake.y - item.y) <= B.snake.radius + 6);
+      if (cave) {
+        const destinations = this.worldPassages.filter((item) => item !== cave);
+        const pair = Phaser.Utils.Array.GetRandom(destinations);
+        if (pair) {
+          // Preserve the side of the entrance where the head was before this
+          // frame's movement: left stays left, above stays above, etc.
+          // The cave mouths face toward the chamber, so their visible-entry
+          // side is opposite the raw world-space offset at the trigger point.
+          // Mirror that offset at the paired mouth to emerge through the
+          // corresponding side rather than the visually opposite side.
+          let offsetX = cave.x - previousSnakePosition.x;
+          let offsetY = cave.y - previousSnakePosition.y;
+          let offsetLength = Math.hypot(offsetX, offsetY);
+          if (offsetLength < 0.001) {
+            offsetX = -Math.cos(this.snake.angle);
+            offsetY = -Math.sin(this.snake.angle);
+            offsetLength = 1;
+          }
+          const exitAngle = Math.atan2(offsetY, offsetX);
+          // Keep the same side but place the head outside the trigger radius.
+          const exitDistance = Math.max(100, offsetLength);
+          const direction = exitAngle;
+          this.snake.reset(pair.x + Math.cos(exitAngle) * exitDistance, pair.y + Math.sin(exitAngle) * exitDistance, direction);
+          this.steering.reset(direction);
+          this.aim = null;
+          this.passageCooldown = 0.75;
+          this.cameraX = this.snake.x;
+          this.cameraY = this.snake.y;
+          this.updateCamera(0, true);
+          audio.play("power"); haptic("power");
+        }
+      }
+    }
+    if (!this.boss && this.currentWorld === "spider-lair" && this.worldPortal?.visible && distance(this.snake, this.worldPortal) < 58 && !this.worldTransitioning && this.passageCooldown <= 0) {
+      this.enterWorld("green-valley", "left", B.arena.top + 140, 0);
       return;
     }
     if (!this.boss && this.currentWorld === "candy-world" && this.cloverPassage?.visible && distance(this.snake, this.cloverPassage) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
@@ -1215,7 +1264,7 @@ export class GameScene extends Phaser.Scene {
       this.ui.toast(`Portal de chefe expirou. Boss Energy (${Math.floor(this.run.bossEnergy)}) preservada.`);
     }
     if (this.boss) this.updateBoss(dt);
-    else if (!this.rushMode) { this.refreshWorldPassages(); this.refreshSecretSpiderPassage(); this.refreshCloverPassage(); }
+    else if (!this.boss && !this.rushMode) { this.refreshWorldPassages(); this.refreshSecretSpiderPassage(); this.refreshCloverPassage(); }
     if (this.currentWorld === "clover-garden") this.updateCloverGarden();
     this.updateBossPickups(dt);
     for (const o of this.obstacles) {
@@ -1710,19 +1759,68 @@ export class GameScene extends Phaser.Scene {
   }
   private buildSpiderLair(g: Phaser.GameObjects.Graphics) {
     const a = B.arena, w = a.right - a.left, h = a.bottom - a.top;
-    g.fillStyle(0x393242, 0.92).fillEllipse(a.left + w * 0.5, a.top + h * 0.5, w * 0.58, h * 0.58);
-    g.lineStyle(5, 0x9e78b7, 0.35);
-    for (const x of [0.17, 0.83]) for (const y of [0.17, 0.83]) {
-      const px = a.left + w * x, py = a.top + h * y;
-      g.lineBetween(px, py, a.left + w * (x < 0.5 ? 0.5 : 0.5), a.top + h * 0.5);
-      g.strokeCircle(px, py, 46);
+    g.fillStyle(0x11151d, 0.98).fillRoundedRect(a.left, a.top, w, h, 24);
+    g.fillStyle(0x292936, 0.98).fillRoundedRect(a.left + 18, a.top + 18, w - 36, h - 36, 20);
+    // Jagged cave walls frame a broad, navigable central chamber.
+    for (let i = 0; i < 18; i++) {
+      const x = a.left + 35 + i * (w - 70) / 17;
+      const topDepth = 45 + (i * 53 % 95), bottomDepth = 42 + (i * 71 % 105);
+      g.fillStyle(i % 2 ? 0x494552 : 0x393743, 0.96)
+        .fillTriangle(x - 44, a.top + 20, x + 42, a.top + 20, x + (i % 2 ? 22 : -18), a.top + topDepth)
+        .fillTriangle(x - 40, a.bottom - 20, x + 44, a.bottom - 20, x + (i % 2 ? -20 : 16), a.bottom - bottomDepth);
     }
-    const label = this.add.text(a.left + w * 0.5, a.top + h * 0.16, "COVIL DA ARANHA · DESVIE DAS TEIAS", { fontSize: "20px", color: "#dfc7f1", fontStyle: "bold", backgroundColor: "#171923bb", padding: { x: 10, y: 6 } }).setOrigin(0.5).setDepth(3);
+    // Five cave mouths are scattered outside the central chamber.
+    const caveMouths: Point[] = [
+      { x: a.left + w * 0.28, y: a.top + h * 0.32 },
+      { x: a.left + w * 0.72, y: a.top + h * 0.68 },
+    ];
+    const center = { x: a.left + w / 2, y: a.top + h / 2 };
+    const minimumCenterDistance = Math.min(w, h) * 0.22;
+    const minimumCaveDistance = 230;
+    for (let attempt = 0; caveMouths.length < 5 && attempt < 1000; attempt++) {
+      const candidate = {
+        x: Phaser.Math.Between(a.left + 190, a.right - 190),
+        y: Phaser.Math.Between(a.top + 190, a.bottom - 190),
+      };
+      if (distance(candidate, center) < minimumCenterDistance) continue;
+      if (caveMouths.some((mouth) => distance(candidate, mouth) < minimumCaveDistance)) continue;
+      caveMouths.push(candidate);
+    }
+    caveMouths.forEach((mouth) => {
+      const radius = 14;
+      g.fillStyle(0x090a10, 1).fillCircle(mouth.x, mouth.y + 4, radius - 5);
+      g.lineStyle(3, 0x77717f, 0.95).strokeCircle(mouth.x, mouth.y, radius);
+      g.lineStyle(1, 0xc5a6e3, 0.75).strokeCircle(mouth.x, mouth.y - 1, radius - 3);
+      this.worldPassages.push(
+        this.add.container(mouth.x, mouth.y).setDepth(2).setSize((radius - 5) * 2, (radius - 5) * 2).setData("destination", "cave-pair"),
+      );
+    });
+    const label = this.add.text(a.left + w * 0.5, a.top + h * 0.16, "COVIL DA ARANHA · CAVERNA SUBTERRÂNEA", { fontSize: "20px", color: "#dfc7f1", fontStyle: "bold", backgroundColor: "#171923bb", padding: { x: 10, y: 6 } }).setOrigin(0.5).setDepth(3);
     this.desertObjects.push(g, label);
-    const exit = this.add.graphics().fillStyle(0xb98bd5, 0.22).fillEllipse(0, 0, 80, 80).lineStyle(4, 0xb98bd5, 0.7).strokeEllipse(0, 0, 62, 62);
-    const exitLabel = this.add.text(0, 47, "GREEN VALLEY", { fontSize: "12px", color: "#e6d4f5", fontStyle: "bold" }).setOrigin(0.5);
+    const exit = this.add.graphics().fillStyle(0x080b10, 1).fillEllipse(0, 3, 74, 38).lineStyle(6, 0x77717f, 0.95).strokeEllipse(0, 0, 82, 44).lineStyle(3, 0xc5a6e3, 0.8).strokeEllipse(0, -3, 70, 35);
+    const exitLabel = this.add.text(0, 32, "SAÍDA · GREEN VALLEY", { fontSize: "12px", color: "#e6d4f5", fontStyle: "bold", backgroundColor: "#171923bb", padding: { x: 5, y: 3 } }).setOrigin(0.5);
     this.worldPortal = this.add.container(a.left + 90, a.top + h * 0.5, [exit, exitLabel]).setDepth(9);
     this.worldPortal.setData("destination", "green-valley");
+  }
+  private buildSpiderEntrance() {
+    const a = B.arena;
+    const x = a.right - 140, y = a.top + 140;
+    const cave = this.add.graphics()
+      .fillStyle(0x36533a, 0.2).fillEllipse(0, 33, 180, 48)
+      .fillStyle(0x252a28, 1).fillEllipse(0, 5, 110, 68)
+      .fillStyle(0x080b0b, 1).fillEllipse(0, 10, 76, 42)
+      .lineStyle(7, 0x777b70, 0.98).strokeEllipse(0, 0, 112, 68)
+      .fillStyle(0x4d7046, 1)
+      .fillTriangle(-67, -5, -44, -51, -22, -8).fillTriangle(45, -4, 65, -48, 82, 2)
+      .fillStyle(0x8a8b7a, 1).fillTriangle(-47, -8, -28, -38, -13, -9).fillTriangle(52, -9, 65, -37, 74, -7)
+      .setDepth(7);
+    const label = this.add.text(0, 52, "COVIL DA ARANHA", { fontSize: "13px", color: "#f0e6c8", fontStyle: "bold", backgroundColor: "#20241dcc", padding: { x: 7, y: 4 } }).setOrigin(0.5);
+    this.secretSpiderPassage = this.add.container(x, y, [cave, label]).setDepth(9).setSize(112, 76);
+    for (const obstacle of [...this.obstacles]) {
+      if (distance(obstacle, this.secretSpiderPassage) >= 150) continue;
+      obstacle.destroy();
+      this.obstacles.splice(this.obstacles.indexOf(obstacle), 1);
+    }
   }
   private drawWorldPassageMarkers(graphics: Phaser.GameObjects.Graphics) {
     this.worldPassages.forEach((passage) => {
@@ -1731,6 +1829,7 @@ export class GameScene extends Phaser.Scene {
     });
   }
   private refreshWorldPassages(exits?: { side: "left" | "right"; y: number }) {
+    if (this.currentWorld === "spider-lair") return;
     const availableTargets = this.currentWorld === "spider-lair" || this.currentWorld === "clover-garden" ? [] : this.availablePassageWorlds();
     const targets = this.currentWorld === "silent-abyss" && save.profile.abyssChallengeCompleted
       ? availableTargets.filter((world) => world.id === "ocean")
@@ -1769,10 +1868,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (this.secretSpiderPassage?.active) return;
-    const a = B.arena;
-    const ring = this.add.graphics().fillStyle(0x9b6fba, 0.25).fillEllipse(0, 0, 90, 90).lineStyle(5, 0xc9a3e5, 0.9).strokeEllipse(0, 0, 68, 68);
-    const label = this.add.text(0, 53, "PASSAGEM SECRETA", { fontSize: "13px", color: "#f1ddff", fontStyle: "bold" }).setOrigin(0.5);
-    this.secretSpiderPassage = this.add.container(a.left + 64, a.top + (a.bottom - a.top) * 0.5, [ring, label]).setDepth(9);
+    this.buildSpiderEntrance();
   }
   private refreshCloverPassage() {
     const unlocked = save.profile.bossesDefeated.includes("candy-monster") && save.profile.selectedSkin === "abyssal-serpent";
@@ -1842,8 +1938,9 @@ export class GameScene extends Phaser.Scene {
     void applyWorldOrientation(world.id, save.profile.settings.orientation);
     const arena = B.arena;
     const entrySide = sourceSide === "left" ? "right" : "left";
-    const entryX = entrySide === "left" ? arena.left + 48 : arena.right - 48;
-    const entryY = Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
+    const spiderReturn = id === "green-valley" && this.currentWorld === "spider-lair";
+    const entryX = spiderReturn ? arena.right - 140 : entrySide === "left" ? arena.left + 48 : arena.right - 48;
+    const entryY = spiderReturn ? arena.top + 140 : Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
     this.snake.reset(entryX, entryY, direction);
     this.steering.reset(direction);
     this.resetControls();
@@ -1890,6 +1987,7 @@ export class GameScene extends Phaser.Scene {
       arenaGraphics.fillStyle(color, spider || abyss ? 0.2 : desert ? 0.42 : ocean ? 0.24 : 0.55).fillEllipse(x, y, 5 + index % 4, 3);
     }
     if(world.id==="candy-world") this.buildCandyWorld(this.add.graphics().setDepth(1));
+    if (world.id === "green-valley" && spiderReturn) this.buildSpiderEntrance();
     if (world.id === "candy-world" && (this.scene.settings.data as { cloverReturn?: boolean } | undefined)?.cloverReturn) {
       this.currentWorld = "clover-garden";
       this.worldSpeedMultiplier = 0.92;
@@ -1928,6 +2026,17 @@ export class GameScene extends Phaser.Scene {
       this.createDesertArenaBarrier();
     }
     if (world.id === "spider-lair") {
+      this.worldPassages = [];
+      this.buildSpiderLair(this.add.graphics().setDepth(1));
+      const caveClearancePoints = [
+        ...this.worldPassages.map(({ x, y }) => ({ x, y })),
+        { x: arena.left + 90, y: arena.top + (arena.bottom - arena.top) * 0.5 },
+      ];
+      for (const obstacle of [...this.obstacles]) {
+        if (!caveClearancePoints.some((point) => distance(obstacle, point) < 150)) continue;
+        obstacle.destroy();
+        this.obstacles.splice(this.obstacles.indexOf(obstacle), 1);
+      }
       this.stickyGraphics = this.add.graphics().setDepth(4);
       this.stickyZones = [];
       this.stickySpeed = 1;
@@ -1967,6 +2076,7 @@ export class GameScene extends Phaser.Scene {
     this.updateCamera(0, true);
     this.renderSnake();
     this.passageCooldown = 0.75;
+    if (world.id === "spider-lair") this.powers.invincible = Math.max(this.powers.invincible, 1.25);
     this.worldTransitioning = false;
     if (world.id !== "spider-lair" && world.bossId && bosses.some((boss) => boss.id === world.bossId))
       this.spawnBossPortal(world.bossId);
@@ -2038,9 +2148,8 @@ export class GameScene extends Phaser.Scene {
           this.add.text(0, -4, "♛", { fontSize: "48px", color: "#ffffff" }).setOrigin(0.5),
         ]).setDepth(19);
     const bodySegments = isKingSnake
-      ? Array.from({ length: 6 }, (_, index) => this.add.image(initialX - 30 * (index + 1), initialY, "king-snake-body").setScale(0.9 - index * 0.045).setDepth(18))
+      ? Array.from({ length: 4 }, (_, index) => this.add.image(initialX - 30 * (index + 1), initialY, "king-snake-body").setScale(0.86 - index * 0.07).setDepth(18))
       : [];
-    if (isKingSnake) this.kingSnakeCrown = this.createKingSnakeCrown().setPosition(initialX, initialY).setDepth(21);
     const trail = Array.from({ length: 33 }, (_, index) => ({ x: initialX - index * 12, y: initialY }));
     const initialState = definition.id === "kraken" || isSpiderQueen ? "IDLE" : "CHASE";
     const preference = this.gameDifficulty;
@@ -2355,7 +2464,6 @@ export class GameScene extends Phaser.Scene {
   private updateBoss(dt: number) {
     const boss = this.boss!;
     const cfg = boss.definition.combat;
-    this.bossFight.update(dt);
     boss.stateTimer -= dt;
     if (boss.definition.id === "spider-queen") this.updateSpiderBehavior(boss);
     else if (boss.definition.id === "king-snake") this.updateKingBehavior(boss, dt);
@@ -2483,10 +2591,42 @@ export class GameScene extends Phaser.Scene {
     if (combat.active) {
       if (!this.bossAuraGraphics) this.bossAuraGraphics = this.add.graphics().setDepth(22);
       this.bossAuraGraphics.clear();
-      const color = boss.definition.id === "spider-queen" ? 0xdca9f2 : 0xffad32;
-      for (let i = 0; i < Math.min(this.snake.length, 12); i++) {
-        const point = this.snake.body[i];
-        this.bossAuraGraphics.lineStyle(4, color, 0.85 - i * 0.045).strokeCircle(point.x, point.y, B.snake.radius + 5);
+      if (boss.definition.id === "king-snake") {
+        const points = this.snake.body.slice(0, Math.min(this.snake.length, 24));
+        const pulse = 0.72 + (Math.sin(this.run.elapsed * 9) + 1) * 0.12;
+        for (let index = 0; index < points.length - 1; index++) {
+          const point = points[index], next = points[index + 1];
+          const dx = next.x - point.x, dy = next.y - point.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const wave = Math.sin(this.run.elapsed * 8 - index * 0.65) * 3;
+          const x1 = point.x - dy / length * wave, y1 = point.y + dx / length * wave;
+          const x2 = next.x - dy / length * wave, y2 = next.y + dx / length * wave;
+          this.bossAuraGraphics.lineStyle(10, 0x8b541e, pulse * (1 - index / (points.length * 1.8)))
+            .lineBetween(x1, y1, x2, y2);
+          this.bossAuraGraphics.lineStyle(5, 0xffd45c, pulse * (1 - index / (points.length * 1.8)))
+            .lineBetween(x1, y1, x2, y2);
+          if (index > 0 && index % 3 === 0) {
+            this.bossAuraGraphics.fillStyle(0xfff0a0, pulse * 0.9).fillCircle(point.x, point.y, 2.5);
+          }
+        }
+        const head = points[0];
+        if (head) {
+          const angle = this.snake.angle;
+          this.bossAuraGraphics.fillStyle(0x8b541e, pulse).fillCircle(head.x, head.y, B.snake.radius + 9);
+          this.bossAuraGraphics.fillStyle(0xffd45c, pulse).fillCircle(head.x, head.y, B.snake.radius + 5);
+          const eyeForward = B.snake.radius * 0.45, eyeSide = B.snake.radius * 0.42;
+          for (const side of [-1, 1]) {
+            const eyeX = head.x + Math.cos(angle) * eyeForward - Math.sin(angle) * eyeSide * side;
+            const eyeY = head.y + Math.sin(angle) * eyeForward + Math.cos(angle) * eyeSide * side;
+            this.bossAuraGraphics.fillStyle(0x75401c, pulse).fillCircle(eyeX, eyeY, 2.4);
+          }
+        }
+      } else {
+        const color = boss.definition.id === "spider-queen" ? 0xdca9f2 : 0xffad32;
+        for (let i = 0; i < Math.min(this.snake.length, 12); i++) {
+          const point = this.snake.body[i];
+          this.bossAuraGraphics.lineStyle(4, color, 0.85 - i * 0.045).strokeCircle(point.x, point.y, B.snake.radius + 5);
+        }
       }
     } else this.bossAuraGraphics?.clear();
     if (this.bossHud) {
@@ -2644,19 +2784,6 @@ export class GameScene extends Phaser.Scene {
     const step = Math.min(length, speed * dt);
     boss.image.x += dx / length * step; boss.image.y += dy / length * step;
   }
-  private createKingSnakeCrown() {
-    const graphics = this.add.graphics();
-    graphics.fillStyle(0x704616, 0.32).fillRoundedRect(-23, -42, 46, 19, 4);
-    graphics.fillStyle(0xf4b83f, 1)
-      .fillRoundedRect(-24, -47, 48, 18, 4)
-      .fillTriangle(-22, -45, -18, -67, -7, -46)
-      .fillTriangle(-8, -45, 0, -73, 8, -45)
-      .fillTriangle(7, -46, 19, -67, 23, -45);
-    graphics.lineStyle(3, 0xffe58a, 0.95).strokeRoundedRect(-19, -44, 38, 10, 3);
-    graphics.fillStyle(0xfff1a8).fillCircle(0, -58, 5);
-    graphics.fillStyle(0xf15b61).fillCircle(0, -40, 4);
-    return this.add.container(0, 0, [graphics]);
-  }
   private updateKingSnakeVisual(boss: NonNullable<GameScene["boss"]>, dt: number) {
     const dx = boss.image.x - boss.lastVisualX, dy = boss.image.y - boss.lastVisualY;
     if (Math.hypot(dx, dy) >= 8) {
@@ -2671,11 +2798,6 @@ export class GameScene extends Phaser.Scene {
     }
     const stunnedWobble = boss.state === "STUNNED" ? Math.sin(this.run.elapsed * 18) * 0.12 : 0;
     boss.image.rotation = boss.visualAngle + stunnedWobble;
-    if (this.kingSnakeCrown) {
-      const bob = Math.sin(this.run.elapsed * (boss.state === "CHARGE" ? 17 : 4)) * (boss.state === "CHARGE" ? 2.5 : 1.5);
-      this.kingSnakeCrown.setPosition(boss.image.x, boss.image.y + bob).setRotation(boss.image.rotation * 0.82);
-      this.kingSnakeCrown.setScale(1 + Math.sin(this.run.elapsed * 5) * 0.025);
-    }
     for (let index = 0; index < boss.bodySegments.length; index++) {
       const trailIndex = (index + 1) * 6;
       const point = boss.trail[Math.min(trailIndex, boss.trail.length - 1)];
@@ -2683,7 +2805,6 @@ export class GameScene extends Phaser.Scene {
       const segment = boss.bodySegments[index];
       segment.setPosition(point.x, point.y);
       segment.rotation = Math.atan2(next.y - point.y, next.x - point.x);
-      segment.setAlpha(0.96 + Math.sin(this.run.elapsed * 5 - index * 0.7) * 0.04);
     }
   }
   private updateKrakenVisual(boss: NonNullable<GameScene["boss"]>) {
@@ -3364,7 +3485,7 @@ export class GameScene extends Phaser.Scene {
     this.particles.explode(30, defeatedX, defeatedY);
     for (const segment of this.boss.bodySegments) segment.destroy();
     this.boss.scorpionStinger?.destroy();
-    this.boss.image.destroy(); this.kingSnakeCrown?.destroy(); this.kingSnakeCrown = undefined; this.boss = undefined;
+    this.boss.image.destroy(); this.boss = undefined;
     this.krakenBarrier?.destroy(); this.krakenBarrier = undefined;
     this.desertArenaBarrier?.destroy(); this.desertArenaBarrier = undefined;
     this.krakenBarrierCooldown = 0;
