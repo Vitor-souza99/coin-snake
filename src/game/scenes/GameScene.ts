@@ -1,4 +1,4 @@
-﻿import Phaser from "phaser";
+import Phaser from "phaser";
 import { B } from "../data/balance";
 import { Snake } from "../entities/Snake";
 import { Coin } from "../entities/Coin";
@@ -152,6 +152,7 @@ export class GameScene extends Phaser.Scene {
   private desertArenaBarrier?: Phaser.GameObjects.Container;
   private desertBarrierCooldown = 0;
   private spiderArena?: Phaser.GameObjects.Container;
+  private spiderArenaOpen = false;
   private spiderStalactite?: Phaser.GameObjects.Container;
   private spiderStalactiteBaseY = 0;
   private spiderStalactiteReady = false;
@@ -221,6 +222,7 @@ export class GameScene extends Phaser.Scene {
     this.boss?.image.destroy();
     this.boss = undefined;
     this.spiderArena?.destroy(); this.spiderArena = undefined;
+    this.spiderArenaOpen = false;
     this.spiderStalactite?.destroy(); this.spiderStalactite = undefined;
     this.spiderArenaCooldown = 0;
     this.spiderStalactiteReady = false; this.spiderStalactiteFalling = false;
@@ -1097,16 +1099,17 @@ export class GameScene extends Phaser.Scene {
   private updateSpiderWebs(dt: number) {
     const boss = this.boss;
     if (!boss) return;
-    if (boss.health <= 4) {
+    if (boss.health <= 5) {
       this.spiderWebTimer -= dt;
       if (this.spiderWebTimer <= 0) {
-        this.spiderWebTimer = 4.5;
+        const desperatePhase = boss.health <= 2;
+        this.spiderWebTimer = desperatePhase ? 4.5 : 6;
         const arena = B.arena;
         const angle = Math.random() * Math.PI * 2;
         const radius = Math.min(arena.right - arena.left, arena.bottom - arena.top) * 0.17;
         const x = Phaser.Math.Clamp(this.spiderArena!.x + Math.cos(angle) * radius, arena.left + 105, arena.right - 105);
         const y = Phaser.Math.Clamp(this.spiderArena!.y + Math.sin(angle) * radius, arena.top + 105, arena.bottom - 105);
-        this.spawnSpiderWeb(x, y, 132);
+        this.spawnSpiderWeb(x, y, desperatePhase ? 118 : 104);
       }
     }
     const inside = this.stickyZones.some((zone) => Math.hypot(this.snake.x - zone.x, this.snake.y - zone.y) < zone.radius);
@@ -1245,7 +1248,7 @@ export class GameScene extends Phaser.Scene {
   }
   private containSnakeInSpiderArena(previous: Point) {
     const boss = this.boss;
-    if (!boss || boss.definition.id !== "spider-queen" || !this.spiderArena) return;
+    if (this.spiderArenaOpen || !boss || boss.definition.id !== "spider-queen" || !this.spiderArena) return;
     const radius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * 0.2;
     const dx = this.snake.x - this.spiderArena.x, dy = this.snake.y - this.spiderArena.y;
     const length = Math.hypot(dx, dy);
@@ -1281,6 +1284,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.renderSnake();
     this.hud.update(this.run, this.combo, this.powers, this.turbo);
+    if (this.bossEnergyHud && this.boss?.definition.id === "spider-queen") {
+      this.bossEnergyHud.textContent = `AURA · ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
+    }
     if (this.bossEnergyHud && !this.boss) this.bossEnergyHud.textContent = this.rushMode
       ? `COIN RUSH · ${Math.ceil(this.run.rushRemaining)} s restantes`
       : `BOSS ENERGY ${Math.floor(this.run.bossEnergy)}/${this.bossEnergyRequirement()}`;
@@ -1406,7 +1412,9 @@ export class GameScene extends Phaser.Scene {
           this.renderStickyZones();
         }
       }
-      const insideSpiderWeb = this.currentWorld === "spider-lair" && this.spiderWebZones.some(({ zone }) => Math.hypot(this.snake.x - zone.x, this.snake.y - zone.y) < zone.radius);
+      const snakeSegments = [{ x: this.snake.x, y: this.snake.y }, ...this.snake.body.slice(1, this.snake.length)];
+      const insideSpiderWeb = this.currentWorld === "spider-lair" && this.spiderWebZones.some(({ zone }) =>
+        snakeSegments.some((segment) => Math.hypot(segment.x - zone.x, segment.y - zone.y) < zone.radius));
       this.spiderWebSlow += ((insideSpiderWeb ? 0.38 : 1) - this.spiderWebSlow) * (1 - Math.exp(-dt / 0.35));
       const insideSticky = this.currentWorld === "candy-world" && this.stickyZones.some((zone) => Math.hypot(this.snake.x-zone.x,this.snake.y-zone.y)<zone.radius);
       const wasSticky = this.stickySpeed < 0.99;
@@ -1432,10 +1440,16 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (!this.boss && this.currentWorld === "green-valley" && this.secretSpiderPassage?.visible && distance(this.snake, this.secretSpiderPassage) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
-      // The entrance is on Green Valley's upper-right; enterWorld places the snake
-      // just inside the opposite (left) edge of the lair, facing inward.
-      this.enterWorld("spider-lair", "right", this.secretSpiderPassage.y, 0);
-      return;
+      const spiderPassage = this.secretSpiderPassage;
+      if (!spiderPassage.getData("unlocked")) {
+        this.ui.toast("As teias escondem um covil. Derrote o Escorpião-Rei para revelar o caminho.");
+        this.passageCooldown = 1.5;
+      } else {
+        // The entrance is on Green Valley's upper-right; enterWorld places the snake
+        // just inside the opposite (left) edge of the lair, facing inward.
+        this.enterWorld("spider-lair", "right", spiderPassage.y, 0);
+        return;
+      }
     }
     if (this.currentWorld === "spider-lair" && !this.worldTransitioning && this.passageCooldown <= 0) {
       if (this.worldPortal?.visible && distance(this.snake, this.worldPortal) < 72
@@ -2083,11 +2097,9 @@ export class GameScene extends Phaser.Scene {
     // Fixed rock shelves create a cave silhouette while leaving clear travel
     // lanes from the central chamber to every cave mouth and the world exit.
     const shelves = [
-      { x: a.left + w * 0.17, y: a.top + h * 0.13, width: 250, height: 42, flip: false },
       { x: a.left + w * 0.83, y: a.top + h * 0.13, width: 220, height: 38, flip: true },
       { x: a.left + w * 0.16, y: a.top + h * 0.87, width: 230, height: 40, flip: true },
       { x: a.left + w * 0.84, y: a.top + h * 0.87, width: 250, height: 42, flip: false },
-      { x: a.left + w * 0.50, y: a.top + h * 0.08, width: 300, height: 34, flip: false },
       { x: a.left + w * 0.49, y: a.top + h * 0.92, width: 280, height: 38, flip: true },
     ];
     const safeWallPoints = [
@@ -2211,12 +2223,21 @@ export class GameScene extends Phaser.Scene {
   }
   private refreshSecretSpiderPassage() {
     const unlocked = save.profile.bossesDefeated.includes("scorpion-king");
-    if (this.currentWorld !== "green-valley" || !unlocked) {
+    if (this.currentWorld !== "green-valley") {
       this.secretSpiderPassage?.destroy(); this.secretSpiderPassage = undefined;
       return;
     }
-    if (this.secretSpiderPassage?.active) return;
-    this.buildSpiderEntrance();
+    if (!this.secretSpiderPassage?.active) this.buildSpiderEntrance();
+    const passage = this.secretSpiderPassage;
+    if (!passage) return;
+    passage.setData("unlocked", unlocked);
+    const caveLabel = passage.getAt(1) as Phaser.GameObjects.Text;
+    caveLabel.setText(unlocked ? "COVIL DA ARANHA · ENTRAR" : "COVIL? · DERROTE O ESCORPIÃO-REI");
+    caveLabel.setColor(unlocked ? "#f0e6c8" : "#ded7c8");
+    passage.setAlpha(unlocked ? 1 : 0.72);
+    passage.setData("entryHint", unlocked
+      ? "Passagem secreta para o Covil da Aranha."
+      : "As teias escondem um covil. Derrote o Escorpião-Rei para revelar o caminho.");
   }
   private refreshCloverPassage() {
     const unlocked = save.profile.bossesDefeated.includes("candy-monster") && save.profile.selectedSkin === "abyssal-serpent";
@@ -2438,14 +2459,16 @@ export class GameScene extends Phaser.Scene {
     if (world.id !== "spider-lair" && world.bossId && bosses.some((boss) => boss.id === world.bossId))
       this.spawnBossPortal(world.bossId);
     if (world.id === "spider-lair") {
+      const spiderQueenDefeated = save.profile.bossesDefeated.includes("spider-queen");
+      if (spiderQueenDefeated) return;
       this.halted = true;
       this.resetControls();
       this.overlay = this.ui.modal(
         "Bem-vinda ao Covil da Aranha!",
-        "Este é um mapa secreto: a Aranha Real está no centro, protegida por uma arena. Desvie das teias anunciadas e dos filhotes que perseguem sua cabeça. Ao fim de cada ataque, colete a pérola de ataque e alcance o alvo brilhante na borda da arena para ferir a aranha. A saída branca fica bloqueada por uma teia até você derrotá-la.",
+        "Este é um mapa secreto: a Aranha Real está no centro, protegida por uma arena. Desvie das teias anunciadas e dos filhotes que perseguem sua cabeça. Colete 4 Boss Coins para carregar a aura e toque a estalactite no alto para feri-la. A saída fica bloqueada por uma teia até você derrotá-la.",
         [{ label: "Continuar", run: () => {
           this.continue();
-          if (this.currentWorld === "spider-lair" && !this.boss && world.bossId) {
+          if (!spiderQueenDefeated && this.currentWorld === "spider-lair" && !this.boss && world.bossId) {
             const spiderBoss = bosses.find((boss) => boss.id === world.bossId);
             if (spiderBoss) this.startBoss(spiderBoss);
           }
@@ -2530,8 +2553,12 @@ export class GameScene extends Phaser.Scene {
     if (isSpiderQueen) this.createSpiderArena();
     this.bossHud!.hidden = false;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = true;
-    this.bossHud!.textContent = `${definition.name} · ${boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" ? "" : " · ATTACK 0/100"}`;
+    this.bossHud!.textContent = `${definition.name} · ${boss.health}/${definition.maxHealth} HP${definition.id === "king-snake" || isSpiderQueen ? "" : " · ATTACK 0/100"}`;
     this.bossFight.active = true;
+    if (isSpiderQueen && this.bossEnergyHud) {
+      this.bossEnergyHud.hidden = false;
+      this.bossEnergyHud.textContent = "AURA · 0/100";
+    }
     this.bossCoinsTimer = 2;
     if (isSpiderQueen) {
       this.bossCoinsTimer = Number.POSITIVE_INFINITY;
@@ -2579,6 +2606,7 @@ export class GameScene extends Phaser.Scene {
   }
   private createSpiderArena() {
     this.spiderArena?.destroy();
+    this.spiderArenaOpen = false;
     const { left, right, top, bottom } = B.arena;
     const centerX = left + (right - left) * 0.5, centerY = top + (bottom - top) * 0.5;
     const radius = Math.min(right - left, bottom - top) * 0.2;
@@ -2652,6 +2680,9 @@ export class GameScene extends Phaser.Scene {
             if (!this.boss || this.boss !== boss) return;
             this.particles.explode(18, impactX, impactY);
             this.feedback(impactX, impactY, "ESTALACTITE! −1 HP", 0xd58bff, true);
+            this.tweens.killTweensOf(boss.image);
+            boss.image.setAlpha(1);
+            this.tweens.add({ targets: boss.image, alpha: 0.22, duration: 110, yoyo: true, repeat: 7, ease: "Linear" });
             boss.hazard?.destroy(); boss.hazard = undefined;
             boss.state = "RECOVER"; boss.stateTimer = 1.1;
             this.damageBoss();
@@ -2965,7 +2996,7 @@ export class GameScene extends Phaser.Scene {
     else if (boss.definition.id === "kraken") this.updateKrakenVisual(boss);
     else if (boss.definition.id === "scorpion-king") this.updateScorpionKingVisual(boss);
     if (this.boss) {
-      if (this.boss.definition.id !== "candy-monster") {
+      if (this.boss.definition.id !== "candy-monster" && this.boss.definition.id !== "spider-queen") {
       this.bossCoinsTimer -= dt;
       if (this.bossCoinsTimer <= 0 && this.bossPickups.filter((pickup) => pickup.kind === "boss-coin").length < 3) {
         this.bossCoinsTimer = 5;
@@ -3152,8 +3183,9 @@ export class GameScene extends Phaser.Scene {
       this.bossMarkers.forEach((marker) => marker.destroy()); this.bossMarkers = [];
       const distanceToTarget = Math.hypot(this.snake.x - boss.targetX, this.snake.y - boss.targetY);
       if (distanceToTarget < 95) this.feedback(boss.targetX, boss.targetY, "DESVIE DA TEIA!", 0xdca9f2);
-      const finalPhase = boss.health <= 4;
-      const webRadius = finalPhase ? 124 : 92;
+      const desperatePhase = boss.health <= 2;
+      const intensifiedPhase = boss.health <= 5;
+      const webRadius = desperatePhase ? 116 : intensifiedPhase ? 100 : 92;
       const web = this.add.graphics().setPosition(boss.targetX, boss.targetY).setDepth(7);
       web.lineStyle(3, 0xf0c8ff, 0.85);
       for (let ring = 1; ring <= 5; ring++) {
@@ -3165,7 +3197,8 @@ export class GameScene extends Phaser.Scene {
         web.lineBetween(0, 0, Math.cos(angle) * webRadius, Math.sin(angle) * webRadius);
       }
       const webZone: StickyZone = { x: boss.targetX, y: boss.targetY, radius: webRadius };
-      if (this.spiderWebZones.length >= (finalPhase ? 7 : 4)) {
+      const maxWebs = desperatePhase ? 6 : intensifiedPhase ? 5 : 4;
+      while (this.spiderWebZones.length >= maxWebs) {
         const oldest = this.spiderWebZones.shift()!;
         oldest.graphic.destroy();
         const oldestZoneIndex = this.stickyZones.indexOf(oldest.zone);
@@ -3185,7 +3218,7 @@ export class GameScene extends Phaser.Scene {
         .lineStyle(4, 0xe7c3ff, 0.8).strokeCircle(0, 0, 54);
       boss.hazard.add(targetRing);
       boss.hazard.setData("webZone", { x: boss.targetX, y: boss.targetY, radius: 58 });
-      if (finalPhase) {
+      if (desperatePhase) {
         const spread = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * 0.11;
         this.spawnSpiderWeb(Phaser.Math.Clamp(boss.targetX - spread, B.arena.left + 130, B.arena.right - 130), boss.targetY, 100);
         this.spawnSpiderWeb(Phaser.Math.Clamp(boss.targetX + spread, B.arena.left + 130, B.arena.right - 130), boss.targetY, 100);
@@ -3200,6 +3233,12 @@ export class GameScene extends Phaser.Scene {
   }
   private bossSafePoint(minDistance = 180) {
     const arena = B.arena;
+    const spiderCircle = this.boss?.definition.id === "spider-queen"
+      ? {
+          center: this.spiderArena ?? { x: arena.left + (arena.right - arena.left) * 0.5, y: arena.top + (arena.bottom - arena.top) * 0.5 },
+          radius: Math.min(arena.right - arena.left, arena.bottom - arena.top) * 0.2,
+        }
+      : undefined;
     const scorpionArena = this.boss?.definition.id === "scorpion-king" && this.desertArenaBarrier
       ? {
           center: this.desertArenaBarrier,
@@ -3208,6 +3247,7 @@ export class GameScene extends Phaser.Scene {
       : undefined;
     for (let attempt = 0; attempt < 40; attempt++) {
       const point = { x: Phaser.Math.Between(arena.left + 100, arena.right - 100), y: Phaser.Math.Between(arena.top + 100, arena.bottom - 100) };
+      if (spiderCircle && distance(point, spiderCircle.center) < spiderCircle.radius + 55) continue;
       if (scorpionArena && !isDesertArenaPickupAccessible(point, scorpionArena.center, scorpionArena.radius, B.snake.radius + 8)) continue;
       if (distance(point, this.snake) < minDistance) continue;
       if (this.boss && distance(point, this.boss.image) < 150) continue;
@@ -3220,6 +3260,10 @@ export class GameScene extends Phaser.Scene {
       if (isDesertArenaPickupAccessible(fallback, scorpionArena.center, scorpionArena.radius, B.snake.radius + 8)) return fallback;
       const alternate = { x: arena.right - 120, y: arena.top + 120 };
       if (isDesertArenaPickupAccessible(alternate, scorpionArena.center, scorpionArena.radius, B.snake.radius + 8)) return alternate;
+    }
+    if (spiderCircle) {
+      const point = { x: spiderCircle.center.x + spiderCircle.radius + 90, y: spiderCircle.center.y };
+      return { x: Math.min(point.x, arena.right - 80), y: point.y };
     }
     return { x: Phaser.Math.Clamp(this.snake.x + 220, arena.left + 80, arena.right - 80), y: Phaser.Math.Clamp(this.snake.y + 180, arena.top + 80, arena.bottom - 80) };
   }
@@ -3241,8 +3285,18 @@ export class GameScene extends Phaser.Scene {
     for (let index = 0; index < amount; index++) {
       const angle = Math.random() * Math.PI * 2;
       const radius = 35 + Math.sqrt(Math.random()) * 145;
-      const dropX = Phaser.Math.Clamp(x + Math.cos(angle) * radius, B.arena.left + 40, B.arena.right - 40);
-      const dropY = Phaser.Math.Clamp(y + Math.sin(angle) * radius, B.arena.top + 40, B.arena.bottom - 40);
+      let dropX = Phaser.Math.Clamp(x + Math.cos(angle) * radius, B.arena.left + 40, B.arena.right - 40);
+      let dropY = Phaser.Math.Clamp(y + Math.sin(angle) * radius, B.arena.top + 40, B.arena.bottom - 40);
+      if (this.currentWorld === "spider-lair" && this.spiderArena) {
+        const center = this.spiderArena;
+        const arenaRadius = Math.min(B.arena.right - B.arena.left, B.arena.bottom - B.arena.top) * 0.2;
+        const distanceFromCenter = Math.hypot(dropX - center.x, dropY - center.y);
+        if (distanceFromCenter < arenaRadius + 45) {
+          const safeAngle = Math.atan2(dropY - center.y, dropX - center.x) || angle;
+          dropX = Phaser.Math.Clamp(center.x + Math.cos(safeAngle) * (arenaRadius + 55), B.arena.left + 40, B.arena.right - 40);
+          dropY = Phaser.Math.Clamp(center.y + Math.sin(safeAngle) * (arenaRadius + 55), B.arena.top + 40, B.arena.bottom - 40);
+        }
+      }
       this.spawnBossPickupAt("loot-boss-coin", dropX, dropY, "●", 0xffd35a);
     }
   }
@@ -3263,9 +3317,12 @@ export class GameScene extends Phaser.Scene {
         this.feedback(pickup.x, pickup.y, boss ? "+1 BOSS COIN · AURA" : "+1 BOSS COIN", 0xffd35a, true);
         void save.save();
         if (boss?.definition.id === "spider-queen" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active) {
-          this.bossFight.combat.activateAttackAura({ maxHits: 1, source: "spider-stalactite", bossId: boss.definition.id });
-          this.feedback(this.spiderStalactite?.x ?? pickup.x, this.spiderStalactite?.y ?? pickup.y, "AURA PRONTA · ATINJA A ESTALACTITE!", 0xd58bff, true);
-          audio.play("power"); haptic("power");
+          if (this.bossFight.combat.activateAttackAura({ maxHits: 1, source: "spider-stalactite", bossId: boss.definition.id })) {
+            // A newly charged stalactite hit must not inherit the previous hit's cooldown.
+            this.bossFight.combat.hitInvulnerability = 0;
+            this.feedback(this.spiderStalactite?.x ?? pickup.x, this.spiderStalactite?.y ?? pickup.y, "AURA PRONTA · ATINJA A ESTALACTITE!", 0xd58bff, true);
+            audio.play("power"); haptic("power");
+          }
         }
         if (boss?.definition.id === "candy-monster" && this.bossFight.combat.attackCharge >= 100 && !this.bossFight.combat.active && !this.bossPickups.some((item) => item.kind === "candy-aura"))
           this.spawnBossPickup("candy-aura", 0, "✦", 0xff76d7);
@@ -4011,6 +4068,18 @@ export class GameScene extends Phaser.Scene {
     const defeated = this.boss.definition;
     this.clearScorpionPoisonPuddles();
     const defeatedX = this.boss.image.x, defeatedY = this.boss.image.y;
+    if (defeated.id === "spider-queen") {
+      this.spiderArenaOpen = true;
+      if (this.spiderArena) {
+        this.tweens.killTweensOf(this.spiderArena);
+        this.tweens.add({ targets: this.spiderArena, alpha: 0, duration: 700, ease: "Sine.easeOut",
+          onComplete: () => {
+            this.spiderArena?.destroy();
+            this.spiderArena = undefined;
+          },
+        });
+      }
+    }
     this.spiderStalactite?.destroy(); this.spiderStalactite = undefined;
     this.spiderStalactiteReady = false; this.spiderStalactiteFalling = false;
     this.particles.explode(30, defeatedX, defeatedY);
@@ -4091,6 +4160,9 @@ export class GameScene extends Phaser.Scene {
         ? ` Skin${rewardedSkins.length > 1 ? "s" : ""} desbloqueada${rewardedSkins.length > 1 ? "s" : ""}: ${rewardedSkins.map((skin) => skin.name).join(", ")}`
         : "",
       first ? `¬Ö +${defeated.rewardCoins} moedas · +${defeated.rewardXP} XP` : "",
+      first && defeated.id === "scorpion-king"
+        ? "As teias se moveram! Uma passagem secreta para o Covil da Aranha surgiu no Green Valley."
+        : "",
       `● ${defeated.bossCoinDrop} Boss Coins caíram no chão`,
     ].filter(Boolean);
     if (first && newlyUnlocked.length) this.ui.toast(`Mundo desbloqueado: ${newlyUnlocked.map((world) => world.name).join(", ")}.`);
