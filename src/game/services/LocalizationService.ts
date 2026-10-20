@@ -46,14 +46,14 @@ const englishMissions: Record<string, readonly [string, string]> = {
 const englishPets: Record<string, readonly [string, string, string]> = {
   scorpionling: ["Scorpionling", "In the Dune Desert, attacks and eliminates a baby scorpion every 4 seconds.", "Defeat the Scorpion King."],
   spiderling: ["Spiderling", "Roams the map and draws nearby regular coins to you.", "Defeat the Spider Queen in the Spider Lair."],
-  bee: ["Bee", "+3 percentage points to your chance of finding blue coins.", "Defeat the Candy Monster."],
+  bee: ["Bee", "Keeps the +3 percentage-point blue coin bonus and brings pollen, granting up to 24 XP per run in 8 XP bursts.", "Defeat the Candy Monster."],
   "candy-blob": ["Candy Blob", "+5% XP when you finish a run.", "Defeat the Candy Monster and purchase for 50 Boss Coins."],
   "baby-octopus": ["Baby Octopus", "+5% magnet duration (8.4 s instead of 8 s).", "Defeat the Kraken."],
-  firefly: ["Firefly", "+5 percentage points to your chance of finding blue coins.", "Defeat King Snake and purchase for 50 Boss Coins."],
-  "snow-pup": ["Snow Pup", "+5% shield duration.", "Defeat the Candy Monster."], "tiny-dragon": ["Tiny Dragon", "+5% boost duration.", "Defeat King Snake."],
+  firefly: ["Firefly", "Keeps the +5 percentage-point blue coin bonus and attracts nearby blue coins toward you.", "Defeat King Snake and purchase for 50 Boss Coins."],
+  "snow-pup": ["Snow Pup", "+5% shield duration.", "Defeat the Candy Monster."], "tiny-dragon": ["Tiny Dragon", "A small combat dragon that dashes, hurts vulnerable bosses, and helps clear spiderlings.", "Discover the secret relic in the Desert Labyrinth and purchase it for 150 Boss Coins."],
   "tidal-turtle": ["Tidal Turtle", "+10% ghost duration (3.3 s instead of 3 s).", "Defeat the Kraken and purchase for 75 Boss Coins."],
   phoenix: ["Solar Phoenix", "+1 starting life in every run.", "Defeat the Kraken and purchase for 125 Boss Coins."],
-  "celestial-serpent": ["Celestial Serpent", "+10% XP when you finish a run.", "Defeat all three bosses and purchase for 200 Boss Coins."],
+  "celestial-serpent": ["Celestial Serpent", "In the Silent Abyss, searches the map for celestial fragments; every 3 grants 15 XP, up to 3 times per run.", "Activate all 3 celestial sanctuaries in the Silent Abyss to unlock this Mythic companion."],
   "lucky-leprechaun": ["Lucky Clover", "Permanent companion: +2 percentage points to the chance of an extra life appearing, and unlocks a slot for another companion.", "Find 2 clovers in Candy World's Secret Garden with the Abyssal Serpent, and 2 in Ocean World's Underwater Garden with the Ghost Snake."],
   "crystal-fox": ["Crystal Fox", "+5% score when collecting coins (does not increase your balance).", "Premium companion—not currently available."],
 };

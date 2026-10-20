@@ -113,7 +113,7 @@ export class ShopScene extends Phaser.Scene {
       const visiblePets = pets.filter((pet) => pet.id !== "lucky-leprechaun" || profile.unlockedPets.includes(pet.id));
       const ownedCount = visiblePets.filter((pet) => profile.unlockedPets.includes(pet.id)).length;
       return `<section class="pet-shop-intro" aria-label="Resumo dos mascotes">
-        <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes para liberar mascotes e colete Boss Coins que eles deixam cair para comprar novos companheiros.</p></div>
+        <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes e descubra passagens secretas para liberar mascotes; compras disponíveis usam Boss Coins.</p></div>
         <div class="pet-wallet"><span>◆ SALDO</span><strong>${profile.bossCoinBalance.toLocaleString("pt-BR")}</strong><small>Boss Coins</small></div>
       </section>
       <div class="pet-collection-grid">${visiblePets.map((pet) => {
@@ -122,21 +122,22 @@ export class ShopScene extends Phaser.Scene {
         const selected = profile.selectedPet === pet.id;
         const permanent = pet.id === "lucky-leprechaun";
         const premium = pet.unlockType === "PREMIUM";
-        const purchasable = available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
-        const stateClass = permanent && unlocked || selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
-        const stateLabel = permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
+        const discovered = pet.id !== "tiny-dragon" || profile.desertRelicFound;
+        const purchasable = discovered && available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
+        const stateClass = !discovered ? "pet-locked" : permanent && unlocked || selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
+        const stateLabel = !discovered ? "???" : permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
         const action = permanent && unlocked
           ? `<button class="action secondary" disabled>EQUIPADO PERMANENTE</button>`
           : unlocked
           ? `<button class="action ${selected ? "secondary" : ""}" data-equip-pet="${pet.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADO" : "EQUIPAR"}</button>`
           : purchasable
             ? `<button class="action" data-buy-pet="${pet.id}" ${profile.bossCoinBalance < pet.coinPrice! ? "disabled" : ""}>COMPRAR · ${pet.coinPrice} BOSS COINS</button>`
-            : `<button class="action secondary" disabled>${premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
-        const detail = permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
+            : `<button class="action secondary" disabled>${!discovered ? "???" : premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
+        const detail = !discovered ? "Uma oferta misteriosa. Descubra a relíquia secreta no Deserto." : permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
         return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
           <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
-          <span class="skin-rarity ${rarityClass}">${pet.rarity}</span><h2>${localizedPet(pet.id, "name", pet.name)}</h2><p class="pet-description">${localizedPet(pet.id, "description", pet.description)}</p>
+          <span class="skin-rarity ${rarityClass}">${discovered ? pet.rarity : "???"}</span><h2>${!discovered ? pet.mysteryName ?? "???" : localizedPet(pet.id, "name", pet.name)}</h2><p class="pet-description">${!discovered ? "Uma relíquia misteriosa guarda algo ainda não descoberto." : localizedPet(pet.id, "description", pet.description)}</p>
           <p class="pet-unlock-detail">${detail}</p><div class="pet-card-action">${action}</div>
         </article>`;
       }).join("")}</div>`;
@@ -226,7 +227,7 @@ export class ShopScene extends Phaser.Scene {
           }
           const price = pet.coinPrice;
           if (!price) return;
-          confirmPurchase(pet.name, price, () => buyPet(profile, id), "Boss Coins", () => profile.bossCoinBalance);
+          confirmPurchase(profile.desertRelicFound && id === "tiny-dragon" ? "Dragãozinho" : pet.name, price, () => buyPet(profile, id), "Boss Coins", () => profile.bossCoinBalance);
         }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-equip-pet]").forEach((button) => button.addEventListener("click", () => {
           const id = button.dataset.equipPet;

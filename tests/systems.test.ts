@@ -24,6 +24,7 @@ import {
   updateMissionDay,
 } from "../src/game/systems/MissionSystem";
 import { PowerUpSystem } from "../src/game/systems/PowerUpSystem";
+import { dragonAttackCooldown, dragonAttackDuration, dragonBossDamage, dragonCanDamageBoss } from "../src/game/systems/DragonPetSystem";
 import { attractSpiderlingCoin, spiderlingCoinRadius, spiderlingCoinSpeed } from "../src/game/systems/SpiderlingSystem";
 import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegraphTiming, difficulty, difficultyProfiles, powerUpSpawnInterval } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
@@ -774,19 +775,65 @@ describe("roadmap progression systems", () => {
     powers.activate("ghost", 0.1);
     expect(powers.ghost).toBeCloseTo(B.power.ghostDuration * 1.1);
   });
-  it("unlocks the new Kraken offers and gates the Mythic pet behind every boss", () => {
+  it("gives Tiny Dragon a bounded attack cadence and preserves every boss vulnerability rule", () => {
+    expect(dragonAttackCooldown).toBe(5.5);
+    expect(dragonAttackDuration).toBeLessThan(dragonAttackCooldown);
+    expect(dragonBossDamage).toBe(1);
+    expect(dragonCanDamageBoss("king-snake", "STUNNED")).toBe(true);
+    expect(dragonCanDamageBoss("king-snake", "ATTACK_MODE")).toBe(false);
+    expect(dragonCanDamageBoss("kraken", "EXPOSED")).toBe(true);
+    expect(dragonCanDamageBoss("kraken", "STUNNED")).toBe(false);
+    expect(dragonCanDamageBoss("scorpion-king", "STUNNED")).toBe(true);
+    expect(dragonCanDamageBoss("candy-monster", "ATTACK_MODE")).toBe(true);
+    expect(dragonCanDamageBoss("candy-monster", "CHASE")).toBe(false);
+    expect(dragonCanDamageBoss("spider-queen", "EXPOSED")).toBe(false);
+  });
+  it("unlocks the Kraken offers but reserves the Mythic pet for Silent Abyss sanctuaries", () => {
     const kraken = validateSave({ saveVersion: 10, bossesDefeated: ["kraken"] });
     expect(kraken.availablePets).toContain("tidal-turtle");
     expect(kraken.availablePets).toContain("phoenix");
     expect(kraken.availablePets).not.toContain("celestial-serpent");
     const allBosses = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake", "candy-monster", "kraken"] });
-    expect(allBosses.availablePets).toContain("celestial-serpent");
+    expect(allBosses.availablePets).not.toContain("celestial-serpent");
+    const sanctuariesComplete = validateSave({ ...allBosses, saveVersion: 14, abyssSanctuaryProgress: 3 });
+    expect(sanctuariesComplete.availablePets).toContain("celestial-serpent");
+    expect(sanctuariesComplete.unlockedPets).toContain("celestial-serpent");
     expect(allBosses.unlockedPets).not.toContain("phoenix");
-    expect(allBosses.unlockedPets).not.toContain("celestial-serpent");
     expect(buyPet(allBosses, "crystal-fox")).toBe(false);
   });
+  it("persists Desert expedition checkpoints and keeps the dragon offer behind the relic", () => {
+    const scorpion = validateSave({ saveVersion: 14, bossesDefeated: ["scorpion-king"], desertExpeditionCheckpoint: 1 });
+    expect(scorpion.desertExpeditionCheckpoint).toBe(1);
+    expect(scorpion.desertRelicFound).toBe(false);
+    expect(scorpion.availablePets).not.toContain("tiny-dragon");
+    expect(buyPet({ ...scorpion, bossCoinBalance: 500, availablePets: ["tiny-dragon"] }, "tiny-dragon")).toBe(false);
+    const relic = validateSave({ ...scorpion, desertRelicFound: true, desertExpeditionCheckpoint: 3 });
+    expect(relic.desertRelicFound).toBe(true);
+    expect(relic.desertExpeditionCheckpoint).toBe(3);
+    expect(relic.availablePets).toContain("tiny-dragon");
+    const buyer = { ...relic, bossCoinBalance: 150 };
+    expect(buyPet(buyer, "tiny-dragon")).toBe(true);
+    expect(buyer.bossCoinBalance).toBe(0);
+    expect(buyer.unlockedPets).toContain("tiny-dragon");
+  });
+  it("does not unlock Tiny Dragon when migrating an old King Snake reward save", () => {
+    const profile = validateSave({ saveVersion: 13, bossesDefeated: ["king-snake"] });
+    expect(profile.availablePets).not.toContain("tiny-dragon");
+    expect(profile.unlockedPets).not.toContain("tiny-dragon");
+  });
+  it("tracks Silent Abyss sanctuaries separately from the Abyssal Serpent skin challenge", () => {
+    const profile = validateSave({ saveVersion: 13, abyssChallengeCompleted: false, abyssSanctuaryProgress: 2 });
+    expect(profile.abyssSanctuaryProgress).toBe(2);
+    expect(profile.abyssChallengeCompleted).toBe(false);
+    expect(profile.unlockedPets).not.toContain("celestial-serpent");
+    const completed = validateSave({ saveVersion: 14, abyssChallengeCompleted: false, abyssSanctuaryProgress: 3 });
+    expect(completed.unlockedPets).toContain("celestial-serpent");
+    expect(completed.unlockedSkins).not.toContain("abyssal-serpent");
+    expect(completed.abyssChallengeCompleted).toBe(false);
+    expect(validateSave({ saveVersion: 14, abyssSanctuaryProgress: 99 }).abyssSanctuaryProgress).toBe(3);
+  });
   it("save validation accepts earnable pets but never grants the premium pet", () => {
-    const profile = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake", "candy-monster", "kraken"], unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
+    const profile = validateSave({ saveVersion: 10, desertRelicFound: true, bossesDefeated: ["king-snake", "candy-monster", "kraken", "scorpion-king"], unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
     expect(profile.unlockedPets).toEqual(earnablePetIds);
     expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
   });
@@ -799,16 +846,16 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(13);
+    expect(profile.saveVersion).toBe(15);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
-    expect(profile.unlockedPets).toContain("tiny-dragon");
+    expect(profile.unlockedPets).not.toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.unlockedPets).not.toContain("snow-pup");
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(13);
+    expect(profile.saveVersion).toBe(15);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -946,7 +993,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(13);
+    expect(migrated.saveVersion).toBe(15);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
   });
@@ -974,21 +1021,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(13);
+    expect(migrated.saveVersion).toBe(15);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(13);
+    expect(profile.saveVersion).toBe(15);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(13);
+    expect(migrated.saveVersion).toBe(15);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -1351,4 +1398,3 @@ describe("snake and powers", () => {
     expect(B.coins.reduce((total, coin) => total + coin.weight, 0)).toBe(100.1);
   });
 });
-

@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 13,
+    saveVersion: 15,
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -70,12 +70,16 @@ export function defaults(): PlayerProfile {
     selectedWorld: "green-valley",
     abyssChallengeBest: 0,
     abyssChallengeCompleted: false,
+    abyssSanctuaryProgress: 0,
+    desertExpeditionCheckpoint: 0,
+    desertExpeditionActive: false,
+    desertRelicFound: false,
   };
 }
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bossCoinBalance = num(r.bossCoinBalance);
   p.bestScore = num(r.bestScore);
@@ -153,7 +157,7 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(r.saveVersion as number);
+  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(r.saveVersion as number);
   const validPetIds = new Set([...earnablePetIds, "lucky-leprechaun"]);
   const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id) && (id !== "lucky-leprechaun" || num(r.cloverGardenProgress) >= 4)) : [];
   p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";
@@ -162,21 +166,27 @@ export function validateSave(input: unknown): PlayerProfile {
   const bossWins = new Set(p.bossesDefeated);
   const bossUnlockedPets = earnablePetIds.filter((id) => {
     const pet = pets.find((entry) => entry.id === id);
-    return pet?.bossRewardId && pet.coinPrice === undefined && bossWins.has(pet.bossRewardId)
+    return id !== "tiny-dragon" && pet?.bossRewardId && pet.coinPrice === undefined && bossWins.has(pet.bossRewardId)
       && (pet.requiredBossIds ?? []).every((bossId) => bossWins.has(bossId));
   });
   const availableBossPets = earnablePetIds.filter((id) => {
     const pet = pets.find((entry) => entry.id === id);
-    return pet?.bossRewardId && bossWins.has(pet.bossRewardId)
+    if (id === "celestial-serpent") return p.abyssSanctuaryProgress >= 3;
+    return pet?.bossRewardId && (id !== "tiny-dragon" || bool(r.desertRelicFound, false)) && bossWins.has(pet.bossRewardId)
       && (pet.requiredBossIds ?? []).every((bossId) => bossWins.has(bossId));
   });
-  p.availablePets = [...new Set([...(isV3 && Array.isArray(r.availablePets) ? r.availablePets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : []), ...availableBossPets])];
+  const savedAvailablePets = isV3 && Array.isArray(r.availablePets) ? r.availablePets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : [];
+  const savedDragonOffer = bool(r.desertRelicFound, false) && bossWins.has("scorpion-king") && savedAvailablePets.includes("tiny-dragon");
+  p.availablePets = [...new Set([...savedAvailablePets.filter((id) => id !== "tiny-dragon"), ...availableBossPets, ...(savedDragonOffer ? ["tiny-dragon"] : [])])];
   // In v8 the firefly was automatically granted with King Snake; preserve that
   // existing ownership when migrating rather than charging players again.
   const ownedBossPets = [...bossUnlockedPets].filter((id) => !pets.find((pet) => pet.id === id)?.coinPrice);
-  p.unlockedPets = [...new Set([...savedPets, ...ownedBossPets])];
+  const canKeepDragon = bool(r.desertRelicFound, false) && bossWins.has("scorpion-king");
+  p.unlockedPets = [...new Set([...savedPets.filter((id) => id !== "tiny-dragon" || canKeepDragon), ...ownedBossPets])];
   if ((r.saveVersion as number) <= 8 && bossWins.has("king-snake")) p.unlockedPets.push("firefly");
-  if (r.saveVersion === 9 && bossWins.has("kraken")) p.unlockedPets.push("tiny-dragon");
+  const hadDragon = Array.isArray(r.unlockedPets) && r.unlockedPets.includes("tiny-dragon");
+  const keepDragon = bool(r.desertRelicFound, false) && bossWins.has("scorpion-king") && p.availablePets.includes("tiny-dragon");
+  if (hadDragon && keepDragon && !p.unlockedPets.includes("tiny-dragon")) p.unlockedPets.push("tiny-dragon");
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
   p.cloverGardenProgress = Math.min(4, num(r.cloverGardenProgress));
   if (p.cloverGardenProgress >= 4 && !p.unlockedPets.includes("lucky-leprechaun")) p.unlockedPets.push("lucky-leprechaun");
@@ -184,7 +194,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.achievements = isV3 && Array.isArray(r.achievements) ? [...new Set(r.achievements.filter((id): id is string => typeof id === "string"))] : [];
   const mastery = record(r.mastery);
   p.mastery = Object.fromEntries(skins.map((skin) => [skin.id, isV3 ? num(mastery[skin.id]) : 0]));
-  const worldIds = new Set(["green-valley", "candy-world", "ocean", "silent-abyss", "desert", "spider-lair"]);
+  const worldIds = new Set(["green-valley", "candy-world", "ocean", "silent-abyss", "desert", "spider-lair", "desert-labyrinth"]);
   const legacyWorldAliases: Record<string, string> = { green_valley: "green-valley", candy_world: "candy-world", ocean_world: "ocean", desert_world: "desert" };
   const savedWorlds = isV3 && Array.isArray(r.worldsUnlocked)
     ? r.worldsUnlocked.flatMap((id): string[] => {
@@ -202,10 +212,16 @@ export function validateSave(input: unknown): PlayerProfile {
   else p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "silent-abyss");
   if (defeated.has("scorpion-king")) p.worldsUnlocked.push("spider-lair");
   else p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "spider-lair");
+  p.worldsUnlocked = p.worldsUnlocked.filter((id) => id !== "desert-labyrinth");
   if (p.playerLevel >= 15 && defeated.has("kraken") && p.worldsUnlocked.includes("ocean")) p.worldsUnlocked.push("desert");
   p.worldsUnlocked = [...new Set(p.worldsUnlocked)];
   p.abyssChallengeBest = num(r.abyssChallengeBest);
   p.abyssChallengeCompleted = bool(r.abyssChallengeCompleted, false);
+  p.abyssSanctuaryProgress = Math.min(3, num(r.abyssSanctuaryProgress));
+  if (p.abyssSanctuaryProgress >= 3) {
+    p.availablePets = [...new Set([...p.availablePets, "celestial-serpent"])];
+    if (!p.unlockedPets.includes("celestial-serpent")) p.unlockedPets.push("celestial-serpent");
+  }
   if (p.abyssChallengeCompleted) p.unlockedSkins = [...new Set([...p.unlockedSkins, "abyssal-serpent"] )];
   if (p.worldsUnlocked.includes("ocean") && !p.worldsUnlocked.includes("candy-world")) p.worldsUnlocked.push("candy-world");
   p.selectedWorld = typeof r.selectedWorld === "string" && p.worldsUnlocked.includes(legacyWorldAliases[r.selectedWorld] ?? r.selectedWorld)
@@ -242,7 +258,14 @@ export function validateSave(input: unknown): PlayerProfile {
       claimed: (selectedSet.has(m.id) || preserveLegacy) && bool(entry.claimed, false) && num(entry.progress) >= m.target,
     };
   }
-  p.saveVersion = 13;
+  p.desertRelicFound = bool(r.desertRelicFound, false);
+  p.desertExpeditionCheckpoint = p.desertRelicFound ? 3 : Math.min(2, Math.max(0, Math.floor(num(r.desertExpeditionCheckpoint))));
+  p.desertExpeditionActive = !p.desertRelicFound && bool(r.desertExpeditionActive, false) && p.bossesDefeated.includes("scorpion-king");
+  if (p.desertRelicFound) p.desertExpeditionActive = false;
+  if (p.desertRelicFound && p.bossesDefeated.includes("scorpion-king")) p.availablePets = [...new Set([...p.availablePets, "tiny-dragon"])];
+  else p.availablePets = p.availablePets.filter((id) => id !== "tiny-dragon");
+  if (!p.desertRelicFound && r.saveVersion !== 9) p.unlockedPets = p.unlockedPets.filter((id) => id !== "tiny-dragon");
+  p.saveVersion = 15;
   return p;
 }
 export interface SaveStorage {

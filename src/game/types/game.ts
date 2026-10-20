@@ -34,7 +34,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 13;
+  saveVersion: 15;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;
@@ -65,6 +65,10 @@ export interface PlayerProfile {
   selectedWorld: string;
   abyssChallengeBest: number;
   abyssChallengeCompleted: boolean;
+  abyssSanctuaryProgress: number;
+  desertExpeditionCheckpoint: number;
+  desertExpeditionActive: boolean;
+  desertRelicFound: boolean;
 }
 export interface RunState {
   id: string;

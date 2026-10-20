@@ -3,6 +3,7 @@ export type PetRarity = "COMMON" | "RARE" | "EPIC" | "LEGENDARY" | "MYTHIC" | "P
 export interface PetDefinition {
   id: string;
   name: string;
+  mysteryName?: string;
   symbol: string;
   rarity: PetRarity;
   description: string;
@@ -40,7 +41,7 @@ export const pets: PetDefinition[] = [
     name: "Bee",
     symbol: "🐝",
     rarity: "RARE",
-    description: "+3 pontos percentuais na chance de moedas azuis.",
+    description: "Mantém o bônus de +3 pontos percentuais para moedas azuis e traz pólen, concedendo até 24 XP por partida em pulsos de 8 XP.",
     unlockedBy: "Derrote Candy Monster.",
     unlockType: "BOSS",
     bossRewardId: "candy-monster",
@@ -71,7 +72,7 @@ export const pets: PetDefinition[] = [
     name: "Vaga-lume",
     symbol: "✨",
     rarity: "RARE",
-    description: "+5 pontos percentuais na chance de moedas azuis.",
+    description: "Mantém o bônus de +5 pontos percentuais para moedas azuis e atrai moedas azuis próximas até você.",
     unlockedBy: "Derrote King Snake e adquira por 50 Boss Coins.",
     unlockType: "BOSS",
     bossRewardId: "king-snake",
@@ -90,12 +91,15 @@ export const pets: PetDefinition[] = [
   {
     id: "tiny-dragon",
     name: "Dragãozinho",
+    mysteryName: "???",
     symbol: "🐲",
     rarity: "EPIC",
-    description: "+5% na duração do Turbo.",
-    unlockedBy: "Derrote King Snake.",
+    description: "Uma relíquia misteriosa guarda algo ainda não descoberto.",
+    unlockedBy: "Descubra a relíquia secreta no Labirinto do Deserto e adquira por 150 Boss Coins.",
     unlockType: "BOSS",
-    bossRewardId: "king-snake",
+    bossRewardId: "scorpion-king",
+    requiredBossIds: ["scorpion-king"],
+    coinPrice: 150,
   },
   {
     id: "tidal-turtle",
@@ -124,12 +128,10 @@ export const pets: PetDefinition[] = [
     name: "Serpente Celestial",
     symbol: "🐉",
     rarity: "MYTHIC",
-    description: "+10% de XP ao finalizar uma partida.",
-    unlockedBy: "Derrote os três chefes e adquira por 200 Boss Coins.",
+    description: "No Abismo Mudo, percorre o mapa e recolhe fragmentos celestiais; a cada 3, concede 15 XP (até 3 vezes por partida).",
+    unlockedBy: "No Abismo Mudo, ative os 3 santuários celestiais para desbloquear este mascote mítico.",
     unlockType: "BOSS",
     bossRewardId: "kraken",
-    coinPrice: 200,
-    requiredBossIds: ["king-snake", "candy-monster", "kraken"],
   },
   {
     id: "lucky-leprechaun",
