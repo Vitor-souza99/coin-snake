@@ -2740,7 +2740,7 @@ export class GameScene extends Phaser.Scene {
       glow.lineStyle(5, 0xd58bff, pulse).strokeCircle(0, 0, 52 + Math.sin(this.run.elapsed * 8) * 5);
       glow.lineStyle(2, 0xf1d5ff, pulse * 0.8).strokeCircle(0, 0, 42);
       const inRange = Math.hypot(this.snake.x - stalactite.x, this.snake.y - stalactite.y) < B.snake.radius + 50;
-      if (inRange && aura.source === "crown-orb" && boss.state === "EXPOSED" && aura.consumeHit(boss.definition.id)) {
+      if (inRange && aura.source === "crown-orb" && aura.consumeHit(boss.definition.id)) {
         this.spiderStalactiteFalling = true;
         const impactX = boss.image.x, impactY = boss.image.y;
         this.tweens.add({ targets: stalactite, x: impactX, y: impactY - 22, duration: 520, ease: "Cubic.In",
@@ -3246,7 +3246,10 @@ export class GameScene extends Phaser.Scene {
   }
   private updateSpiderBehavior(boss: NonNullable<GameScene["boss"]>) {
     const preference = this.gameDifficulty;
-    if (boss.state === "ATTACK_EXTEND" && boss.stateTimer <= 0) {
+    if (boss.state === "IDLE" && boss.stateTimer <= 0) {
+      boss.state = "ATTACK_EXTEND";
+      boss.stateTimer = 0.45;
+    } else if (boss.state === "ATTACK_EXTEND" && boss.stateTimer <= 0) {
       boss.targetX = Phaser.Math.Clamp(this.snake.x, B.arena.left + 105, B.arena.right - 105);
       boss.targetY = Phaser.Math.Clamp(this.snake.y, B.arena.top + 105, B.arena.bottom - 105);
       boss.hazard = this.add.container(boss.targetX, boss.targetY).setDepth(8);
@@ -3350,8 +3353,21 @@ export class GameScene extends Phaser.Scene {
     const point = { x, y };
     const color = tint ?? (kind === "life-reward" ? 0xff5b78 : kind === "crown-orb" ? 0xffb52e : kind === "attack-pearl" ? 0x9df8ff : 0xff76d7);
     const graphic = this.add.graphics().fillStyle(color, 0.28).fillCircle(0, 0, 28).lineStyle(4, color, 0.95).strokeCircle(0, 0, 23);
-    const label = this.add.text(0, 0, symbol ?? (kind === "life-reward" ? "♥" : kind === "crown-orb" ? "♛" : kind === "sugar-shield" || kind === "candy-shield" ? "S" : "✦"), { fontSize: "25px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
-    const image = this.add.container(point.x, point.y, [graphic, label]).setDepth(24);
+    const isScorpionAura = kind === "crown-orb" && this.boss?.definition.id === "scorpion-king";
+    const label = this.add.text(0, 0, isScorpionAura ? "" : symbol ?? (kind === "life-reward" ? "♥" : kind === "crown-orb" ? "♛" : kind === "sugar-shield" || kind === "candy-shield" ? "S" : "✦"), { fontSize: "25px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0.5);
+    const contents: Phaser.GameObjects.GameObject[] = [graphic, label];
+    if (isScorpionAura) {
+      const scorpion = this.add.graphics();
+      scorpion.lineStyle(3, 0x5a2c18, 1).lineBetween(-7, 5, -18, 13).lineBetween(7, 5, 18, 13)
+        .lineBetween(-7, 1, -20, 5).lineBetween(7, 1, 20, 5)
+        .lineBetween(-6, -3, -17, -8).lineBetween(6, -3, 17, -8)
+        .lineStyle(4, 0xffd27a, 1).beginPath().moveTo(0, -7).lineTo(0, -13).lineTo(8, -18).lineTo(12, -25).strokePath();
+      scorpion.fillStyle(0xe98735, 1).fillEllipse(0, 4, 13, 17).fillEllipse(0, -5, 14, 11).fillEllipse(0, -14, 10, 9).fillCircle(12, -25, 4);
+      scorpion.fillStyle(0xffefbd, 1).fillCircle(-3, -15, 1.5).fillCircle(3, -15, 1.5);
+      scorpion.lineStyle(2, 0xffefbd, 1).lineBetween(18, 13, 22, 16).lineBetween(-18, 13, -22, 16);
+      contents.push(scorpion);
+    }
+    const image = this.add.container(point.x, point.y, contents).setDepth(24);
     this.tweens.add({ targets: image, scale: kind === "attack-pearl" ? 1.32 : 1.16, duration: kind === "attack-pearl" ? 320 : 500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     if (kind === "attack-pearl") this.tweens.add({ targets: graphic, alpha: 0.42, duration: 320, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     const isAuraPickup = kind === "crown-orb" || kind === "attack-pearl" || kind === "candy-aura";
@@ -3388,7 +3404,7 @@ export class GameScene extends Phaser.Scene {
       this.spawnBossPickup("candy-aura", 0, "✦", 0xff76d7);
     } else {
       const point = this.bossSafePoint(130);
-      this.spawnBossPickupAt("crown-orb", point.x, point.y, boss.definition.id === "spider-queen" ? "🕷" : "♛", boss.definition.id === "spider-queen" ? 0xb958ee : 0xffb52e);
+      this.spawnBossPickupAt("crown-orb", point.x, point.y, boss.definition.id === "spider-queen" ? "🕷" : boss.definition.id === "scorpion-king" ? "" : "♛", boss.definition.id === "spider-queen" ? 0xb958ee : boss.definition.id === "scorpion-king" ? 0xe98735 : 0xffb52e);
     }
     this.updateAuraStatusHud("4/4 BOSS COINS · AURA READY · COLLECT IT");
   }
