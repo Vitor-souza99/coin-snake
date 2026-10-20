@@ -96,7 +96,12 @@ export class ScreenUI {
       });
       layer.querySelector(".dialog-actions")!.append(b);
     });
-    layer.addEventListener("keydown", (e) => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && actions.length > 1) {
+        e.preventDefault();
+        actions[actions.length - 1].run();
+        return;
+      }
       if (e.key !== "Tab") return;
       const buttons = [...layer.querySelectorAll("button")];
       const first = buttons[0],
@@ -108,10 +113,16 @@ export class ScreenUI {
         e.preventDefault();
         first.focus();
       }
-    });
+    };
+    layer.addEventListener("keydown", onKeyDown);
     this.root.append(layer);
-    layer.querySelector("button")?.focus({ preventScroll: true });
-    return { destroy: () => layer.remove() };
+    layer.querySelector<HTMLButtonElement>("button:last-child")?.focus({ preventScroll: true });
+    return {
+      destroy: () => {
+        layer.removeEventListener("keydown", onKeyDown);
+        layer.remove();
+      },
+    };
   }
   destroy() {
     this.timers.forEach((id) => window.clearTimeout(id));

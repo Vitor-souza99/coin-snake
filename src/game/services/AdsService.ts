@@ -32,6 +32,7 @@ export class AdsService {
   }
 
   async showRewardedAd(_reason: RewardedPlacement): Promise<boolean> {
+    void _reason;
     if (!this.isRewardedAdReady()) return false;
     this.busy = true;
     try {

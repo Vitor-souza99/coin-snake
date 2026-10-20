@@ -105,3 +105,12 @@ export function krakenAttackTarget(point: Point, bounds: { left: number; top: nu
     y: Math.max(bounds.top + clearance, Math.min(bounds.bottom - clearance, point.y)),
   };
 }
+
+export type KrakenHitZone = "head" | "body" | "miss";
+
+/** Classifies the Kraken slam impact against the snake's head-first body trail. */
+export function krakenHitZone(target: Point, head: Point, body: Point[], radius: number): KrakenHitZone {
+  if (Math.hypot(target.x - head.x, target.y - head.y) <= radius) return "head";
+  if (body.slice(1).some((segment) => Math.hypot(target.x - segment.x, target.y - segment.y) <= radius)) return "body";
+  return "miss";
+}

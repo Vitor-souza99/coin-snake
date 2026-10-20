@@ -4,6 +4,28 @@ export interface AttackAuraOptions {
   bossId: string;
 }
 
+export type BossAuraPickupKind = "crown-orb" | "candy-aura" | "attack-pearl";
+
+export function bossAuraPickupKind(bossId: string): BossAuraPickupKind | undefined {
+  if (bossId === "candy-monster") return "candy-aura";
+  if (bossId === "kraken") return "attack-pearl";
+  if (["king-snake", "spider-queen", "scorpion-king"].includes(bossId)) return "crown-orb";
+  return undefined;
+}
+
+/** Regular gameplay coins never charge a boss aura; only Boss Coins do. */
+export function regularCoinAuraCharge(bossId: string, coinId: string, chargePerCoin: number): number {
+  void bossId;
+  void coinId;
+  void chargePerCoin;
+  return 0;
+}
+
+/** Every boss except the Spider Queen receives timed Boss Coins during combat. */
+export function bossUsesTimedCoins(bossId: string): boolean {
+  return bossId !== "spider-queen";
+}
+
 /** Resolves Candy's response to aura activation without preserving a pending attack. */
 export function activateCandyAura(combat: BossCombatSystem, bossId: string): boolean {
   if (!combat.activateAttackAura({ maxHits: 1, source: "candy-aura", bossId })) return false;
@@ -30,12 +52,15 @@ export class BossCombatSystem {
   }
 
   activateAttackAura(options: AttackAuraOptions): boolean {
-    if (this.attackCharge < 100 || options.maxHits <= 0) return false;
+    const expectedSource = bossAuraPickupKind(options.bossId);
+    if (!expectedSource || this.attackCharge < 100 || options.maxHits <= 0 || options.source !== expectedSource) return false;
     this.attackCharge = 0;
     this.active = true;
     this.remainingHits = options.maxHits;
     this.source = options.source;
     this.bossId = options.bossId;
+    // A newly collected aura must not inherit the cooldown from the previous hit.
+    this.hitInvulnerability = 0;
     return true;
   }
 
@@ -53,6 +78,9 @@ export class BossCombatSystem {
 
   consumeProtectionHit(bossId: string): boolean {
     if (!this.active || this.bossId !== bossId || this.remainingHits <= 0) return false;
+    // King Snake's aura is also the attack charge: blocking a charge must not
+    // consume the hit needed to damage him during the stun window.
+    if (bossId === "king-snake") return true;
     this.remainingHits--;
     if (this.remainingHits === 0) this.clearAura();
     return true;

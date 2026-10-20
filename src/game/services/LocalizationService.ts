@@ -36,6 +36,58 @@ const messages = {
   },
 } as const;
 
+const englishMissions: Record<string, readonly [string, string]> = {
+  collector: ["Treasure Hunt", "Collect 100 virtual coins."], scorer: ["A Great Run", "Score 2,000 points in one run."],
+  explorer: ["Nature's Power", "Collect 3 power-ups."], survivor: ["Persistence", "Survive for 90 seconds in one run."],
+  "combo-master": ["Perfect Rhythm", "Reach an x8 combo in one run."], "gold-rush": ["Golden Glow", "Collect 2 golden coins."],
+  "magnet-fan": ["Coin Magnet", "Collect 2 coins with Magnet active."], "daily-player": ["One More Run", "Finish 2 runs today."],
+  "run-finisher": ["Keep Going", "Finish 3 runs today."],
+};
+const englishPets: Record<string, readonly [string, string, string]> = {
+  scorpionling: ["Scorpionling", "In the Dune Desert, attacks and eliminates a baby scorpion every 4 seconds.", "Defeat the Scorpion King."],
+  spiderling: ["Spiderling", "Roams the map and draws nearby regular coins to you.", "Defeat the Spider Queen in the Spider Lair."],
+  bee: ["Bee", "+3 percentage points to your chance of finding blue coins.", "Defeat the Candy Monster."],
+  "candy-blob": ["Candy Blob", "+5% XP when you finish a run.", "Defeat the Candy Monster and purchase for 50 Boss Coins."],
+  "baby-octopus": ["Baby Octopus", "+5% magnet duration (8.4 s instead of 8 s).", "Defeat the Kraken."],
+  firefly: ["Firefly", "+5 percentage points to your chance of finding blue coins.", "Defeat King Snake and purchase for 50 Boss Coins."],
+  "snow-pup": ["Snow Pup", "+5% shield duration.", "Defeat the Candy Monster."], "tiny-dragon": ["Tiny Dragon", "+5% boost duration.", "Defeat King Snake."],
+  "tidal-turtle": ["Tidal Turtle", "+10% ghost duration (3.3 s instead of 3 s).", "Defeat the Kraken and purchase for 75 Boss Coins."],
+  phoenix: ["Solar Phoenix", "+1 starting life in every run.", "Defeat the Kraken and purchase for 125 Boss Coins."],
+  "celestial-serpent": ["Celestial Serpent", "+10% XP when you finish a run.", "Defeat all three bosses and purchase for 200 Boss Coins."],
+  "lucky-leprechaun": ["Lucky Clover", "Permanent companion: +2 percentage points to the chance of an extra life appearing, and unlocks a slot for another companion.", "Find 2 clovers in Candy World's Secret Garden with the Abyssal Serpent, and 2 in Ocean World's Underwater Garden with the Ghost Snake."],
+  "crystal-fox": ["Crystal Fox", "+5% score when collecting coins (does not increase your balance).", "Premium companion—not currently available."],
+};
+const englishWorlds: Record<string, readonly [string, string, string, string, string]> = {
+  "green-valley": ["Green Valley", "The starting valley and main adventure hub.", "Classic arena; no special mechanics.", "Green fields, trees, and peaceful paths.", "Bee, King Snake Skin"],
+  "candy-world": ["Candy World", "A pastel land guarded by the Candy Monster.", "Sticky zones", "Colorful candy, pastel colors, and sticky zones.", "Candy Blob, Candy Dragon Skin"],
+  ocean: ["Ocean World", "Ocean currents surround this underwater world.", "Ocean currents", "Blue waters, waves, and bubbles.", "Baby Octopus, Ghost Skin"],
+  "silent-abyss": ["The Silent Abyss", "A hidden rift leads to dark waters without currents.", "Survive for 90 seconds without currents; progress counts only on this map.", "Silent ruins, subtle bioluminescence, and an isolated arena.", "Abyssal Serpent"],
+  "spider-lair": ["Spider Lair", "A secret passage in Green Valley leads to the Spider Queen's lair.", "Dodge sticky webs; use your attack aura when the Spider Queen is exposed after firing.", "A hidden lair covered in webs, guarded by the Spider Queen.", "Spider Queen Skin, Spiderling"],
+  desert: ["Dune Desert", "Buried ruins, hidden oases, and sand gusts guarded by the Scorpion King.", "Sand gusts push your snake; oases slightly slow you down and offer a calmer route.", "Golden dunes, ancient ruins, cacti, and an oasis at the desert's heart.", "Scorpionling, Desert Scorpion Snake"],
+  "ice-world": ["Ice World", "A frozen region planned for exploration.", "Slippery surfaces (coming soon)", "Glaciers, snow, and ice crystals.", ""],
+  space: ["Space", "A free cosmic expansion planned for the future.", "Variable gravity (coming soon)", "Stars and nebulae across a cosmic field.", ""],
+  dragon_kingdom: ["Dragon Kingdom", "An optional dragon expansion; not required to complete the base game.", "Fire zones", "Dark mountains, lava, and dragon silhouettes.", "Dragon Coin, Fire Trail, Dragon Crown, Fire Dragon, Ancient Dragon"],
+  haunted_realm: ["Haunted Realm", "An optional expansion of ghosts and mysteries.", "Obstacles and ghosts that appear and disappear.", "A dark realm shrouded in mist and apparitions.", "Mini Ghost"],
+  prehistoric_world: ["Prehistoric World", "An optional expansion featuring prehistoric creatures.", "Natural hazards.", "Ancient vegetation, fossils, and distant volcanoes.", "Baby Dino"],
+};
+
+export function localizedMission(id: string, field: "title" | "description", fallback: string): string { return currentLanguage === "en" ? englishMissions[id]?.[field === "title" ? 0 : 1] ?? fallback : fallback; }
+export function localizedPet(id: string, field: "name" | "description" | "unlockedBy", fallback: string): string { return currentLanguage === "en" ? englishPets[id]?.[{ name: 0, description: 1, unlockedBy: 2 }[field]] ?? fallback : fallback; }
+export function localizedWorld(id: string, field: "name" | "description" | "specialMechanic" | "previewDescription" | "rewards", fallback: string): string {
+  if (currentLanguage !== "en") return fallback;
+  const item = englishWorlds[id];
+  const index = { name: 0, description: 1, specialMechanic: 2, previewDescription: 3, rewards: 4 }[field];
+  return item?.[index] ?? fallback;
+}
+const englishBossHints: Record<string, string> = {
+  "king-snake": "Collect Boss Coins (25/100 each) to charge your aura. At 100/100, collect the crown to activate it. Dodge King Snake's red charge line: without an aura, a hit costs a life; with one, it blocks the hit without being consumed. When King Snake crashes into the arena and is stunned, touch him with your active aura to deal 1 HP of damage. Contact without an aura deals no damage; charge another aura for the next attack.",
+  "candy-monster": "Collect 4 Boss Coins to charge and collect the aura. Each aura hit deals 1 HP of damage. After each attack, the Candy Monster flashes and retreats for 4 seconds—use that time to escape. Dodge the attack circles; attacks become more frequent as its health drops.",
+  kraken: "Collect Boss Coins (25 each) until you reach 100/100; a blue pearl will then appear. Collect it to activate your aura and hit the Kraken. Dodge the tentacle circles; when a tentacle misses, use your aura on it to deal 1 damage. At 2 HP, the Kraken tries to heal for 9 seconds: charge to 100/100, collect the pearl, and hit it to interrupt. Otherwise, it recovers 3 HP. After interrupting or completing the heal, leave the circle within 5 seconds. It only tries to heal once.",
+  "scorpion-king": "Dodge the red charge trail. When the Scorpion King misses and is stunned, use your attack aura to hit it. Escape the poison pools at 5 and 2 HP. In the final phase, dodge its leaps: hit its head with your attack aura to deal damage; its body reduces your size.",
+  "spider-queen": "Dodge the red thread and webs. Collect 4 Boss Coins to activate the purple aura; use it to touch the stalactite above and drop it on the Spider Queen for 1 damage. At 5 HP, webs grow larger and appear more often; at 2 HP, pressure increases again and two extra webs are launched.",
+};
+export function localizedBossHint(id: string, fallback: string): string { return currentLanguage === "en" ? englishBossHints[id] ?? fallback : fallback; }
+
 export type MessageKey = Exclude<keyof typeof messages.en, "difficultyTips">;
 let currentLanguage: Language = "en";
 

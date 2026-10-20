@@ -47,7 +47,7 @@ export function eligiblePortalWorlds(state: WorldPlayerState, current: string) {
 }
 export function traversableWorlds(state: WorldPlayerState, current: string) {
   const currentId = canonicalWorldId(current);
-  if (currentId === "silent-abyss" && "abyssChallengeCompleted" in state && state.abyssChallengeCompleted) {
+  if (currentId === "silent-abyss") {
     return worlds.filter((world) => world.id === "ocean" && world.isImplemented && isWorldUnlocked(world, state));
   }
   return worlds.filter((world) => world.id !== currentId && world.id !== "clover-garden" && world.isImplemented && world.unlockType !== "PREMIUM" && (world.category !== "SECRET" || world.id === "silent-abyss" && currentId === world.id && state.worldsUnlocked.includes(world.id)) && isWorldUnlocked(world, state));

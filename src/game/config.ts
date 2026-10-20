@@ -9,7 +9,6 @@ import { DifficultySelectScene } from "./scenes/DifficultySelectScene";
 import { ShopScene } from "./scenes/ShopScene";
 import { MissionsScene } from "./scenes/MissionsScene";
 import { GameOverScene } from "./scenes/GameOverScene";
-import { SkinPreviewScene } from "./scenes/SkinPreviewScene";
 import { WorldSelectScene } from "./scenes/WorldSelectScene";
 export const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -29,7 +28,6 @@ export const config: Phaser.Types.Core.GameConfig = {
     CollectionScene,
     GameScene,
     ShopScene,
-    SkinPreviewScene,
     WorldSelectScene,
     MissionsScene,
     GameOverScene,

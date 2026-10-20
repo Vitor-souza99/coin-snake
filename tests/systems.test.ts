@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   defaults,
   validateSave,
@@ -7,10 +7,13 @@ import {
 import {
   buySkin,
   buyPet,
+  addXP,
   creditBossCoins,
   claimShopReward,
   SHOP_REWARDED_COINS,
   creditCoins,
+  coinCollectionXP,
+  bossCoinCollectionXP,
   finishRun,
 } from "../src/game/systems/EconomySystem";
 import { ComboSystem } from "../src/game/systems/ComboSystem";
@@ -25,15 +28,14 @@ import { attractSpiderlingCoin, spiderlingCoinRadius, spiderlingCoinSpeed } from
 import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegraphTiming, difficulty, difficultyProfiles, powerUpSpawnInterval } from "../src/game/systems/DifficultySystem";
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
-import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
+import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, krakenHitZone, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
 import { containDesertArenaPoint, blockDesertArenaCrossing, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
-import { addXP } from "../src/game/systems/EconomySystem";
 import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
 import { newRun } from "../src/game/types/game";
 import { PortalSystem } from "../src/game/systems/PortalSystem";
-import { activateCandyAura, BossCombatSystem, resolveCandyAuraHit } from "../src/game/systems/BossCombatSystem";
+import { activateCandyAura, BossCombatSystem, bossAuraPickupKind, bossUsesTimedCoins, regularCoinAuraCharge, resolveCandyAuraHit } from "../src/game/systems/BossCombatSystem";
 import { eligiblePortalWorlds, reconcileWorldUnlocks, rememberWorld, traversableWorlds, weightedWorldChoice, worldRequirementText, worldStatus } from "../src/game/systems/WorldSystem";
 import { worldById, worlds } from "../src/game/data/worlds";
 import { bosses } from "../src/game/data/bosses";
@@ -42,7 +44,51 @@ import { awardAchievement, achievementDefinitions } from "../src/game/systems/Ac
 import { logoLayout } from "../src/game/ui/LogoLayout";
 import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, isMysterySkin, skinMysteryClues, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
 import { purchases } from "../src/game/services/PurchaseService";
+import { clearDevRunSnapshot, loadDevRunSnapshot, saveDevRunSnapshot, validateDevRunSnapshot } from "../src/game/systems/DevRunSnapshot";
 
+describe("development run snapshots", () => {
+  const freshSnapshot = () => {
+    const run = newRun();
+    return {
+      world: "green-valley", run,
+      snake: { x: 360, y: 690, angle: -Math.PI / 2, length: B.snake.initial },
+      lives: B.power.initialLives,
+      combo: { value: 1, remaining: 0, max: 1 },
+      turbo: { energy: 100, exhausted: false, activations: 0 },
+      powers: { magnet: 0, turbo: 0, precision: 0, luckyStar: 0, ghost: 0, shield: false, invincible: 0, slowed: 0 },
+      coins: [{ x: 500, y: 400, kind: "normal" }],
+    };
+  };
+
+  it("saves and restores a valid development snapshot", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    try {
+      saveDevRunSnapshot(true, freshSnapshot());
+      const restored = loadDevRunSnapshot(true);
+      expect(restored).toMatchObject({ version: 2, world: "green-valley", run: { score: 0 }, coins: [{ kind: "normal" }] });
+      expect(validateDevRunSnapshot(restored)).toBe(true);
+      clearDevRunSnapshot(true);
+      expect(loadDevRunSnapshot(true)).toBeUndefined();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("rejects malformed snapshots and never accesses storage when disabled", () => {
+    expect(validateDevRunSnapshot({ version: 1 })).toBe(false);
+    const getItem = vi.fn();
+    vi.stubGlobal("localStorage", { getItem });
+    try {
+      expect(loadDevRunSnapshot(false)).toBeUndefined();
+      saveDevRunSnapshot(false, freshSnapshot());
+      clearDevRunSnapshot(false);
+      expect(getItem).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
 describe("Spiderling coin assistance", () => {
   it("attracts nearby common coins toward the snake at a capped speed", () => {
     const coin = { x: 100, y: 0, kind: { id: "normal" } };
@@ -199,6 +245,38 @@ describe("economy", () => {
     expect(p.xp).toBe(50);
     expect(p.bestScore).toBe(500);
   });
+  it("awards coin XP by coin value and diminishing Boss Coin XP without a cap", () => {
+    expect([1, 5, 20, 50, 100].map(coinCollectionXP)).toEqual([1, 5, 20, 50, 100]);
+    expect(bossCoinCollectionXP(0)).toBe(5);
+    expect(bossCoinCollectionXP(9)).toBe(5);
+    expect(bossCoinCollectionXP(10)).toBe(2);
+    expect(bossCoinCollectionXP(0, 12)).toBe(54);
+    const p = defaults(), run = newRun();
+    run.coinXP = 126;
+    run.bossCoinXP = 54;
+    run.coinXPCredited = 126;
+    run.bossCoinXPCredited = 54;
+    finishRun(p, run);
+    expect(p.xp).toBe(B.xp.perRun);
+  });
+  it("does not credit collected coin XP twice when a run finishes", () => {
+    const p = defaults(), run = newRun();
+    const firstCoinXP = coinCollectionXP(5);
+    run.coinXP += firstCoinXP;
+    addXP(p, firstCoinXP);
+    run.coinXPCredited = run.coinXP;
+    const firstBossCoinXP = bossCoinCollectionXP(run.bossCoins);
+    run.bossCoins++;
+    run.bossCoinXP += firstBossCoinXP;
+    addXP(p, firstBossCoinXP);
+    run.bossCoinXPCredited = run.bossCoinXP;
+    const secondCoinXP = coinCollectionXP(20);
+    run.coinXP += secondCoinXP;
+    addXP(p, secondCoinXP);
+    run.coinXPCredited = run.coinXP;
+    finishRun(p, run);
+    expect(p.xp).toBe(B.xp.perRun + 30);
+  });
   it("applies Candy Blob XP only to the run XP, not coins", () => {
     const p = defaults(), r = newRun();
     p.selectedPet = "candy-blob";
@@ -241,11 +319,12 @@ describe("boss entry hints", () => {
     expect(king.combat.attackCooldown).toBe(6);
     expect(king.combat.telegraphDuration).toBe(1.3);
     expect(king.combat.stunDuration).toBe(3.5);
-    expect(king.entryHint).not.toMatch(/Boss Coins/i);
+    expect(king.entryHint).toMatch(/4 Boss Coins/i);
+    expect(king.entryHint).toMatch(/25\/100/i);
     expect(king.entryHint).toMatch(/coroa/i);
     expect(king.phases).toContain(2);
   });
-  it("configures the Candy Monster's six-hit fight, faster attacks, and two-coin aura charge", () => {
+  it("configures the Candy Monster's six-hit fight, faster attacks, and four-coin aura charge", () => {
     const candy = bosses.find((boss) => boss.id === "candy-monster")!;
     expect(candy.maxHealth).toBe(6);
     expect(candy.phases).toEqual([4, 2]);
@@ -259,7 +338,85 @@ describe("boss entry hints", () => {
   });
 });
 describe("boss attack aura", () => {
-  it("charges the Spider Queen stalactite aura with four Boss Coins and consumes one hit", () => {
+  it("defines one matching aura pickup kind for each boss", () => {
+    expect(bossAuraPickupKind("king-snake")).toBe("crown-orb");
+    expect(bossAuraPickupKind("candy-monster")).toBe("candy-aura");
+    expect(bossAuraPickupKind("kraken")).toBe("attack-pearl");
+    expect(bossAuraPickupKind("scorpion-king")).toBe("crown-orb");
+    expect(bossAuraPickupKind("spider-queen")).toBe("crown-orb");
+    expect(bossAuraPickupKind("unknown-boss")).toBeUndefined();
+  });
+
+  it("does not activate from a mismatched boss aura pickup", () => {
+    for (const boss of bosses) {
+      const combat = new BossCombatSystem();
+      combat.addCharge(100);
+      const wrongSource = bossAuraPickupKind(boss.id) === "crown-orb" ? "attack-pearl" : "crown-orb";
+      expect(combat.activateAttackAura({ maxHits: 1, source: wrongSource, bossId: boss.id })).toBe(false);
+      expect(combat.attackCharge).toBe(100);
+      expect(combat.active).toBe(false);
+    }
+  });
+
+  it("spawns timed Boss Coins for Candy Monster as well as the other bosses", () => {
+    expect(bossUsesTimedCoins("candy-monster")).toBe(true);
+    expect(bossUsesTimedCoins("king-snake")).toBe(true);
+    expect(bossUsesTimedCoins("spider-queen")).toBe(false);
+  });
+
+  it("does not charge King Snake's aura from regular coins", () => {
+    const combat = new BossCombatSystem();
+    for (const coinId of ["normal", "blue", "diamond", "golden", "mythic"]) {
+      combat.addCharge(regularCoinAuraCharge("king-snake", coinId, 25));
+    }
+    expect(combat.attackCharge).toBe(0);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(false);
+  });
+
+  it("charges King Snake only from four Boss Coins before making the crown collectible", () => {
+    const combat = new BossCombatSystem();
+    for (let coin = 1; coin <= 4; coin++) {
+      combat.addCharge(25);
+      expect(combat.attackCharge).toBe(coin * 25);
+      expect(combat.attackCharge >= 100).toBe(coin === 4);
+    }
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+  });
+
+  it("does not charge any boss aura from regular coins", () => {
+    for (const bossId of ["king-snake", "candy-monster", "kraken", "scorpion-king"]) {
+      for (const coinId of ["normal", "blue", "diamond", "golden", "mythic", "candy_coin", "pearl_coin"]) {
+        expect(regularCoinAuraCharge(bossId, coinId, 25)).toBe(0);
+      }
+    }
+  });
+
+  it("charges the combat aura only when a Boss Coin pickup is collected", () => {
+    const combat = new BossCombatSystem();
+    for (const coinId of ["normal", "golden", "mythic"]) {
+      combat.addCharge(regularCoinAuraCharge("candy-monster", coinId, 25));
+    }
+    expect(combat.attackCharge).toBe(0);
+    combat.addCharge(bosses.find((boss) => boss.id === "kraken")!.combat.attackChargePerBossCoin);
+    expect(combat.attackCharge).toBe(25);
+  });
+
+  it("requires four Boss Coins, resets charge on collection, and repeats after a hit", () => {
+    const combat = new BossCombatSystem();
+    for (let i = 1; i <= 3; i++) {
+      expect(combat.addCharge(25)).toBe(i * 25);
+      expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(false);
+    }
+    expect(combat.addCharge(25)).toBe(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+    expect(combat.attackCharge).toBe(0);
+    expect(combat.consumeHit("king-snake")).toBe(true);
+    expect(combat.addCharge(75)).toBe(75);
+    expect(combat.addCharge(25)).toBe(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+  });
+
+  it("requires collecting the Spider Queen aura after four Boss Coins", () => {
     const combat = new BossCombatSystem();
     const spider = bosses.find((boss) => boss.id === "spider-queen")!;
 
@@ -268,7 +425,7 @@ describe("boss attack aura", () => {
     }
 
     expect(combat.attackCharge).toBe(100);
-    expect(combat.activateAttackAura({ maxHits: 1, source: "spider-stalactite", bossId: spider.id })).toBe(true);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: spider.id })).toBe(true);
     expect(combat.consumeHit("king-snake")).toBe(false);
     expect(combat.consumeHit(spider.id)).toBe(true);
     expect(combat.consumeHit(spider.id)).toBe(false);
@@ -308,27 +465,46 @@ describe("boss attack aura", () => {
     expect(combat.active).toBe(false);
   });
 
-  it("consumes the King Snake aura as protection without applying hit cooldown", () => {
+  it("keeps the King Snake attack aura after blocking a charge, then consumes it on damage", () => {
     const combat = new BossCombatSystem();
     combat.addCharge(100);
     expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
 
     expect(combat.consumeProtectionHit("king-snake")).toBe(true);
-    expect(combat.active).toBe(false);
-    expect(combat.remainingHits).toBe(0);
+    expect(combat.active).toBe(true);
+    expect(combat.remainingHits).toBe(1);
     expect(combat.hitInvulnerability).toBe(0);
-    expect(combat.consumeProtectionHit("king-snake")).toBe(false);
+    expect(combat.consumeHit("king-snake")).toBe(true);
+    expect(combat.active).toBe(false);
   });
 
-  it("keeps hit limits and boss matching for the Scorpion's sugar shield aura", () => {
+  it("allows consecutive King Snake hits after charging and collecting a fresh aura", () => {
+    const combat = new BossCombatSystem();
+    for (let hp = 0; hp < 6; hp++) {
+      expect(combat.addCharge(25)).toBe((hp % 4 + 1) * 25);
+      if (hp % 4 === 3) {
+        expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+        expect(combat.consumeHit("king-snake")).toBe(true);
+      }
+    }
+    expect(combat.active).toBe(false);
+    expect(combat.attackCharge).toBe(50);
+  });
+
+  it("does not allow a King Snake aura to damage the boss outside its stun window", () => {
     const combat = new BossCombatSystem();
     combat.addCharge(100);
-    expect(combat.activateAttackAura({ maxHits: 2, source: "sugar_shield", bossId: "scorpion-king" })).toBe(true);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "king-snake" })).toBe(true);
+    expect(combat.consumeHit("king-snake")).toBe(true);
+  });
+
+  it("keeps hit limits and boss matching for the Scorpion's aura", () => {
+    const combat = new BossCombatSystem();
+    combat.addCharge(100);
+    expect(combat.activateAttackAura({ maxHits: 1, source: "crown-orb", bossId: "scorpion-king" })).toBe(true);
 
     combat.update(120);
     expect(combat.consumeHit("king-snake")).toBe(false);
-    expect(combat.consumeHit("scorpion-king")).toBe(true);
-    combat.update(0.81);
     expect(combat.consumeHit("scorpion-king")).toBe(true);
     expect(combat.active).toBe(false);
   });
@@ -457,6 +633,18 @@ describe("roadmap progression systems", () => {
     expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual(["ocean"]);
     expect(reconcileWorldUnlocks(profile)).toEqual([]);
   });
+  it("does not unlock Candy below level 5 after King Snake, then unlocks it upon reaching level 5", () => {
+    const profile = defaults();
+    profile.playerLevel = 4;
+    profile.bossesDefeated.push("king-snake");
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual([]);
+    expect(profile.worldsUnlocked).not.toContain("candy-world");
+
+    profile.playerLevel = 5;
+    expect(reconcileWorldUnlocks(profile).map((world) => world.id)).toEqual(["candy-world"]);
+    expect(profile.worldsUnlocked).toContain("candy-world");
+    expect(traversableWorlds(profile, "green-valley").map((world) => world.id)).toContain("candy-world");
+  });
   it("unlocks Desert only after level 15, Kraken, and Ocean access, and migrates it", () => {
     const profile = defaults();
     profile.playerLevel = 15;
@@ -478,7 +666,7 @@ describe("roadmap progression systems", () => {
     profile.bossesDefeated.push("kraken");
     reconcileWorldUnlocks(profile);
     expect(profile.worldsUnlocked).toContain("silent-abyss");
-    expect(traversableWorlds(profile, "silent-abyss").map((world) => world.id)).toEqual(["green-valley", "candy-world", "ocean"]);
+    expect(traversableWorlds(profile, "silent-abyss").map((world) => world.id)).toEqual(["ocean"]);
     expect(profile.unlockedSkins).not.toContain("abyssal-serpent");
     const completed = validateSave({ saveVersion: 11, bossesDefeated: ["kraken"], worldsUnlocked: ["ocean", "candy-world", "silent-abyss"], abyssChallengeBest: 90, abyssChallengeCompleted: true });
     expect(completed.abyssChallengeBest).toBe(90);
@@ -575,7 +763,7 @@ describe("roadmap progression systems", () => {
     expect(powers.invincible).toBe(B.power.shieldGrace);
     powers.activate("turbo", 0.05);
     expect(powers.turbo).toBeCloseTo(B.power.turboDuration * 1.05);
-    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 35, 40, 45]);
+    expect(bosses.map((boss) => boss.bossCoinDrop)).toEqual([10, 25, 4, 40, 45]);
     expect(bosses.find((boss) => boss.id === "king-snake")?.petReward).toBe("tiny-dragon");
     expect(bosses.find((boss) => boss.id === "candy-monster")?.petReward).toBe("bee");
     expect(bosses.find((boss) => boss.id === "candy-monster")?.additionalPetRewards).toEqual(["candy-blob", "snow-pup"]);
@@ -947,6 +1135,14 @@ describe("snake and powers", () => {
     expect(isOutsideKrakenArena({ x: arena.x + radius + 91, y: arena.y }, arena, radius, 90)).toBe(true);
     expect(isOutsideKrakenArena({ x: arena.x + radius + 89, y: arena.y }, arena, radius, 90)).toBe(false);
   });
+  it("places the Coral Lagoon aura at the map center, away from the Kraken arena center", () => {
+    const regions = oceanRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom);
+    const lagoon = regions.find((region) => region.id === "coral_lagoon")!;
+    const krakenArena = regions.find((region) => region.id === "kraken_arena")!;
+    expect(lagoon).toMatchObject({ x: (B.arena.left + B.arena.right) / 2, y: (B.arena.top + B.arena.bottom) / 2 });
+    expect(lagoon.x).not.toBe(krakenArena.x);
+    expect(lagoon.y).not.toBe(krakenArena.y);
+  });
   it("aims Kraken attacks at the snake outside its arena and within map bounds", () => {
     const center = { x: 500, y: 500 }, radius = 110;
     const bounds = { left: 0, top: 0, right: 1000, bottom: 1000 };
@@ -956,6 +1152,13 @@ describe("snake and powers", () => {
     expect(isOutsideKrakenArena(target, center, radius)).toBe(true);
     expect(target.x).toBeLessThanOrEqual(bounds.right - 96);
     expect(krakenAttackTarget({ x: -100, y: 500 }, bounds, 96)).toEqual({ x: 96, y: 500 });
+  });
+  it("distinguishes Kraken hits on the snake head, body, and empty space", () => {
+    const head = { x: 100, y: 100 };
+    const body = [head, { x: 80, y: 100 }, { x: 60, y: 100 }];
+    expect(krakenHitZone({ x: 105, y: 100 }, head, body, 10)).toBe("head");
+    expect(krakenHitZone({ x: 80, y: 110 }, head, body, 10)).toBe("body");
+    expect(krakenHitZone({ x: 150, y: 150 }, head, body, 10)).toBe("miss");
   });
   it("applies regional Ocean currents additively while preserving player input and clamping Turbo speed", () => {
     const spawn = { x: 700, y: 750 };

@@ -44,7 +44,9 @@ export class DifficultySelectScene extends Phaser.Scene {
         updateTip();
       });
     });
-    ui.on("#start-run", () => this.scene.start("Game", { ...data, gameDifficulty: save.profile.settings.gameDifficulty }));
+    ui.on("#start-run", () => {
+      this.scene.start("Game", { ...data, gameDifficulty: save.profile.settings.gameDifficulty });
+    });
     ui.on("#cancel-run", () => this.scene.start("Menu"));
     ui.on("#back", () => this.scene.start("Menu"));
   }

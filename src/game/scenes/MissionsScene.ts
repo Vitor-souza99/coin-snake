@@ -4,6 +4,7 @@ import { B } from "../data/balance";
 import { save } from "../systems/SaveSystem";
 import { updateMissionDay } from "../systems/MissionSystem";
 import { ScreenUI, header } from "../ui/ScreenUI";
+import { getLanguage, localizedMission } from "../services/LocalizationService";
 export class MissionsScene extends Phaser.Scene {
   constructor() {
     super("Missions");
@@ -17,12 +18,13 @@ export class MissionsScene extends Phaser.Scene {
     const timeLeft = Math.max(0, nextReset.getTime() - now.getTime());
     const hours = Math.floor(timeLeft / 3_600_000), minutes = Math.floor((timeLeft % 3_600_000) / 60_000);
     ui.html(
-      `${header("Missões do dia", `Novos desafios em ${hours}h ${minutes}min`)}<div class="grid">${selectedMissions
+      `${header(getLanguage() === "en" ? "Daily Missions" : "Missões do dia", getLanguage() === "en" ? `New challenges in ${hours}h ${minutes}m` : `Novos desafios em ${hours}h ${minutes}min`)}<div class="grid">${selectedMissions
         .map((m) => {
           const e = save.profile.missions[m.id],
             ready = e.progress >= m.target,
-            label = m.difficulty === "easy" ? "Fácil" : m.difficulty === "medium" ? "Média" : "Desafio";
-          return `<article class="card mission"><span class="pill">${label}</span><h2>${m.title}</h2><p class="muted">${m.description}</p><div class="track"><i style="width:${Math.min(100, (100 * e.progress) / m.target)}%"></i></div><p class="muted">${Math.floor(e.progress)} / ${m.target}</p><p>${e.claimed ? "✓ Recompensa recebida" : ready ? `✓ Concluída · +${m.reward} moedas e +${B.xp.perMission} XP recebidos` : `Recompensa: ${m.reward} moedas + ${B.xp.perMission} XP`}</p></article>`;
+            label = getLanguage() === "en" ? m.difficulty === "easy" ? "Easy" : m.difficulty === "medium" ? "Medium" : "Challenge" : m.difficulty === "easy" ? "Fácil" : m.difficulty === "medium" ? "Média" : "Desafio";
+          const en = getLanguage() === "en";
+          return `<article class="card mission"><span class="pill">${label}</span><h2>${localizedMission(m.id, "title", m.title)}</h2><p class="muted">${localizedMission(m.id, "description", m.description)}</p><div class="track"><i style="width:${Math.min(100, (100 * e.progress) / m.target)}%"></i></div><p class="muted">${Math.floor(e.progress)} / ${m.target}</p><p>${e.claimed ? `✓ ${en ? "Reward claimed" : "Recompensa recebida"}` : ready ? `✓ ${en ? "Complete" : "Concluída"} · +${m.reward} ${en ? "coins and" : "moedas e"} +${B.xp.perMission} XP ${en ? "received" : "recebidos"}` : `${en ? "Reward" : "Recompensa"}: ${m.reward} ${en ? "coins" : "moedas"} + ${B.xp.perMission} XP`}</p></article>`;
         })
         .join("")}</div>`,
     );

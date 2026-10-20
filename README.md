@@ -47,7 +47,7 @@ Em Ajustar controles e som, ative modo canhoto para inverter os controles, ajust
 | `npm run preview` | Servir build local |
 | `npm run typecheck` | Verificar TypeScript strict |
 | `npm run lint` | ESLint |
-| `npm run test` | 29 testes de regras |
+| `npm run test` | Testes automatizados de regras |
 | `npm run test:browser` | Smoke test com servidor dev ativo |
 | `npm run android:sync` | Build + cap sync android |
 | `npm run android:open` | Abrir Android Studio |
@@ -83,7 +83,7 @@ A câmera é somente de mundo; HUD não sofre zoom. Look-ahead interpola posiç�
 
 ## Save e migração
 
-A chave **coin-snake-v1** é mantida intencionalmente. `saveVersion: 2` adiciona preferências, dicas, frutas/turbo em estatísticas. A migração conserva saldo, XP, skins, missões, recordes e flags anteriores. Saves de versão superior a 2 não são sobrescritos. Dados corrompidos usam defaults e mensagem de erro. Escritas são serializadas. Sem login, backend ou cloud save.
+`saveVersion: 3` adiciona preferências, dicas, frutas/turbo e estatísticas. A migração conserva saldo, XP, skins, missões, recordes e flags anteriores. Saves de versão superior a 3 não são sobrescritos. Dados corrompidos usam defaults e mensagem de erro. Escritas são serializadas. Sem login, backend ou cloud save.
 
 Moedas são creditadas pelo delta a cada morte. XP/estatísticas são consolidados ao finalizar pelo menu/reiniciar. A run interrompida por encerramento forçado do processo não é restaurada. Missões usam data local; alterar relógio/save não é protegido por servidor.
 
@@ -105,6 +105,6 @@ npm run test:browser
 
 ## Escopo e próximos passos
 
-O master prompt completo está em `docs/MASTER_PROMPT.md`. Há uma implementação inicial dos sistemas de portal/mundos, boss/pets, Coin Rush, conquistas e mastery; consulte `docs/IMPLEMENTATION_STATUS.md` para limitações. Candy usa slowdown global e Ocean uma leve deriva (não há zonas localizadas); bosses precisam playtest, e analytics/compras reais não são integrados. Não considere esta build pronta para publicação.
+O master prompt completo está em `docs/MASTER_PROMPT.md`. Há uma implementação inicial dos sistemas de portal/mundos, bosses/pets, Coin Rush, conquistas e mastery; consulte `docs/IMPLEMENTATION_STATUS.md` para limitações. Candy usa slowdown global e Ocean uma leve deriva (não há zonas localizadas); bosses precisam playtest, e analytics/compras reais não são integrados. Não considere esta build pronta para publicação.
 
 Antes de ampliar o jogo, valide a sensação de controle, a legibilidade e o desempenho no seu celular. Esta atualização parte da versão entregue nesta conversa; modificações feitas somente no seu VS Code não foram incorporadas automaticamente.

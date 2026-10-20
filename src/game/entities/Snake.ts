@@ -11,7 +11,7 @@ export class Snake {
     x: 360,
     y: 690,
   }));
-  private capacity =
+  private readonly capacity =
     Math.ceil((B.snake.max * B.snake.spacing) / B.snake.trailStep) + 10;
   private trail: Point[] = Array.from({ length: this.capacity }, () => ({
     x: 0,
@@ -35,6 +35,13 @@ export class Snake {
       this.trail[index].y = this.y - dy * i * B.snake.trailStep;
     }
     this.placeBody();
+  }
+  restore(x: number, y: number, angle: number, length: number) {
+    if (![x, y, angle, length].every(Number.isFinite)) return false;
+    if (length < 1 || length > B.snake.max) return false;
+    this.length = Math.floor(length);
+    this.reset(x, y, angle);
+    return true;
   }
   grow() {
     if (this.length >= B.snake.max) return;

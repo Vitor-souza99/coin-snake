@@ -1,6 +1,6 @@
 # Coin Snake 1.1 — Controles e responsividade
 
-Esta atualização entrega a próxima fase do prompt: controle suave, joystick, turbo manual, Shrink Fruit e rotação da interface. **Não inclui ainda portais, bosses, pets ou novos mundos.** Eles estão no roadmap, sem botões que simulem recursos inexistentes.
+Esta atualização inclui controle suave, joystick, turbo manual, Shrink Fruit e rotação da interface. Também traz sistemas iniciais de mundos, portais, bosses, pets e Coin Rush; consulte `docs/IMPLEMENTATION_STATUS.md` para conhecer as limitações e o estado de validação.
 
 ## Abrir no Windows
 1. Extraia o ZIP em uma pasta nova. Guarde seu projeto anterior.
@@ -30,7 +30,7 @@ A base é o Coin Snake MVP entregue anteriormente nesta conversa. Mudanças feit
 - Fruta roxa: reduz 25% do corpo, mínimo de cinco segmentos, vida de 10s e cooldown de 20–35s.
 - Canvas responsivo; telas com composição horizontal real, câmera com look-ahead e pausa segura ao girar.
 - Configurações de som/vibração, redução de efeitos e dicas reapresentáveis.
-- Save v2 com migração do v1 e proteção contra sobrescrever um save de versão futura.
+- Save v3 com migração de versões anteriores e proteção contra sobrescrever um save de versão futura.
 - Loja, missões, pontuação, combos, powers e revive dev preservados.
 
 Leia `README.md` e `docs/IMPLEMENTATION_STATUS.md` para comandos, validações e limites.

@@ -85,6 +85,10 @@ export interface RunState {
   missionFinalized: boolean;
   bossEnergy: number;
   bossCoins: number;
+  coinXP: number;
+  bossCoinXP: number;
+  coinXPCredited: number;
+  bossCoinXPCredited: number;
   portalsUsed: number;
   bossDefeats: number;
   rushMode: boolean;
@@ -111,6 +115,10 @@ export function newRun(): RunState {
     missionFinalized: false,
     bossEnergy: 0,
     bossCoins: 0,
+    coinXP: 0,
+    bossCoinXP: 0,
+    coinXPCredited: 0,
+    bossCoinXPCredited: 0,
     portalsUsed: 0,
     bossDefeats: 0,
     rushMode: false,

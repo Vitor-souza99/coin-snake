@@ -10,6 +10,7 @@ import { reconcileWorldUnlocks, selectWorld, worldRequirementText, worldStatus }
 import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
 import { ScreenUI, header, textureURL } from "../ui/ScreenUI";
+import { getLanguage, localizedPet, localizedWorld } from "../services/LocalizationService";
 
 type Category = "skins" | "pets" | "maps" | "packs";
 
@@ -35,6 +36,7 @@ export class ShopScene extends Phaser.Scene {
     let category: Category = previous?.category ?? "skins";
     let filter: "ALL" | "OWNED" | "LOCKED" = previous?.filter ?? "ALL";
     let rarity: SkinRarity | "ALL" = previous?.rarity ?? "ALL";
+    const en = getLanguage() === "en";
 
     const confirmPurchase = (name: string, price: number, purchase: () => boolean, currency = "moedas", balance: () => number = () => profile.totalCoins) => {
       const confirmation = ui.modal(
@@ -100,10 +102,10 @@ export class ShopScene extends Phaser.Scene {
           : !premium && skin.unlockType === "COINS" && skin.coinPrice !== null
             ? `<button class="action small" data-buy-skin="${skin.id}" ${profile.totalCoins < skin.coinPrice ? "disabled" : ""}>COMPRAR</button>`
             : "";
-        return `<article class="card skin-card rarity-card rarity-${skin.rarity.toLowerCase()}" data-skin="${skin.id}" tabindex="0" role="button" aria-label="Visualizar ${mystery ? "skin misteriosa" : `${skin.name}, ${skin.rarity}`}">
+        return `<article class="card skin-card rarity-card rarity-${skin.rarity.toLowerCase()}" data-skin="${skin.id}">
           ${mystery ? '<div class="mystery-skin-mark" aria-label="Aparência oculta">?</div>' : `<img src="${textureURL(this, `${skin.id}-preview-head`)}" alt="Preview de ${skin.name}">`}
           <div class="details"><h2>${mystery ? "Skin misteriosa" : skin.name}</h2><span class="skin-rarity rarity-${skin.rarity.toLowerCase()}">${mystery ? "MISTÉRIO" : skin.rarity}</span><p>${mystery ? skinMysteryClues.subtle : premium ? "🔒 PREMIUM · INDISPONÍVEL" : owned ? selected ? "✓ EQUIPADA" : "✓ DESBLOQUEADA" : price}</p>
-          <div class="skin-card-actions"><button class="action small secondary" data-view="${skin.id}">VER</button>${mystery ? '<button class="action small secondary" data-mystery-clue>REVELAR PISTA</button>' : equip}</div></div></article>`;
+           <div class="skin-card-actions">${mystery ? '<button class="action small secondary" data-mystery-clue>REVELAR PISTA</button>' : equip}</div></div></article>`;
       }).join("") || '<p class="muted">Nenhuma skin nesta seleção.</p>'}</div>`;
     };
 
@@ -134,7 +136,7 @@ export class ShopScene extends Phaser.Scene {
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
         return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
           <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
-          <span class="skin-rarity ${rarityClass}">${pet.rarity}</span><h2>${pet.name}</h2><p class="pet-description">${pet.description}</p>
+          <span class="skin-rarity ${rarityClass}">${pet.rarity}</span><h2>${localizedPet(pet.id, "name", pet.name)}</h2><p class="pet-description">${localizedPet(pet.id, "description", pet.description)}</p>
           <p class="pet-unlock-detail">${detail}</p><div class="pet-card-action">${action}</div>
         </article>`;
       }).join("")}</div>`;
@@ -148,8 +150,8 @@ export class ShopScene extends Phaser.Scene {
         const label = status === "PREMIUM_LOCKED" ? "PREMIUM · EM BREVE" : status === "COMING_SOON" ? "CONTEÚDO FUTURO" : status === "LOCKED" ? "BLOQUEADO" : selected ? "SELECIONADO" : "DISPONÍVEL";
         return `<article class="card map-shop-card" style="--map-accent:#${world.accent.toString(16).padStart(6, "0")}">
           <div class="map-shop-art" aria-hidden="true" style="background:linear-gradient(135deg,#${world.background.toString(16).padStart(6, "0")},#${world.ground.toString(16).padStart(6, "0")})"></div>
-          <span class="skin-rarity">${world.category === "PREMIUM" ? "PREMIUM" : world.category === "STANDARD" ? "INICIAL" : "PROGRESSÃO"}</span><h2>${world.name}</h2><p>${world.description}</p>
-          <p class="muted"><b>${label}</b><br>${worldRequirementText(world, profile)}</p><p class="muted">${world.specialMechanic}<br>Recompensas: ${world.rewards.join(", ") || "A definir"}</p>
+          <span class="skin-rarity">${world.category === "PREMIUM" ? "PREMIUM" : world.category === "STANDARD" ? en ? "STARTER" : "INICIAL" : en ? "PROGRESSION" : "PROGRESSÃO"}</span><h2>${localizedWorld(world.id, "name", world.name)}</h2><p>${localizedWorld(world.id, "description", world.description)}</p>
+          <p class="muted"><b>${label}</b><br>${worldRequirementText(world, profile)}</p><p class="muted">${localizedWorld(world.id, "specialMechanic", world.specialMechanic)}<br>${en ? "Rewards:" : "Recompensas:"} ${localizedWorld(world.id, "rewards", world.rewards.join(", ")) || (en ? "Coming soon" : "A definir")}</p>
           ${available ? `<button class="action ${selected ? "secondary" : ""}" data-select-world="${world.id}" ${selected ? "disabled" : ""}>${selected ? "MUNDO ATUAL" : "JOGAR NESTE MAPA"}</button>` : `<button class="action secondary" disabled>${status === "PREMIUM_LOCKED" ? "PREMIUM · EM BREVE" : status === "COMING_SOON" ? "EM DESENVOLVIMENTO" : "BLOQUEADO"}</button>`}
         </article>`;
       }).join("")}</div>`;
@@ -188,9 +190,6 @@ export class ShopScene extends Phaser.Scene {
             if (ui.root.isConnected) render();
           }
         });
-        ui.root.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => button.addEventListener("click", (event) => {
-          event.stopPropagation(); this.preview(button.dataset.view!);
-        }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-mystery-clue]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation();
           button.closest(".details")?.querySelector("p")?.replaceChildren(document.createTextNode(skinMysteryClues.clear));
@@ -210,10 +209,6 @@ export class ShopScene extends Phaser.Scene {
           if (!buySkin(profile, button.dataset.equipSkin!)) return;
           void save.save(); audio.play("click"); haptic("power"); render();
         }));
-        ui.root.querySelectorAll<HTMLElement>("[data-skin]").forEach((card) => {
-          card.addEventListener("click", (event) => { if (!(event.target as HTMLElement).closest("button")) this.preview(card.dataset.skin!); });
-          card.addEventListener("keydown", (event) => { if ((event.key === "Enter" || event.key === " ") && event.target === card) { event.preventDefault(); this.preview(card.dataset.skin!); } });
-        });
         ui.root.querySelectorAll<HTMLButtonElement>("[data-filter]").forEach((button) => button.addEventListener("click", () => {
           filter = button.dataset.filter as "ALL" | "OWNED" | "LOCKED"; render();
         }));
@@ -251,19 +246,6 @@ export class ShopScene extends Phaser.Scene {
     };
 
     render();
-  }
-
-  private preview(id: string) {
-    this.captureSkinScroll();
-    audio.play("click");
-    haptic("coin");
-    this.ui.root.hidden = true;
-    this.scene.pause();
-    this.scene.launch("SkinPreview", { skinId: id });
-  }
-
-  showShop() {
-    if (this.ui?.root.isConnected) this.ui.root.hidden = false;
   }
 
   showPurchaseSuccess(name: string) {

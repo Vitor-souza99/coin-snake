@@ -2,6 +2,8 @@ import type { RunState } from "../types/game";
 import type { ComboSystem } from "../systems/ComboSystem";
 import type { PowerUpSystem } from "../systems/PowerUpSystem";
 import type { TurboSystem } from "../systems/TurboSystem";
+import type { PlayerProfile } from "../types/game";
+import { xpProgressForLevel } from "../systems/ExperienceSystem";
 import { ScreenUI } from "./ScreenUI";
 export class GameplayHUD {
   private score: HTMLElement;
@@ -12,6 +14,9 @@ export class GameplayHUD {
   private bar: HTMLElement;
   private value: HTMLElement;
   private button: HTMLElement;
+  private level: HTMLElement;
+  private xp: HTMLElement;
+  private xpBar: HTMLElement;
   constructor(ui: ScreenUI) {
     this.score = ui.get("#score");
     this.coins = ui.get("#coins");
@@ -21,8 +26,11 @@ export class GameplayHUD {
     this.bar = ui.get("#turbo-bar");
     this.value = ui.get("#turbo-value");
     this.button = ui.get("#turbo");
+    this.level = ui.get("#player-level-value");
+    this.xp = ui.get("#player-xp-value");
+    this.xpBar = ui.get("#player-xp-bar");
   }
-  update(r: RunState, c: ComboSystem, p: PowerUpSystem, t: TurboSystem) {
+  update(r: RunState, c: ComboSystem, p: PowerUpSystem, t: TurboSystem, profile: PlayerProfile) {
     const set = (e: HTMLElement, value: string) => {
       if (e.textContent !== value) e.textContent = value;
     };
@@ -30,6 +38,10 @@ export class GameplayHUD {
     set(this.coins, String(r.matchCoins));
     set(this.combo, `×${c.value}`);
     set(this.lives, `♥ ${p.lives}`);
+    const progress = xpProgressForLevel(profile.xp);
+    set(this.level, `NÍVEL ${profile.playerLevel}`);
+    set(this.xp, `${progress.current} / ${progress.required} XP`);
+    this.xpBar.style.width = `${Math.min(100, progress.current / progress.required * 100)}%`;
     const powers = [];
     if (p.magnet > 0) powers.push(`ÍMÃ ${Math.ceil(p.magnet)}s`);
     if (p.shield) powers.push("ESCUDO");

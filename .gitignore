@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.log
+vite-*.err
 .DS_Store
 .idea/
 .vscode/

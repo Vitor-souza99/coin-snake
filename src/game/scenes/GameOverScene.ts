@@ -2,10 +2,10 @@ import Phaser from "phaser";
 import type { RunState } from "../types/game";
 import { save } from "../systems/SaveSystem";
 import { missions } from "../data/missions";
-import { B } from "../data/balance";
 import { GameScene } from "./GameScene";
 import { ads } from "../services/AdsService";
 import { ScreenUI, action } from "../ui/ScreenUI";
+import { pendingRunXP } from "../systems/EconomySystem";
 export class GameOverScene extends Phaser.Scene {
   private run!: RunState;
   private busy = false;
@@ -25,8 +25,9 @@ export class GameOverScene extends Phaser.Scene {
       (m) =>
         p.missions[m.id]?.progress >= m.target && !p.missions[m.id]?.claimed,
     ).length;
+    const collectionXP = r.coinXP + r.bossCoinXP;
     this.ui.html(
-      `<div class="result-layout"><div class="result-hero"><span class="kicker">Cada volta conta</span><h1>${r.rushMode ? "Coin Rush concluído" : "Fim de jogo"}</h1><div class="big-score">${r.score}</div><span class="pill">Pontos · recorde ${p.bestScore}</span><p class="muted">${Math.floor(r.elapsed)}s de aventura · combo x${r.maxCombo}</p></div><div class="result-details"><div class="card"><b>◉ ${r.matchCoins} moedas coletadas</b><p class="muted">+${B.xp.perRun + Math.floor(r.score / B.xp.scoreDivisor)} XP ao finalizar<br>${r.turboUses} acelerações · ${r.shrinkFruits} frutas</p><p>${ready ? ready + " missão(ões) pronta(s) para resgate" : "Progresso nas missões atualizado"}</p></div>${!r.revived && ads.isRewardedAdReady() ? action("revive", "🎬 Assistir anúncio e reviver · 1 vez por partida", "gold") : '<p class="footnote">' + (r.revived ? "Revive já usado nesta partida." : "Anúncio premiado indisponível neste dispositivo.") + "</p>"}${action("again", "Jogar novamente")}${action("menu", "Voltar ao menu", "secondary")}<p class="footnote" id="save-status">Salvando moedas…</p></div></div>`,
+      `<div class="result-layout"><div class="result-hero"><span class="kicker">Cada volta conta</span><h1>${r.rushMode ? "Coin Rush concluído" : "Fim de jogo"}</h1><div class="big-score">${r.score}</div><span class="pill">Pontos · recorde ${p.bestScore}</span><p class="muted">${Math.floor(r.elapsed)}s de aventura · combo x${r.maxCombo}</p></div><div class="result-details"><div class="card"><b>◉ ${r.matchCoins} moedas coletadas</b><p class="muted">+${pendingRunXP(p, r)} XP ao finalizar${collectionXP ? `<br>+${r.coinXP} XP por moedas · +${r.bossCoinXP} XP por Boss Coins` : ""}<br>${r.turboUses} acelerações · ${r.shrinkFruits} frutas</p><p>${ready ? ready + " missão(ões) pronta(s) para resgate" : "Progresso nas missões atualizado"}</p></div>${!r.revived && ads.isRewardedAdReady() ? action("revive", "🎬 Assistir anúncio e reviver · 1 vez por partida", "gold") : '<p class="footnote">' + (r.revived ? "Revive já usado nesta partida." : "Anúncio premiado indisponível neste dispositivo.") + "</p>"}${action("again", "Jogar novamente")}${action("menu", "Voltar ao menu", "secondary")}<p class="footnote" id="save-status">Salvando moedas…</p></div></div>`,
     );
     this.ui.on("#again", () => this.leave("Game"));
     this.ui.on("#menu", () => this.leave("Menu"));

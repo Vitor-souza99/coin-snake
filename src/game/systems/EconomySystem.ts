@@ -44,6 +44,19 @@ export function buyPet(p: PlayerProfile, id: string): boolean {
 export function creditBossCoins(p: PlayerProfile, amount: number) {
   p.bossCoinBalance += Math.max(0, Math.floor(amount));
 }
+
+/** XP awarded for collecting regular coins. */
+export function coinCollectionXP(value: number) {
+  return Math.max(0, Math.floor(value));
+}
+
+/** Boss Coin collection has diminishing returns after the first ten per run. */
+export function bossCoinCollectionXP(previousCoins: number, amount = 1) {
+  const count = Math.max(0, Math.floor(amount));
+  let xp = 0;
+  for (let index = 0; index < count; index++) xp += previousCoins + index < 10 ? 5 : 2;
+  return xp;
+}
 // Credit only the delta at each death: a revive cannot pay the same coins twice.
 export function creditCoins(p: PlayerProfile, run: RunState) {
   const amount = Math.max(0, run.matchCoins - run.creditedCoins);
@@ -57,7 +70,8 @@ export function finishRun(p: PlayerProfile, run: RunState) {
   run.finished = true;
   const runXP = B.xp.perRun + Math.floor(run.score / B.xp.scoreDivisor);
   const xpBonus = p.selectedPet === "candy-blob" ? 0.05 : p.selectedPet === "celestial-serpent" ? 0.1 : 0;
-  addXP(p, runXP + (xpBonus > 0 ? Math.ceil(runXP * xpBonus) : 0));
+  addXP(p, runXP + (xpBonus > 0 ? Math.ceil(runXP * xpBonus) : 0) +
+    Math.max(0, run.coinXP - run.coinXPCredited) + Math.max(0, run.bossCoinXP - run.bossCoinXPCredited));
   const s = p.statistics;
   s.totalGames++;
   s.totalCoinsCollected += run.matchCoins;
@@ -72,6 +86,13 @@ export function finishRun(p: PlayerProfile, run: RunState) {
   s.turboUses += run.turboUses;
   s.bossesDefeated += run.bossDefeats;
   s.portalsUsed += run.portalsUsed;
+}
+
+export function pendingRunXP(p: PlayerProfile, run: RunState) {
+  const runXP = B.xp.perRun + Math.floor(run.score / B.xp.scoreDivisor);
+  const xpBonus = p.selectedPet === "candy-blob" ? 0.05 : p.selectedPet === "celestial-serpent" ? 0.1 : 0;
+  return runXP + (xpBonus > 0 ? Math.ceil(runXP * xpBonus) : 0) +
+    Math.max(0, run.coinXP - run.coinXPCredited) + Math.max(0, run.bossCoinXP - run.bossCoinXPCredited);
 }
 
 export const SHOP_REWARDED_COINS = 250;

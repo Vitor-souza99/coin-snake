@@ -167,6 +167,11 @@ canvas {
 }
 .screen-header {
   max-width: 1050px;
+  position: sticky;
+  top: calc(-1 * clamp(16px, 3vw, 36px));
+  z-index: 5;
+  padding: 10px 0 12px;
+  background: linear-gradient(#f6f5e6 78%, #f6f5e600);
   margin: 0 auto 22px;
   display: flex;
   justify-content: space-between;
@@ -627,45 +632,6 @@ canvas {
   font-weight: 900;
   letter-spacing: 0.6px;
 }
-.skin-preview-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(min(100%, 280px), 0.8fr);
-  align-items: start;
-  gap: clamp(16px, 3vw, 32px);
-  max-width: 1050px;
-  margin: auto;
-}
-.skin-preview-stage {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-  min-width: 0;
-  width: 100%;
-}
-.skin-preview-canvas {
-  display: block;
-  width: 100%;
-  height: clamp(220px, 40vh, 420px);
-  min-width: 0;
-  border: 1px solid #d5dec4;
-  border-radius: 22px;
-  background: transparent;
-  pointer-events: none;
-}
-.skin-preview-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
-.skin-preview-controls .action { flex: 1 1 100px; }
-.skin-preview-info { min-width: 0; overflow-wrap: anywhere; }
-.skin-preview-info h2 { margin: 10px 0; font-size: clamp(21px, 2.4vw, 28px); line-height: 1.15; }
-.skin-preview-info p { line-height: 1.55; }
-.skin-preview-actions { margin-top: 20px; }
-.skin-preview-actions .action { width: 100%; }
-.skin-preview-screen {
-  background: transparent;
-}
-.skin-preview-controls {
-  position: relative;
-  z-index: 1;
-}
 @media (max-width: 700px) {
   .pet-shop-intro { align-items: stretch; }
   .pet-wallet { min-width: 110px; }
@@ -674,9 +640,6 @@ canvas {
   .pet-card h2 { font-size: 18px; }
   .pet-card .pet-symbol { width: 58px; height: 58px; border-radius: 18px; font-size: 36px; }
   .pet-state { font-size: 9px; padding: 4px 7px; }
-  .skin-preview-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .skin-preview-canvas { height: clamp(210px, 30vh, 300px); }
-  .skin-preview-info { padding: 18px; }
 }
 @media (max-width: 430px) {
   .pet-shop-intro { flex-direction: column; }
@@ -693,14 +656,8 @@ canvas {
   .skin-card { align-items: flex-start; gap: 10px; }
   .skin-card img { width: 52px; height: 52px; flex-basis: 52px; }
   .skin-card-actions .action { flex-basis: 84px; padding-inline: 8px; }
-  .skin-preview-controls .action { flex-basis: 88px; padding-inline: 8px; }
 }
 @media (max-height: 520px) and (orientation: landscape) {
-  .skin-preview-screen { padding-block: 12px; }
-  .skin-preview-screen .screen-header { margin-bottom: 12px; }
-  .skin-preview-layout { grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr); }
-  .skin-preview-canvas { height: 46vh; min-height: 170px; }
-  .skin-preview-info { padding: 14px; }
 }
 .mission h2 {
   font-size: 20px;
@@ -789,6 +746,49 @@ canvas {
   display: block;
   font-variant-numeric: tabular-nums;
 }
+.player-level {
+  position: absolute;
+  top: 74px;
+  right: 14px;
+  width: 158px;
+  padding: 7px 9px;
+  border: 1px solid #ffffff8c;
+  border-radius: 10px;
+  background: #ffffeee0;
+  box-shadow: 0 2px 9px #23482d24;
+  color: #284a35;
+  pointer-events: none;
+}
+.player-level__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.player-level__label b {
+  font-size: 11px;
+  letter-spacing: 0.35px;
+}
+.player-level__label span {
+  white-space: nowrap;
+}
+.player-level__track {
+  height: 5px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #37573d38;
+}
+.player-level__track i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5bb96b, #b0d949);
+  transition: width 0.25s ease;
+}
 .pause-button {
   margin-left: auto;
   pointer-events: auto;
@@ -814,15 +814,18 @@ canvas {
   max-width: calc(100% - 28px);
 }
 .game-ui #effects {
-  background: transparent;
-  padding: 0;
+  top: 177px;
+  left: 18px;
+  z-index: 6;
+  max-width: min(360px, calc(100% - 36px));
+  line-height: 1.35;
 }
 .game-ui #world-tag {
   background: transparent !important;
 }
 .boss-energy {
   position: absolute;
-  top: 126px;
+  top: 139px;
   left: 18px;
   padding: 7px 10px;
   border: 1px solid #ffd66f;
@@ -836,14 +839,54 @@ canvas {
   line-height: 1.2;
   text-shadow: 0 1px 3px #000;
 }
+.boss-energy[hidden] {
+  display: none;
+}
 .world-tag {
   position: absolute;
-  top: 109px;
+  top: 119px;
   left: 18px;
   letter-spacing: 2px;
   font-size: 10px;
   font-weight: 800;
   color: #446540;
+}
+.game-ui #world-tag {
+  top: 112px;
+  left: 18px;
+  z-index: 4;
+}
+.game-ui .boss-energy {
+  top: 143px;
+  left: 18px;
+  z-index: 5;
+}
+.aura-status {
+  position: absolute;
+  top: 177px;
+  left: 18px;
+  z-index: 7;
+  max-width: min(360px, calc(100% - 36px));
+  padding: 7px 10px;
+  border: 1px solid #8bd49c;
+  border-radius: 9px;
+  background: #183f35ed;
+  box-shadow: 0 3px 12px #09071355;
+  color: #fffdf0;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.aura-status[hidden] { display: none; }
+.aura-status--ready {
+  border-color: #ffd66f;
+  background: #624411ed;
+  color: #fff1b8;
+}
+#abyss-timer {
+  top: 143px;
+  left: 18px;
 }
 #abyss-timer {
   top: 109px;
@@ -974,21 +1017,26 @@ canvas {
   left: 20px;
 }
 .dialog-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 1000;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: #102d2677;
   backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
   pointer-events: auto;
-  z-index: 50;
 }
 .dialog {
   width: min(100%, 420px);
-  max-height: 100%;
+  max-height: calc(100dvh - 32px);
   overflow: auto;
+  overflow-wrap: anywhere;
   background: #f7f6e7;
   border: 1px solid #fff;
   border-radius: 28px;
@@ -1227,6 +1275,24 @@ canvas {
     top: 85px;
     left: 145px;
   }
+  .game-ui #effects {
+    top: 177px;
+    left: 15px;
+  }
+  .aura-status { left: 15px; max-width: calc(100% - 30px); }
+  .boss-energy {
+    top: 121px;
+    left: 15px;
+  }
+  .game-ui #world-tag {
+    top: 78px;
+    left: 15px;
+  }
+  .game-ui .boss-energy,
+  .game-ui #abyss-timer {
+    top: 110px;
+    left: 15px;
+  }
   .joystick-zone {
     height: 58%;
     width: 48%;
@@ -1303,6 +1369,11 @@ canvas {
   .hud-stats {
     gap: 12px;
     padding: 10px;
+  }
+  .player-level {
+    top: 67px;
+    right: 10px;
+    width: 145px;
   }
   .hud-value {
     font-size: 18px;
