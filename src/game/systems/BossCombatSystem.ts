@@ -9,7 +9,7 @@ export type BossAuraPickupKind = "crown-orb" | "candy-aura" | "attack-pearl";
 export function bossAuraPickupKind(bossId: string): BossAuraPickupKind | undefined {
   if (bossId === "candy-monster") return "candy-aura";
   if (bossId === "kraken") return "attack-pearl";
-  if (["king-snake", "spider-queen", "scorpion-king"].includes(bossId)) return "crown-orb";
+  if (["king-snake", "spider-queen", "scorpion-king", "candy-garden-guardian", "ocean-garden-guardian"].includes(bossId)) return "crown-orb";
   return undefined;
 }
 

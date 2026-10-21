@@ -44,7 +44,7 @@ export class GameplayHUD {
     this.xpBar.style.width = `${Math.min(100, progress.current / progress.required * 100)}%`;
     const powers = [];
     if (p.magnet > 0) powers.push(`ÍMÃ ${Math.ceil(p.magnet)}s`);
-    if (p.shield) powers.push("ESCUDO");
+    if (p.shield) powers.push(p.shieldRemaining > 0 ? `ESCUDO ${Math.ceil(p.shieldRemaining)}s` : "ESCUDO");
     if (p.turbo > 0) powers.push(`TURBO ×2 ${Math.ceil(p.turbo)}s`);
     if (p.precision > 0) powers.push(`FREIO PRECISO ${Math.ceil(p.precision)}s`);
     if (p.luckyStar > 0) powers.push(`★ SORTE ${Math.ceil(p.luckyStar)}s`);

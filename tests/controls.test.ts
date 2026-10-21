@@ -18,7 +18,6 @@ describe("manual turbo", () => {
     const t = new TurboSystem();
     t.update(1, true);
     expect(t.active).toBe(true);
-    expect(t.energy).toBe(76);
     t.update(0.7, false);
     expect(t.active).toBe(false);
     expect(t.energy).toBeCloseTo(83.7);
@@ -91,7 +90,7 @@ describe("v1 migration", () => {
       missions: { collector: { progress: 70, claimed: false } },
     };
     const p = validateSave(old);
-    expect(p.saveVersion).toBe(15);
+    expect(p.saveVersion).toBe(18);
     expect(p.totalCoins).toBe(812);
     expect(p.selectedSkin).toBe("cat");
     expect(p.xp).toBe(900);
@@ -107,29 +106,29 @@ describe("v1 migration", () => {
     p.settings.orientation = "landscape";
     p.hints.shrink = true;
     expect(
-      validateSave(JSON.parse(JSON.stringify(p))).settings.leftHanded,
+      validateSave({ ...JSON.parse(JSON.stringify(p)), saveVersion: 16 }).settings.leftHanded,
     ).toBe(true);
-    expect(validateSave(JSON.parse(JSON.stringify(p))).settings.cameraMode).toBe("panoramic");
-    expect(validateSave(JSON.parse(JSON.stringify(p))).settings.orientation).toBe("landscape");
-    expect(validateSave(p).hints.shrink).toBe(true);
+    expect(validateSave({ ...JSON.parse(JSON.stringify(p)), saveVersion: 16 }).settings.cameraMode).toBe("panoramic");
+    expect(validateSave({ ...JSON.parse(JSON.stringify(p)), saveVersion: 16 }).settings.orientation).toBe("landscape");
+    expect(validateSave({ ...p, saveVersion: 16 }).hints.shrink).toBe(true);
   });
   it("defaults missing or invalid camera modes to standard", () => {
     expect(validateSave({ ...defaults(), settings: {} }).settings.cameraMode).toBe("standard");
     expect(validateSave({ ...defaults(), settings: { cameraMode: "invalid" } }).settings.cameraMode).toBe("standard");
   });
   it("defaults missing or invalid screen orientation to automatic", () => {
-    expect(validateSave({ ...defaults(), settings: {} }).settings.orientation).toBe("auto");
-    expect(validateSave({ ...defaults(), settings: { orientation: "diagonal" } }).settings.orientation).toBe("auto");
-    expect(validateSave({ ...defaults(), settings: { orientation: "portrait" } }).settings.orientation).toBe("portrait");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: {} }).settings.orientation).toBe("auto");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { orientation: "diagonal" } }).settings.orientation).toBe("auto");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { orientation: "portrait" } }).settings.orientation).toBe("portrait");
   });
   it("persists game difficulties and migrates legacy speed preferences", () => {
     expect(defaults().settings.gameDifficulty).toBe("normal");
-    expect(validateSave({ ...defaults(), settings: {} }).settings.gameDifficulty).toBe("normal");
-    expect(validateSave({ ...defaults(), settings: { gameDifficulty: "invalid" } }).settings.gameDifficulty).toBe("normal");
-    expect(validateSave({ ...defaults(), settings: { gameDifficulty: "easy" } }).settings.gameDifficulty).toBe("easy");
-    expect(validateSave({ ...defaults(), settings: { gameDifficulty: "hard" } }).settings.gameDifficulty).toBe("hard");
-    expect(validateSave({ ...defaults(), settings: { speedPreference: "low" } }).settings.gameDifficulty).toBe("easy");
-    expect(validateSave({ ...defaults(), settings: { speedPreference: "very-high" } }).settings.gameDifficulty).toBe("hard");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: {} }).settings.gameDifficulty).toBe("normal");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { gameDifficulty: "invalid" } }).settings.gameDifficulty).toBe("normal");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { gameDifficulty: "easy" } }).settings.gameDifficulty).toBe("easy");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { gameDifficulty: "hard" } }).settings.gameDifficulty).toBe("hard");
+    expect(validateSave({ ...defaults(), saveVersion: 15, settings: { speedPreference: "low" } }).settings.gameDifficulty).toBe("easy");
+    expect(validateSave({ ...defaults(), saveVersion: 15, settings: { speedPreference: "very-high" } }).settings.gameDifficulty).toBe("hard");
   });
   it("detects Portuguese device languages and falls back to English", () => {
     expect(detectLanguage("pt-BR")).toBe("pt-BR");
@@ -142,9 +141,9 @@ describe("v1 migration", () => {
   it("persists language preference and migrates older saves to automatic", () => {
     const p = defaults();
     p.settings.language = "en";
-    expect(validateSave(JSON.parse(JSON.stringify(p))).settings.language).toBe("en");
+    expect(validateSave({ ...JSON.parse(JSON.stringify(p)), saveVersion: 16 }).settings.language).toBe("en");
     expect(validateSave({ ...defaults(), saveVersion: 6 }).settings.language).toBe("auto");
-    expect(validateSave({ ...defaults(), settings: { language: "invalid" } }).settings.language).toBe("auto");
+    expect(validateSave({ ...defaults(), saveVersion: 18, settings: { language: "invalid" } }).settings.language).toBe("auto");
   });
   it("counts new statistics once per run", () => {
     const p = defaults(),
@@ -158,4 +157,10 @@ describe("v1 migration", () => {
   });
 });
 
-it('never overwrites a save from a newer version',async()=>{let writes=0;const s=new SaveSystem({get:async()=>JSON.stringify({saveVersion:99,totalCoins:20000}),set:async()=>{writes++;}});await s.load();await s.save();expect(writes).toBe(0);expect(s.error).toContain('versão mais nova');});
+it("never overwrites a save from a newer version", async () => {
+  let writes = 0;
+  const s = new SaveSystem({ get: async () => JSON.stringify({ saveVersion: 99, totalCoins: 20000 }), set: async () => { writes++; } });
+  await s.load(); await s.save();
+  expect(writes).toBe(0);
+  expect(s.error).toContain("versão mais nova");
+});

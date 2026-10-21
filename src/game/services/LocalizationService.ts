@@ -16,6 +16,18 @@ const messages = {
     back: "← Voltar", menuKicker: "Pequena cobra. Grande aventura.", level: "Nível", best: "Recorde", play: "JOGAR →", worlds: "Mundos", shop: "Loja", missions: "Missões", settings: "Ajustar controles, som e idioma", collect: "Colete. Cresça. Encontre seu ritmo.", virtualCoins: "Moedas exclusivamente virtuais.",
     settingsTitle: "Do seu jeito", settingsKicker: "Controles, som e idioma", language: "Idioma", languageAuto: "Automático", languagePortuguese: "Português (Brasil)", languageEnglish: "English", leftHanded: "Modo canhoto", leftHandedHelp: "Joystick à direita; turbo à esquerda.", camera: "Câmera", standard: "Padrão", panoramic: "Panorâmica", orientation: "Orientação da tela", automatic: "Automática", portrait: "Vertical", landscape: "Horizontal", mute: "Silenciar áudio", sfx: "Efeitos sonoros", music: "Música", musicHelp: "Trilha leve nos menus; pausada durante as partidas.", haptics: "Vibração", hapticsHelp: "Em dispositivos Android compatíveis.", reducedMotion: "Reduzir efeitos visuais", computer: "No computador", tutorial: "Ver dicas novamente", rush: "Coin Rush", collection: "Coleção", reset: "Apagar todo o progresso", languageChanged: "Idioma atualizado.",
     difficultyTitle: "Escolha a dificuldade", difficultyKicker: "Vale para esta partida", difficultyEasy: "Fácil", difficultyNormal: "Normal", difficultyHard: "Difícil", difficultyEasyHelp: "Cobra mais lenta, mais power-ups e chefes com mais pausas.", difficultyNormalHelp: "Ritmo e equilíbrio padrão.", difficultyHardHelp: "Cobra e chefes mais rápidos, com menos power-ups.", startGame: "COMEÇAR →", cancel: "Cancelar",
+    tutorialTitle: "Encontre seu ritmo", tutorialBody: "Use o joystick para mover.\nColete moedas.\nEvite obstáculos e não toque no próprio corpo.", tutorialStart: "Vamos jogar",
+    confirmPurchaseTitle: "Confirmar compra", confirmPurchaseBody: "Deseja comprar {item} por {price} {currency}?\nSeu saldo atual: {balance} {currency}.", confirmPurchase: "Comprar", cancelUpper: "CANCELAR", purchaseFailed: "Compra não realizada. Confira seu saldo e tente novamente.",
+    resetTitle: "Apagar todo o progresso?", resetBody: "Isso apagará moedas, mundos desbloqueados, itens, missões, recordes e configurações.\n\nEssa ação não pode ser desfeita.", resetConfirm: "Apagar todo o progresso",
+    exitTitle: "Sair do jogo?", exitBody: "Deseja fechar o jogo?", exit: "Sair",
+    pauseTitle: "Jogo pausado", pauseBody: "Seu vale pode esperar.", continue: "Continuar", restart: "Reiniciar", pauseMenu: "Menu", pauseCamera: "Câmera", soundOn: "Ativar som", soundOff: "Desativar som",
+    spiderIntroTitle: "Bem-vinda ao Covil da Aranha!", spiderIntroBody: "Este mapa secreto abriga a Aranha Real no centro de uma arena. Desvie das teias sinalizadas e dos filhotes que perseguem sua cabeça. Colete 4 Boss Coins para carregar a aura e toque a estalactite no alto para ferir a aranha. A saída será liberada quando você derrotá-la.",
+    cloverDefeatTitle: "Sapo-Rei derrotado!", cloverDefeatBody: "Quatro trevos surgiram no jardim. Colete todos para abrir a saída. O Sapo-Rei deixou 15 Boss Coins, que você pode coletar agora ou após a revanche.",
+    cloverRevengeTitle: "Revanche: Sapo-Rei", cloverRevengeBody: "Quer desafiar o Sapo-Rei novamente? A revanche é opcional. Ao vencer, você poderá coletar 15 Boss Coins.", startFight: "Começar a luta", notNow: "Agora não",
+    victoryTitle: "{boss} derrotado!", victoryBody: "Vitória!{rewards}", victoryContinue: "Continuar",
+    abyssVictoryTitle: "A fenda silenciou", abyssVictoryBody: "Você sobreviveu por 90 segundos no Abismo Mudo. A Serpente Abissal foi desbloqueada e está disponível na sua coleção.",
+    sanctuaryTitle: "Serpente Celestial desbloqueada!", sanctuaryBody: "Os três santuários despertaram a Serpente Celestial. Ela já está disponível na sua coleção de mascotes.",
+    bossOptional: "A luta é opcional. Sua Boss Energy só será usada quando a luta começar.", bossStart: "Começar a luta", bossLater: "Agora não",
     difficultyTipTitle: "DICA DA PARTIDA", difficultyTipNext: "Outra dica", difficultyTipCount: "{current} de {total}",
     difficultyTips: {
       easy: ["Use o joystick com movimentos curtos para fazer curvas suaves.", "Pegue power-ups: eles ajudam a controlar momentos perigosos.", "Olhe adiante e planeje por onde sua cobra vai passar.", "Evite encurralar a cobra nas bordas da arena.", "Colete moedas no caminho, sem fazer curvas arriscadas.", "O turbo acelera a cobra; use-o em trechos livres.", "Quando surgir um chefe, observe antes de se aproximar.", "Mantenha espaço para virar se aparecer um obstáculo.", "Crescer aumenta sua pontuação, mas exige mais espaço.", "Faça pausas entre as partidas para experimentar outra estratégia."],
@@ -27,6 +39,18 @@ const messages = {
     back: "← Back", menuKicker: "Little snake. Big adventure.", level: "Level", best: "Best", play: "PLAY →", worlds: "Worlds", shop: "Shop", missions: "Missions", settings: "Controls, sound & language", collect: "Collect. Grow. Find your rhythm.", virtualCoins: "Virtual coins only.",
     settingsTitle: "Make it yours", settingsKicker: "Controls, sound & language", language: "Language", languageAuto: "Automatic", languagePortuguese: "Português (Brasil)", languageEnglish: "English", leftHanded: "Left-handed mode", leftHandedHelp: "Joystick on the right; boost on the left.", camera: "Camera", standard: "Standard", panoramic: "Panoramic", orientation: "Screen orientation", automatic: "Automatic", portrait: "Portrait", landscape: "Landscape", mute: "Mute audio", sfx: "Sound effects", music: "Music", musicHelp: "Light menu soundtrack; paused during gameplay.", haptics: "Haptics", hapticsHelp: "On compatible Android devices.", reducedMotion: "Reduce visual effects", computer: "On computer", tutorial: "Show tips again", rush: "Coin Rush", collection: "Collection", reset: "Delete all progress", languageChanged: "Language updated.",
     difficultyTitle: "Choose difficulty", difficultyKicker: "For this run", difficultyEasy: "Easy", difficultyNormal: "Normal", difficultyHard: "Hard", difficultyEasyHelp: "Slower snake, more power-ups, and bosses with longer breaks.", difficultyNormalHelp: "The standard pace and balance.", difficultyHardHelp: "Faster snake and bosses, with fewer power-ups.", startGame: "START →", cancel: "Cancel",
+    tutorialTitle: "Find your rhythm", tutorialBody: "Use the joystick to move.\nCollect coins.\nAvoid obstacles and your own body.", tutorialStart: "Let’s play",
+    confirmPurchaseTitle: "Confirm purchase", confirmPurchaseBody: "Buy {item} for {price} {currency}?\nYour current balance: {balance} {currency}.", confirmPurchase: "Buy", cancelUpper: "CANCEL", purchaseFailed: "Purchase not completed. Check your balance and try again.",
+    resetTitle: "Delete all progress?", resetBody: "This will erase your coins, unlocked worlds, items, missions, records, and settings.\n\nThis action can’t be undone.", resetConfirm: "Delete all progress",
+    exitTitle: "Exit the game?", exitBody: "Do you want to close the game?", exit: "Exit",
+    pauseTitle: "Game paused", pauseBody: "Your valley can wait.", continue: "Continue", restart: "Restart", pauseMenu: "Menu", pauseCamera: "Camera", soundOn: "Turn sound on", soundOff: "Turn sound off",
+    spiderIntroTitle: "Welcome to Spider Lair!", spiderIntroBody: "This secret map is home to the Spider Queen, in the center of an arena. Dodge the marked webs and hatchlings that chase your head. Collect 4 Boss Coins to charge your aura, then touch the stalactite above to damage the queen. The exit opens when you defeat her.",
+    cloverDefeatTitle: "Clover King defeated!", cloverDefeatBody: "Four clovers have appeared in the garden. Collect them all to open the exit. The Clover King left 15 Boss Coins, which you can collect now or after the rematch.",
+    cloverRevengeTitle: "Rematch: Clover King", cloverRevengeBody: "Want to challenge the Clover King again? The rematch is optional. Victory lets you collect 15 Boss Coins.", startFight: "Start fight", notNow: "Not now",
+    victoryTitle: "{boss} defeated!", victoryBody: "Victory!{rewards}", victoryContinue: "Continue",
+    abyssVictoryTitle: "The rift falls silent", abyssVictoryBody: "You survived the Silent Abyss for 90 seconds. The Abyssal Serpent is unlocked and available in your collection.",
+    sanctuaryTitle: "Celestial Serpent unlocked!", sanctuaryBody: "The three sanctuaries awakened the Celestial Serpent. It’s now available in your pet collection.",
+    bossOptional: "The fight is optional. Your Boss Energy is only spent when the fight begins.", bossStart: "Start fight", bossLater: "Not now",
     difficultyTipTitle: "RUN TIP", difficultyTipNext: "Another tip", difficultyTipCount: "{current} of {total}",
     difficultyTips: {
       easy: ["Use short joystick movements for smooth turns.", "Collect power-ups to help handle dangerous moments.", "Look ahead and plan where your snake will travel.", "Avoid trapping your snake against the arena edges.", "Collect coins along the way without risky turns.", "Boost speeds you up; use it on clear stretches.", "When a boss appears, observe before moving closer.", "Leave room to turn if an obstacle appears.", "Growing raises your score but requires more space.", "Take a break between runs and try a new strategy."],
@@ -48,11 +72,11 @@ const englishPets: Record<string, readonly [string, string, string]> = {
   spiderling: ["Spiderling", "Roams the map and draws nearby regular coins to you.", "Defeat the Spider Queen in the Spider Lair."],
   bee: ["Bee", "Keeps the +3 percentage-point blue coin bonus and brings pollen, granting up to 24 XP per run in 8 XP bursts.", "Defeat the Candy Monster."],
   "candy-blob": ["Candy Blob", "+5% XP when you finish a run.", "Defeat the Candy Monster and purchase for 50 Boss Coins."],
-  "baby-octopus": ["Baby Octopus", "+5% magnet duration (8.4 s instead of 8 s).", "Defeat the Kraken."],
+  "baby-octopus": ["Baby Octopus", "Extends each Magnet pickup to 12 seconds.", "Defeat the Kraken."],
   firefly: ["Firefly", "Keeps the +5 percentage-point blue coin bonus and attracts nearby blue coins toward you.", "Defeat King Snake and purchase for 50 Boss Coins."],
   "snow-pup": ["Snow Pup", "+5% shield duration.", "Defeat the Candy Monster."], "tiny-dragon": ["Tiny Dragon", "A small combat dragon that dashes, hurts vulnerable bosses, and helps clear spiderlings.", "Discover the secret relic in the Desert Labyrinth and purchase it for 150 Boss Coins."],
-  "tidal-turtle": ["Tidal Turtle", "+10% ghost duration (3.3 s instead of 3 s).", "Defeat the Kraken and purchase for 75 Boss Coins."],
-  phoenix: ["Solar Phoenix", "+1 starting life in every run.", "Defeat the Kraken and purchase for 125 Boss Coins."],
+  "tidal-turtle": ["Tidal Turtle", "Extends Ghost to 5 seconds and grants a Shield every 45 seconds. The Shield expires after 10 seconds if unused.", "Defeat the Kraken and purchase for 75 Boss Coins."],
+  phoenix: ["Solar Phoenix", "Once per run, revives you when you lose your last life and restores 1 life.", "Defeat the Kraken and purchase for 125 Boss Coins."],
   "celestial-serpent": ["Celestial Serpent", "In the Silent Abyss, searches the map for celestial fragments; every 3 grants 15 XP, up to 3 times per run.", "Activate all 3 celestial sanctuaries in the Silent Abyss to unlock this Mythic companion."],
   "lucky-leprechaun": ["Lucky Clover", "Permanent companion: +2 percentage points to the chance of an extra life appearing, and unlocks a slot for another companion.", "Find 2 clovers in Candy World's Secret Garden with the Abyssal Serpent, and 2 in Ocean World's Underwater Garden with the Ghost Snake."],
   "crystal-fox": ["Crystal Fox", "+5% score when collecting coins (does not increase your balance).", "Premium companion—not currently available."],
@@ -100,8 +124,10 @@ export function getLanguage(): Language {
   return currentLanguage;
 }
 
-export function t(key: MessageKey): string {
-  return messages[currentLanguage][key] as string;
+export function t(key: MessageKey, values: Record<string, string | number> = {}): string {
+  let message = messages[currentLanguage][key] as string;
+  for (const [name, value] of Object.entries(values)) message = message.replaceAll(`{${name}}`, String(value));
+  return message;
 }
 
 export function difficultyTips(difficulty: "easy" | "normal" | "hard"): readonly string[] {

@@ -41,9 +41,9 @@ export class MainMenuScene extends Phaser.Scene {
   }
   private confirmExit() {
     const ui = new ScreenUI(this);
-    ui.modal("Sair do jogo?", "Tem certeza de que deseja sair?", [
-      { label: "Sair", run: () => { void import("@capacitor/app").then(({ App }) => App.exitApp()); } },
-      { label: "Cancelar", run: () => ui.destroy() },
-    ]);
+    ui.modal(t("exitTitle"), t("exitBody"), [
+      { label: t("exit"), run: () => { void import("@capacitor/app").then(({ App }) => App.exitApp()); } },
+      { label: t("cancel"), run: () => ui.destroy() },
+    ], { initialFocus: 1 });
   }
 }

@@ -744,19 +744,25 @@ describe("roadmap progression systems", () => {
     ]);
     expect(beeCoins.reduce((total, coin) => total + coin.weight, 0)).toBe(100.1);
   });
-  it("Baby Octopus increases magnet duration by five percent and is earned from Kraken", () => {
+  it("Baby Octopus extends magnet to twelve seconds and is earned from Kraken", () => {
     const powers = new PowerUpSystem();
-    powers.activate("magnet", 0.05);
-    expect(powers.magnet).toBeCloseTo(8.4);
+    powers.activate("magnet", 0, B.power.octopusMagnetDuration);
+    expect(powers.magnet).toBe(12);
     expect(bosses.find((boss) => boss.id === "kraken")?.petReward).toBe("baby-octopus");
     expect(pets.find((pet) => pet.id === "baby-octopus")?.rarity).toBe("EPIC");
   });
   it("new boss pets grant their advertised power-up bonuses", () => {
     const powers = new PowerUpSystem();
-    powers.activate("shield", 0.05);
+    expect(powers.activateTimedShield(B.power.turtleShieldDuration)).toBe(true);
     expect(powers.shield).toBe(true);
-    powers.update(6.1);
+    powers.update(B.power.turtleShieldDuration - 1);
     expect(powers.shield).toBe(true);
+    powers.update(1);
+    expect(powers.shield).toBe(false);
+    expect(powers.activateTimedShield(B.power.turtleShieldDuration)).toBe(true);
+    powers.update(60);
+    expect(powers.shield).toBe(false);
+    powers.activate("shield");
     powers.update(60);
     expect(powers.shield).toBe(true);
     expect(powers.absorb()).toBe(true);
@@ -772,8 +778,13 @@ describe("roadmap progression systems", () => {
     expect(pets.find((pet) => pet.id === "phoenix")?.rarity).toBe("LEGENDARY");
     expect(pets.find((pet) => pet.id === "celestial-serpent")?.rarity).toBe("MYTHIC");
     expect(new PowerUpSystem(B.power.initialLives + 1).lives).toBe(3);
-    powers.activate("ghost", 0.1);
-    expect(powers.ghost).toBeCloseTo(B.power.ghostDuration * 1.1);
+    powers.activate("ghost", 0, B.power.turtleGhostDuration);
+    expect(powers.ghost).toBe(5);
+    const phoenix = new PowerUpSystem(0);
+    expect(phoenix.reviveWithLife()).toBe(true);
+    expect(phoenix.lives).toBe(1);
+    expect(phoenix.loseLife()).toBe(true);
+    expect(phoenix.reviveWithLife()).toBe(false);
   });
   it("gives Tiny Dragon a bounded attack cadence and preserves every boss vulnerability rule", () => {
     expect(dragonAttackCooldown).toBe(5.5);
@@ -795,7 +806,7 @@ describe("roadmap progression systems", () => {
     expect(kraken.availablePets).not.toContain("celestial-serpent");
     const allBosses = validateSave({ saveVersion: 10, bossesDefeated: ["king-snake", "candy-monster", "kraken"] });
     expect(allBosses.availablePets).not.toContain("celestial-serpent");
-    const sanctuariesComplete = validateSave({ ...allBosses, saveVersion: 14, abyssSanctuaryProgress: 3 });
+    const sanctuariesComplete = validateSave({ ...allBosses, saveVersion: 16, abyssSanctuaryProgress: 3 });
     expect(sanctuariesComplete.availablePets).toContain("celestial-serpent");
     expect(sanctuariesComplete.unlockedPets).toContain("celestial-serpent");
     expect(allBosses.unlockedPets).not.toContain("phoenix");
@@ -807,7 +818,7 @@ describe("roadmap progression systems", () => {
     expect(scorpion.desertRelicFound).toBe(false);
     expect(scorpion.availablePets).not.toContain("tiny-dragon");
     expect(buyPet({ ...scorpion, bossCoinBalance: 500, availablePets: ["tiny-dragon"] }, "tiny-dragon")).toBe(false);
-    const relic = validateSave({ ...scorpion, desertRelicFound: true, desertExpeditionCheckpoint: 3 });
+    const relic = validateSave({ ...scorpion, saveVersion: 16, desertRelicFound: true, desertExpeditionCheckpoint: 3 });
     expect(relic.desertRelicFound).toBe(true);
     expect(relic.desertExpeditionCheckpoint).toBe(3);
     expect(relic.availablePets).toContain("tiny-dragon");
@@ -833,7 +844,7 @@ describe("roadmap progression systems", () => {
     expect(validateSave({ saveVersion: 14, abyssSanctuaryProgress: 99 }).abyssSanctuaryProgress).toBe(3);
   });
   it("save validation accepts earnable pets but never grants the premium pet", () => {
-    const profile = validateSave({ saveVersion: 10, desertRelicFound: true, bossesDefeated: ["king-snake", "candy-monster", "kraken", "scorpion-king"], unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
+    const profile = validateSave({ saveVersion: 16, desertRelicFound: true, bossesDefeated: ["king-snake", "candy-monster", "kraken", "scorpion-king"], unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
     expect(profile.unlockedPets).toEqual(earnablePetIds);
     expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
   });
@@ -844,9 +855,27 @@ describe("roadmap progression systems", () => {
     expect(complete.unlockedPets).toContain("lucky-leprechaun");
     expect(pets.find((pet) => pet.id === "lucky-leprechaun")?.description).toContain("+2 pontos percentuais");
   });
+  it("migrates legacy clover totals into the single garden and preserves prior guardian victories", () => {
+    const legacy = validateSave({ saveVersion: 15, cloverGardenProgress: 3 });
+    expect(legacy.cloverGardenProgressByOrigin).toEqual({ "candy-world": 3, ocean: 0 });
+    const current = validateSave({ saveVersion: 16, cloverGardenProgress: 1, cloverGardenProgressByOrigin: { "candy-world": 1, ocean: 2 }, cloverGardenBossesDefeated: ["ocean-garden-guardian", "unknown"] });
+    expect(current.cloverGardenProgressByOrigin).toEqual({ "candy-world": 3, ocean: 0 });
+    expect(current.cloverGardenProgress).toBe(3);
+    expect(current.cloverGardenBossesDefeated).toEqual(["candy-garden-guardian"]);
+    expect(current.cloverGardenCollected).toEqual([0, 1, 2]);
+    expect(current.saveVersion).toBe(18);
+  });
+  it("preserves individual clovers collected in any order in v18 saves", () => {
+    const current = validateSave({ saveVersion: 17, cloverGardenProgress: 2, cloverGardenCollected: [3, 1, 1, 7, -1], cloverGardenBossesDefeated: ["candy-garden-guardian"] });
+    expect(current.cloverGardenCollected).toEqual([1, 3]);
+    expect(current.cloverGardenProgress).toBe(2);
+    const reloaded = validateSave(JSON.parse(JSON.stringify(current)));
+    expect(reloaded.cloverGardenCollected).toEqual([1, 3]);
+    expect(reloaded.cloverGardenProgress).toBe(2);
+  });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(15);
+    expect(profile.saveVersion).toBe(18);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).not.toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -855,7 +884,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(15);
+    expect(profile.saveVersion).toBe(18);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -993,7 +1022,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(15);
+    expect(migrated.saveVersion).toBe(18);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
   });
@@ -1021,21 +1050,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(15);
+    expect(migrated.saveVersion).toBe(18);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(15);
+    expect(profile.saveVersion).toBe(18);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(15);
+    expect(migrated.saveVersion).toBe(18);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });

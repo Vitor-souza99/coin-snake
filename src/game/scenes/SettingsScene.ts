@@ -82,11 +82,11 @@ export class SettingsScene extends Phaser.Scene {
     ui.on("#collection", () => this.scene.start("Collection"));
     ui.on("#reset-save", () => {
       const confirmation = ui.modal(
-        "Apagar todo o progresso?",
-        "Você perderá moedas, mundos desbloqueados, itens, missões, recordes e configurações.\n\nEssa ação não pode ser desfeita.",
+        t("resetTitle"),
+        t("resetBody"),
         [
           {
-            label: "Sim, apagar tudo",
+            label: t("resetConfirm"),
             run: () => {
               confirmation.destroy();
               void save.reset().then(() => {
@@ -96,8 +96,9 @@ export class SettingsScene extends Phaser.Scene {
               });
             },
           },
-          { label: "Cancelar", run: () => confirmation.destroy() },
+          { label: t("cancel"), run: () => confirmation.destroy() },
         ],
+        { initialFocus: 1 },
       );
     });
   }

@@ -10,7 +10,7 @@ import { reconcileWorldUnlocks, selectWorld, worldRequirementText, worldStatus }
 import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
 import { ScreenUI, header, textureURL } from "../ui/ScreenUI";
-import { getLanguage, localizedPet, localizedWorld } from "../services/LocalizationService";
+import { getLanguage, localizedPet, localizedWorld, t } from "../services/LocalizationService";
 
 type Category = "skins" | "pets" | "maps" | "packs";
 
@@ -38,27 +38,28 @@ export class ShopScene extends Phaser.Scene {
     let rarity: SkinRarity | "ALL" = previous?.rarity ?? "ALL";
     const en = getLanguage() === "en";
 
-    const confirmPurchase = (name: string, price: number, purchase: () => boolean, currency = "moedas", balance: () => number = () => profile.totalCoins) => {
+    const confirmPurchase = (name: string, price: number, purchase: () => boolean, currency = en ? "coins" : "moedas", balance: () => number = () => profile.totalCoins) => {
+      const formatPrice = (value: number) => value.toLocaleString(en ? "en-US" : "pt-BR");
       const confirmation = ui.modal(
-        "Confirmar compra",
-        `Tem certeza que deseja comprar ${name} por ${price.toLocaleString("pt-BR")} ${currency}?\nSeu saldo atual: ${balance().toLocaleString("pt-BR")} ${currency}.`,
+        t("confirmPurchaseTitle"),
+        t("confirmPurchaseBody", { item: name, price: formatPrice(price), currency, balance: formatPrice(balance()) }),
         [
-          { label: "CONFIRMAR COMPRA", run: () => {
+          { label: t("confirmPurchase"), run: () => {
             this.captureSkinScroll();
             if (balance() < price || !purchase()) {
               confirmation.destroy();
               this.restoreSkinScroll();
-              ui.toast("Compra não realizada. Confira seu saldo e a disponibilidade do item.");
+              ui.toast(t("purchaseFailed"));
               return;
             }
             void save.save().then(() => {
               confirmation.destroy();
               render();
               this.restoreSkinScroll();
-              this.showPurchaseSuccess(name);
+            this.showPurchaseSuccess(name);
             });
           } },
-          { label: "CANCELAR", run: () => {
+          { label: t("cancelUpper"), run: () => {
             this.captureSkinScroll();
             confirmation.destroy();
             this.restoreSkinScroll();
@@ -135,8 +136,9 @@ export class ShopScene extends Phaser.Scene {
             : `<button class="action secondary" disabled>${!discovered ? "???" : premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
         const detail = !discovered ? "Uma oferta misteriosa. Descubra a relíquia secreta no Deserto." : permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
-        return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
-          <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${pet.symbol}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
+         const petArt = pet.id === "phoenix" ? `<svg class="phoenix-pet-art" viewBox="0 0 120 100" role="img" aria-label="Solar Phoenix"><defs><linearGradient id="phoenix-fire" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#ff542e"/><stop offset=".55" stop-color="#ffad32"/><stop offset="1" stop-color="#fff1a0"/></linearGradient></defs><path fill="url(#phoenix-fire)" d="M54 56C28 72 30 89 8 93c13-15 2-26 21-40-13 1-20-7-25-17 17 11 29 5 43 12L42 20l17 18 14-25 2 31c17-5 28-2 39-14-4 15-13 25-29 29 12 15 7 27 20 40-22-5-23-22-48-43z"/><path fill="#fff0b0" d="m65 43 9-17 5 21-8 8z"/><circle cx="71" cy="42" r="2.5" fill="#28334a"/><path fill="#ffdb65" d="m76 46 14 4-14 4z"/></svg>` : pet.symbol;
+         return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
+          <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${petArt}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
           <span class="skin-rarity ${rarityClass}">${discovered ? pet.rarity : "???"}</span><h2>${!discovered ? pet.mysteryName ?? "???" : localizedPet(pet.id, "name", pet.name)}</h2><p class="pet-description">${!discovered ? "Uma relíquia misteriosa guarda algo ainda não descoberto." : localizedPet(pet.id, "description", pet.description)}</p>
           <p class="pet-unlock-detail">${detail}</p><div class="pet-card-action">${action}</div>
         </article>`;

@@ -74,6 +74,7 @@ export class ScreenUI {
     title: string,
     body: string,
     actions: { label: string; run: () => void }[],
+    options: { initialFocus?: number } = {},
   ) {
     const layer = document.createElement("div");
     layer.className = "dialog-backdrop";
@@ -96,6 +97,7 @@ export class ScreenUI {
       });
       layer.querySelector(".dialog-actions")!.append(b);
     });
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && actions.length > 1) {
         e.preventDefault();
@@ -104,23 +106,29 @@ export class ScreenUI {
       }
       if (e.key !== "Tab") return;
       const buttons = [...layer.querySelectorAll("button")];
+      if (!buttons.length) {
+        e.preventDefault();
+        return;
+      }
       const first = buttons[0],
         last = buttons[buttons.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      if (e.shiftKey && (document.activeElement === first || !layer.contains(document.activeElement))) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      } else if (!e.shiftKey && (document.activeElement === last || !layer.contains(document.activeElement))) {
         e.preventDefault();
         first.focus();
       }
     };
     layer.addEventListener("keydown", onKeyDown);
     this.root.append(layer);
-    layer.querySelector<HTMLButtonElement>("button:last-child")?.focus({ preventScroll: true });
+    const buttons = layer.querySelectorAll<HTMLButtonElement>("button");
+    buttons[Math.max(0, Math.min(options.initialFocus ?? 0, buttons.length - 1))]?.focus({ preventScroll: true });
     return {
       destroy: () => {
         layer.removeEventListener("keydown", onKeyDown);
         layer.remove();
+        if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
       },
     };
   }

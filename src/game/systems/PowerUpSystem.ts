@@ -10,9 +10,11 @@ export class PowerUpSystem {
   private ghostWasActive = false;
   private ghostRemaining = 0;
   shield = false;
+  shieldRemaining = 0;
   invincible = 0;
   slowed = 0;
   lives: number = B.power.initialLives;
+  private phoenixReviveUsed = false;
   constructor(initialLives: number = B.power.initialLives) {
     this.lives = Math.min(B.power.maxLives, Math.max(0, initialLives));
   }
@@ -21,24 +23,37 @@ export class PowerUpSystem {
     this.lives++;
     return true;
   }
+  reviveWithLife(): boolean {
+    if (this.lives > 0 || this.phoenixReviveUsed) return false;
+    this.phoenixReviveUsed = true;
+    this.lives = 1;
+    return true;
+  }
   loseLife(): boolean {
     if (this.lives <= 0) return false;
     this.lives--;
     return true;
   }
-  activate(kind: PowerKind, durationBonus = 0) {
+  activate(kind: PowerKind, durationBonus = 0, durationOverride?: number) {
     if (kind === "shield") {
       this.shield = true;
-    } else if (kind === "magnet") this.magnet = B.power.magnetDuration * (1 + durationBonus);
+      this.shieldRemaining = 0;
+    } else if (kind === "magnet") this.magnet = durationOverride ?? B.power.magnetDuration * (1 + durationBonus);
     else if (kind === "turbo") this.turbo = B.power.turboDuration * (1 + durationBonus);
     else if (kind === "precision") this.precision = B.power.precisionDuration * (1 + durationBonus);
     else if (kind === "lucky-star") this.luckyStar = B.power.luckyStarDuration * (1 + durationBonus);
     else if (kind === "ghost") {
-      this.ghost = B.power.ghostDuration * (1 + durationBonus);
+      this.ghost = durationOverride ?? B.power.ghostDuration * (1 + durationBonus);
       this.ghostRemaining = this.ghost;
       this.ghostGrace = 0;
       this.ghostWasActive = true;
     }
+  }
+  activateTimedShield(duration: number): boolean {
+    if (this.shield || duration <= 0) return false;
+    this.shield = true;
+    this.shieldRemaining = duration;
+    return true;
   }
   update(dt: number) {
     this.magnet = Math.max(0, this.magnet - dt);
@@ -46,6 +61,10 @@ export class PowerUpSystem {
     this.precision = Math.max(0, this.precision - dt);
     this.luckyStar = Math.max(0, this.luckyStar - dt);
     this.invincible = Math.max(0, this.invincible - dt);
+    if (this.shield && this.shieldRemaining > 0) {
+      this.shieldRemaining = Math.max(0, this.shieldRemaining - dt);
+      if (this.shieldRemaining === 0) this.shield = false;
+    }
     this.slowed = Math.max(0, this.slowed - dt);
     this.ghostRemaining = Math.max(0, this.ghostRemaining - dt);
     this.ghost = Math.max(0, this.ghostRemaining);
@@ -72,6 +91,7 @@ export class PowerUpSystem {
     if (this.invincible > 0) return true;
     if (!this.shield) return false;
     this.shield = false;
+    this.shieldRemaining = 0;
     this.invincible = B.power.shieldGrace;
     return true;
   }
@@ -82,6 +102,7 @@ export class PowerUpSystem {
     if (this.invincible > 0) return true;
     if (!this.shield) return false;
     this.shield = false;
+    this.shieldRemaining = 0;
     this.invincible = B.power.shieldGrace;
     return true;
   }

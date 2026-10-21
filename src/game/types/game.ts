@@ -34,7 +34,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 15;
+  saveVersion: 18;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;
@@ -57,6 +57,9 @@ export interface PlayerProfile {
   availablePets: string[];
   selectedPet: string | null;
   cloverGardenProgress: number;
+  cloverGardenProgressByOrigin: { "candy-world": number; ocean: number };
+  cloverGardenCollected: number[];
+  cloverGardenBossesDefeated: string[];
   rewardedShopDate: string;
   bossesDefeated: string[];
   achievements: string[];
