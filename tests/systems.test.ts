@@ -30,7 +30,7 @@ import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegr
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, krakenHitZone, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
-import { containDesertArenaPoint, blockDesertArenaCrossing, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis } from "../src/game/data/desertWorld";
+import { containDesertArenaPoint, blockDesertArenaCrossing, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis, scorpionStingHitZone, scorpionStingEffect, scorpionJumpHitZone, scorpionJumpEffect, scorpionPoisonStrikeEffect } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
@@ -916,6 +916,62 @@ describe("logo intro responsive layout", () => {
 });
 
 describe("Desert world mechanics", () => {
+  it("classifies Scorpion stings against the head and body using the snake radius", () => {
+    const head = { x: 100, y: 100 }, body = [head, { x: 160, y: 100 }];
+    expect(scorpionStingHitZone({ x: 120, y: 100 }, head, body, 28)).toBe("head");
+    expect(scorpionStingHitZone({ x: 180, y: 100 }, head, body, 28)).toBe("body");
+    expect(scorpionStingHitZone({ x: 200, y: 100 }, head, body, 28, 14)).toBe("body");
+    expect(scorpionStingHitZone({ x: 204, y: 100 }, head, body, 28, 14)).toBe("miss");
+    expect(scorpionStingHitZone({ x: 100, y: 100 }, head, body, 28)).toBe("head");
+    expect(scorpionStingHitZone({ x: 130, y: 100 }, head, body, 28, 14)).toBe("head");
+    // Attack radius covers the closed arena boundary (arena radius + snake clearance).
+    expect(scorpionStingHitZone({ x: 300, y: 100 }, head, body, 178, 14)).toBe("body");
+    expect(scorpionStingHitZone({ x: 100, y: 100 }, head, [{ x: 100, y: 100 }, { x: 100, y: 100 }], 28, 14)).toBe("head");
+  });
+  it("classifies Scorpion jump landings against the head and every body segment", () => {
+    const head = { x: 100, y: 100 }, body = [head, { x: 240, y: 100 }];
+    expect(scorpionJumpHitZone({ x: 110, y: 100 }, head, body, 118, 14)).toBe("head");
+    expect(scorpionJumpHitZone({ x: 340, y: 100 }, head, body, 118, 14)).toBe("body");
+    expect(scorpionJumpHitZone({ x: 420, y: 100 }, head, body, 178, 14)).toBe("body");
+    expect(scorpionJumpHitZone({ x: 400, y: 100 }, head, body, 118, 14)).toBe("miss");
+    expect(scorpionJumpEffect("body", {}, 5)).toBe("segments");
+    expect(scorpionJumpEffect("body", {}, 4)).toBe("life");
+    expect(scorpionJumpEffect("head", {})).toBe("life");
+    expect(scorpionJumpEffect("body", { shield: true }, 5)).toBe("shield");
+    expect(scorpionJumpEffect("body", { ghost: true }, 5)).toBe("protected");
+  });
+  it("resolves Scorpion sting damage while respecting protections", () => {
+    expect(scorpionStingEffect("body", 8, 5, {})).toBe("segment");
+    expect(scorpionStingEffect("head", 8, 5, {})).toBe("life");
+    expect(scorpionStingEffect("body", 5, 5, {})).toBe("life");
+    expect(scorpionStingEffect("body", 8, 5, {})).toBe("segment");
+    expect(scorpionJumpEffect("body", {}, 5)).toBe("segments");
+    expect(scorpionStingEffect("body", 8, 5, { ghost: true })).toBe("protected");
+    expect(scorpionStingEffect("body", 8, 5, { invulnerable: true })).toBe("protected");
+    expect(scorpionStingEffect("body", 8, 5, { grace: true })).toBe("segment");
+  });
+  it("makes Scorpion poison strikes remove a segment on body hits and a life on head hits or minimum length", () => {
+    expect(scorpionPoisonStrikeEffect("body", 8, 5, {})).toBe("segment");
+    expect(scorpionPoisonStrikeEffect("head", 8, 5, {})).toBe("life");
+    expect(scorpionPoisonStrikeEffect("body", 5, 5, {})).toBe("life");
+    expect(scorpionPoisonStrikeEffect("miss", 8, 5, {})).toBe("miss");
+    expect(scorpionPoisonStrikeEffect("body", 8, 5, { shield: true })).toBe("shield");
+    expect(scorpionPoisonStrikeEffect("body", 8, 5, { grace: true })).toBe("segment");
+    expect(scorpionPoisonStrikeEffect("body", 8, 5, { invulnerable: true })).toBe("protected");
+    expect(scorpionJumpEffect("body", { ghost: true }, 5)).toBe("protected");
+    expect(scorpionJumpEffect("body", { grace: true }, 5)).toBe("segments");
+  });
+  it("applies damage on every consecutive body sting despite collision grace", () => {
+    let length = 8;
+    for (let attack = 0; attack < 3; attack++) {
+      const effect = scorpionStingEffect("body", length, 5, { grace: true });
+      expect(effect).toBe("segment");
+      if (effect === "segment") length = Math.max(5, length - 1);
+    }
+    expect(length).toBe(5);
+    expect(scorpionStingEffect("body", length, 5, { grace: true })).toBe("life");
+    expect(length).toBe(5);
+  });
   it("creates arena-scaled routes, oasis, and gusts that apply only inside their lanes", () => {
     const regions = desertRegions(0, 0, 1000, 800), gusts = desertGusts(0, 0, 1000, 800);
     const oasis = regions.find((region) => region.id === "oasis")!;
@@ -1410,6 +1466,7 @@ describe("snake and powers", () => {
     expect(1 - 65 / lucky).toBeCloseTo(0.351, 2);
   });
   it("poison slows movement temporarily and refreshes instead of stacking", () => {
+    expect(B.hazard.slowMultiplier).toBe(0.55);
     const p = new PowerUpSystem();
     p.applyPoison();
     expect(p.slowed).toBe(B.hazard.poisonDuration);
@@ -1419,6 +1476,17 @@ describe("snake and powers", () => {
     expect(p.slowed).toBe(B.hazard.poisonDuration);
     p.update(B.hazard.poisonDuration);
     expect(p.slowed).toBe(0);
+  });
+  it("keeps poison active while standing in a poison puddle", () => {
+    const p = new PowerUpSystem();
+    p.applyPoison();
+    p.update(B.hazard.poisonDuration - 0.1);
+    expect(p.slowed).toBeCloseTo(0.1);
+    p.applyPoison();
+    expect(p.slowed).toBe(B.hazard.poisonDuration);
+    p.update(0.1);
+    p.applyPoison();
+    expect(p.slowed).toBe(B.hazard.poisonDuration);
   });
   it("adds a very rare 100-value coin tier", () => {
     const mythic = B.coins.find((coin) => coin.id === "mythic");

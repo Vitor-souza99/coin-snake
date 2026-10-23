@@ -164,3 +164,14 @@ it("never overwrites a save from a newer version", async () => {
   expect(writes).toBe(0);
   expect(s.error).toContain("versão mais nova");
 });
+
+it("loads the current save version without resetting progress", async () => {
+  const profile = defaults();
+  profile.totalCoins = 450;
+  profile.bestScore = 1200;
+  const s = new SaveSystem({ get: async () => JSON.stringify(profile), set: async () => {} });
+  await s.load();
+  expect(s.profile.totalCoins).toBe(450);
+  expect(s.profile.bestScore).toBe(1200);
+  expect(s.error).toBeNull();
+});

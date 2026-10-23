@@ -99,7 +99,7 @@ export const B = {
     shieldGrace: 1.5,
     reviveGrace: 2,
   },
-  hazard: { poisonDuration: 4, slowMultiplier: 0.7 },
+  hazard: { poisonDuration: 4, slowMultiplier: 0.55 },
   difficulty: {
     secondsPerLevel: 30,
     scorePerLevel: 4000,

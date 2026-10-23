@@ -4,6 +4,63 @@ export type DesertRegionId = "oasis" | "ruins" | "dune_field" | "scorpion_arena"
 export interface DesertRegion extends Point { id: DesertRegionId; width: number; height: number }
 export interface SandGust extends Point { width: number; height: number; direction: Point; force: number; phase: number }
 export type DesertRouteId = "oasis" | "ruins" | "dunes";
+export type ScorpionStingHitZone = "head" | "body" | "miss";
+export type ScorpionStingEffect = "miss" | "protected" | "shield" | "life" | "segment";
+export type ScorpionJumpEffect = ScorpionStingEffect | "segments";
+
+export function scorpionStingEffect(
+  hitZone: ScorpionStingHitZone,
+  length: number,
+  initialLength: number,
+  protections: { invulnerable?: boolean; ghost?: boolean; grace?: boolean; shield?: boolean },
+): ScorpionStingEffect {
+  if (hitZone === "miss") return "miss";
+  // Boss collision grace prevents repeated contact damage, but must not cancel
+  // a separately telegraphed Scorpion attack impact.
+  if (protections.invulnerable || protections.ghost) return "protected";
+  if (protections.shield) return "shield";
+  return hitZone === "head" || length <= initialLength ? "life" : "segment";
+}
+
+/** Classifies a circular scorpion sting against the snake, including its physical radius. */
+export function scorpionStingHitZone(target: Point, head: Point, body: Point[], radius: number, headRadius = 0, segmentRadius = headRadius): ScorpionStingHitZone {
+  const overlaps = (point: Point, pointRadius: number) =>
+    Math.hypot(target.x - point.x, target.y - point.y) <= radius + pointRadius;
+  if (overlaps(head, headRadius)) return "head";
+  if (body.slice(1).some((segment) => overlaps(segment, segmentRadius))) return "body";
+  return "miss";
+}
+
+/** Classifies the Scorpion King's landing impact against the full snake. */
+export function scorpionJumpHitZone(target: Point, head: Point, body: Point[], radius: number, headRadius = 0, segmentRadius = headRadius): ScorpionStingHitZone {
+  return scorpionStingHitZone(target, head, body, radius, headRadius, segmentRadius);
+}
+
+/** A landing costs five segments; if fewer than five are available, it costs a life. */
+export function scorpionJumpEffect(
+  hitZone: ScorpionStingHitZone,
+  protections: { invulnerable?: boolean; ghost?: boolean; grace?: boolean; shield?: boolean },
+  segmentsAvailable = 0,
+): ScorpionJumpEffect {
+  if (hitZone === "miss") return "miss";
+  if (protections.invulnerable || protections.ghost) return "protected";
+  if (protections.shield) return "shield";
+  if (hitZone === "head") return "life";
+  return segmentsAvailable >= 5 ? "segments" : "life";
+}
+
+/** A poison strike uses the same body/head damage rule as a regular sting. */
+export function scorpionPoisonStrikeEffect(
+  hitZone: ScorpionStingHitZone,
+  length: number,
+  initialLength: number,
+  protections: { invulnerable?: boolean; ghost?: boolean; grace?: boolean; shield?: boolean },
+): ScorpionStingEffect {
+  if (hitZone === "miss") return "miss";
+  if (protections.invulnerable || protections.ghost) return "protected";
+  if (protections.shield) return "shield";
+  return hitZone === "head" || length <= initialLength ? "life" : "segment";
+}
 
 export const desertWorldConfig = {
   gustForce: 28,

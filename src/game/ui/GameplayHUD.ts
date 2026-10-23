@@ -50,7 +50,7 @@ export class GameplayHUD {
     if (p.luckyStar > 0) powers.push(`★ SORTE ${Math.ceil(p.luckyStar)}s`);
     if (p.ghost > 0 || p.ghostGrace > 0) powers.push(`FANTASMA ${Math.ceil(p.ghost + p.ghostGrace)}s`);
     if (p.invincible > 0) powers.push("PROTEGIDO");
-    if (p.slowed > 0) powers.push(`VENENO ${Math.ceil(p.slowed)}s`);
+    if (p.slowed > 0) powers.push(`VENENO · ${Math.ceil(p.slowed)}s`);
     set(
       this.effects,
       powers.join(" · "),
