@@ -30,7 +30,7 @@ import { bossAttackTiming, bossDifficultyProfile, bossMovementSpeed, candyTelegr
 import { Snake } from "../src/game/entities/Snake";
 import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldConfig, inCandyRiver, stickySpeedMultiplier } from "../src/game/data/candyWorld";
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, krakenHitZone, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
-import { containDesertArenaPoint, blockDesertArenaCrossing, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis, scorpionStingHitZone, scorpionStingEffect, scorpionJumpHitZone, scorpionJumpEffect, scorpionPoisonStrikeEffect } from "../src/game/data/desertWorld";
+import { containDesertArenaPoint, blockDesertArenaCrossing, circleIntersectsDesertWall, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis, scorpionStingHitZone, scorpionStingEffect, scorpionJumpHitZone, scorpionJumpEffect, scorpionPoisonStrikeEffect } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
@@ -821,11 +821,12 @@ describe("roadmap progression systems", () => {
     const relic = validateSave({ ...scorpion, saveVersion: 16, desertRelicFound: true, desertExpeditionCheckpoint: 3 });
     expect(relic.desertRelicFound).toBe(true);
     expect(relic.desertExpeditionCheckpoint).toBe(3);
-    expect(relic.availablePets).toContain("tiny-dragon");
+    expect(relic.availablePets).not.toContain("tiny-dragon");
     const buyer = { ...relic, bossCoinBalance: 150 };
-    expect(buyPet(buyer, "tiny-dragon")).toBe(true);
-    expect(buyer.bossCoinBalance).toBe(0);
-    expect(buyer.unlockedPets).toContain("tiny-dragon");
+    buyer.availablePets.push("tiny-dragon");
+    expect(buyPet(buyer, "tiny-dragon")).toBe(false);
+    expect(buyer.bossCoinBalance).toBe(150);
+    expect(buyer.unlockedPets).not.toContain("tiny-dragon");
   });
   it("does not unlock Tiny Dragon when migrating an old King Snake reward save", () => {
     const profile = validateSave({ saveVersion: 13, bossesDefeated: ["king-snake"] });
@@ -845,7 +846,7 @@ describe("roadmap progression systems", () => {
   });
   it("save validation accepts earnable pets but never grants the premium pet", () => {
     const profile = validateSave({ saveVersion: 16, desertRelicFound: true, bossesDefeated: ["king-snake", "candy-monster", "kraken", "scorpion-king"], unlockedPets: [...earnablePetIds, "crystal-fox", "unknown"] });
-    expect(profile.unlockedPets).toEqual(earnablePetIds);
+    expect(profile.unlockedPets).toEqual(earnablePetIds.filter((id) => id !== "tiny-dragon"));
     expect(pets.find((pet) => pet.id === "crystal-fox")?.unlockType).toBe("PREMIUM");
   });
   it("unlocks the always-active lucky leprechaun only after four persisted clovers", () => {
@@ -916,6 +917,13 @@ describe("logo intro responsive layout", () => {
 });
 
 describe("Desert world mechanics", () => {
+  it("collides the snake circle with the visible rectangular labyrinth walls", () => {
+    const wall = { left: 100, right: 130, top: 80, bottom: 220 };
+    expect(circleIntersectsDesertWall({ x: 90, y: 150 }, 12, wall)).toBe(true);
+    expect(circleIntersectsDesertWall({ x: 85, y: 150 }, 12, wall)).toBe(false);
+    expect(circleIntersectsDesertWall({ x: 90, y: 72 }, 12, wall)).toBe(false);
+    expect(circleIntersectsDesertWall({ x: 100, y: 80 }, 1, wall)).toBe(true);
+  });
   it("classifies Scorpion stings against the head and body using the snake radius", () => {
     const head = { x: 100, y: 100 }, body = [head, { x: 160, y: 100 }];
     expect(scorpionStingHitZone({ x: 120, y: 100 }, head, body, 28)).toBe("head");

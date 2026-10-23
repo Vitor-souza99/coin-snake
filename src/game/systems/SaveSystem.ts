@@ -199,17 +199,14 @@ export function validateSave(input: unknown): PlayerProfile {
       && (pet.requiredBossIds ?? []).every((bossId) => bossWins.has(bossId));
   });
   const savedAvailablePets = isV3 && Array.isArray(r.availablePets) ? r.availablePets.filter((id): id is string => typeof id === "string" && validPetIds.has(id)) : [];
-  const savedDragonOffer = bool(r.desertRelicFound, false) && bossWins.has("scorpion-king") && savedAvailablePets.includes("tiny-dragon");
-  p.availablePets = [...new Set([...savedAvailablePets.filter((id) => id !== "tiny-dragon"), ...availableBossPets, ...(savedDragonOffer ? ["tiny-dragon"] : [])])];
+  p.availablePets = [...new Set([...savedAvailablePets.filter((id) => id !== "tiny-dragon"), ...availableBossPets])];
   // In v8 the firefly was automatically granted with King Snake; preserve that
   // existing ownership when migrating rather than charging players again.
   const ownedBossPets = [...bossUnlockedPets].filter((id) => !pets.find((pet) => pet.id === id)?.coinPrice);
   const canKeepDragon = bool(r.desertRelicFound, false) && bossWins.has("scorpion-king");
   p.unlockedPets = [...new Set([...savedPets.filter((id) => id !== "tiny-dragon" || canKeepDragon), ...ownedBossPets])];
   if ((r.saveVersion as number) <= 8 && bossWins.has("king-snake")) p.unlockedPets.push("firefly");
-  const hadDragon = Array.isArray(r.unlockedPets) && r.unlockedPets.includes("tiny-dragon");
-  const keepDragon = bool(r.desertRelicFound, false) && bossWins.has("scorpion-king") && p.availablePets.includes("tiny-dragon");
-  if (hadDragon && keepDragon && !p.unlockedPets.includes("tiny-dragon")) p.unlockedPets.push("tiny-dragon");
+  // The Desert Labyrinth reward is temporarily unavailable; discard stale claims.
   p.selectedPet = typeof r.selectedPet === "string" && p.unlockedPets.includes(r.selectedPet) ? r.selectedPet : null;
   if (p.cloverGardenProgress >= 4 && !p.unlockedPets.includes("lucky-leprechaun")) p.unlockedPets.push("lucky-leprechaun");
   p.unlockedSkins = [...new Set([...p.unlockedSkins, ...p.bossesDefeated.flatMap((bossId) => getBossSkinRewards(bossId).map((skin) => skin.id))])];
@@ -284,9 +281,9 @@ export function validateSave(input: unknown): PlayerProfile {
   p.desertExpeditionCheckpoint = p.desertRelicFound ? 3 : Math.min(2, Math.max(0, Math.floor(num(r.desertExpeditionCheckpoint))));
   p.desertExpeditionActive = !p.desertRelicFound && bool(r.desertExpeditionActive, false) && p.bossesDefeated.includes("scorpion-king");
   if (p.desertRelicFound) p.desertExpeditionActive = false;
-  if (p.desertRelicFound && p.bossesDefeated.includes("scorpion-king")) p.availablePets = [...new Set([...p.availablePets, "tiny-dragon"])];
-  else p.availablePets = p.availablePets.filter((id) => id !== "tiny-dragon");
-  if (!p.desertRelicFound && r.saveVersion !== 9) p.unlockedPets = p.unlockedPets.filter((id) => id !== "tiny-dragon");
+  p.availablePets = p.availablePets.filter((id) => id !== "tiny-dragon");
+  p.unlockedPets = p.unlockedPets.filter((id) => id !== "tiny-dragon");
+  if (p.selectedPet === "tiny-dragon") p.selectedPet = null;
   p.saveVersion = 18;
   return p;
 }

@@ -124,17 +124,18 @@ export class ShopScene extends Phaser.Scene {
         const permanent = pet.id === "lucky-leprechaun";
         const premium = pet.unlockType === "PREMIUM";
         const discovered = pet.id !== "tiny-dragon" || profile.desertRelicFound;
-        const purchasable = discovered && available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
+        const comingSoon = pet.id === "tiny-dragon";
+        const purchasable = discovered && !comingSoon && available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
         const stateClass = !discovered ? "pet-locked" : permanent && unlocked || selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
-        const stateLabel = !discovered ? "???" : permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
+        const stateLabel = comingSoon ? "EM BREVE" : !discovered ? "???" : permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
         const action = permanent && unlocked
           ? `<button class="action secondary" disabled>EQUIPADO PERMANENTE</button>`
-          : unlocked
+          : unlocked && !comingSoon
           ? `<button class="action ${selected ? "secondary" : ""}" data-equip-pet="${pet.id}" ${selected ? "disabled" : ""}>${selected ? "EQUIPADO" : "EQUIPAR"}</button>`
           : purchasable
             ? `<button class="action" data-buy-pet="${pet.id}" ${profile.bossCoinBalance < pet.coinPrice! ? "disabled" : ""}>COMPRAR · ${pet.coinPrice} BOSS COINS</button>`
-            : `<button class="action secondary" disabled>${!discovered ? "???" : premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
-        const detail = !discovered ? "Uma oferta misteriosa. Descubra a relíquia secreta no Deserto." : permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
+            : `<button class="action secondary" disabled>${comingSoon ? "EM BREVE" : !discovered ? "???" : premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
+        const detail = comingSoon ? "O Labirinto do Deserto e o Dragãozinho estarão disponíveis em breve." : !discovered ? "Uma oferta misteriosa. Descubra a relíquia secreta no Deserto." : permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
          const petArt = pet.id === "phoenix" ? `<svg class="phoenix-pet-art" viewBox="0 0 120 100" role="img" aria-label="Solar Phoenix"><defs><linearGradient id="phoenix-fire" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#ff542e"/><stop offset=".55" stop-color="#ffad32"/><stop offset="1" stop-color="#fff1a0"/></linearGradient></defs><path fill="url(#phoenix-fire)" d="M54 56C28 72 30 89 8 93c13-15 2-26 21-40-13 1-20-7-25-17 17 11 29 5 43 12L42 20l17 18 14-25 2 31c17-5 28-2 39-14-4 15-13 25-29 29 12 15 7 27 20 40-22-5-23-22-48-43z"/><path fill="#fff0b0" d="m65 43 9-17 5 21-8 8z"/><circle cx="71" cy="42" r="2.5" fill="#28334a"/><path fill="#ffdb65" d="m76 46 14 4-14 4z"/></svg>` : pet.symbol;
          return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">

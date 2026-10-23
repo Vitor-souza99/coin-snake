@@ -33,7 +33,7 @@ export function buySkin(p: PlayerProfile, id: string): boolean {
 }
 export function buyPet(p: PlayerProfile, id: string): boolean {
   const pet = pets.find((entry) => entry.id === id);
-  if (!pet || pet.unlockType !== "BOSS" || !p.availablePets.includes(id) || id === "tiny-dragon" && !p.desertRelicFound) return false;
+  if (!pet || pet.unlockType !== "BOSS" || id === "tiny-dragon" || !p.availablePets.includes(id)) return false;
   if (p.unlockedPets.includes(id)) return true;
   if (!pet.coinPrice || p.bossCoinBalance < pet.coinPrice) return false;
   p.bossCoinBalance -= pet.coinPrice;

@@ -8,6 +8,13 @@ export type ScorpionStingHitZone = "head" | "body" | "miss";
 export type ScorpionStingEffect = "miss" | "protected" | "shield" | "life" | "segment";
 export type ScorpionJumpEffect = ScorpionStingEffect | "segments";
 
+/** Checks a circular player hitbox against an axis-aligned maze wall. */
+export function circleIntersectsDesertWall(point: Point, radius: number, bounds: { left: number; right: number; top: number; bottom: number }): boolean {
+  const nearestX = Math.max(bounds.left, Math.min(bounds.right, point.x));
+  const nearestY = Math.max(bounds.top, Math.min(bounds.bottom, point.y));
+  return Math.hypot(point.x - nearestX, point.y - nearestY) < radius;
+}
+
 export function scorpionStingEffect(
   hitZone: ScorpionStingHitZone,
   length: number,
