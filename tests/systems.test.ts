@@ -46,6 +46,40 @@ import { logoLayout } from "../src/game/ui/LogoLayout";
 import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, isMysterySkin, skinMysteryClues, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
 import { purchases } from "../src/game/services/PurchaseService";
 import { clearDevRunSnapshot, loadDevRunSnapshot, saveDevRunSnapshot, validateDevRunSnapshot } from "../src/game/systems/DevRunSnapshot";
+import { stepSnake, turnSnake, type ClassicSnakeState } from "../src/game/systems/ClassicSnakeSystem";
+
+describe("classic snake grid rules", () => {
+  const state = (): ClassicSnakeState => ({ width: 6, height: 6, body: [{ x: 2, y: 2 }, { x: 1, y: 2 }, { x: 0, y: 2 }], direction: "right", food: { x: 4, y: 4 }, score: 0, over: false });
+
+  it("moves one grid cell and ignores an immediate reverse turn", () => {
+    const game = state();
+    turnSnake(game, "left");
+    expect(game.direction).toBe("right");
+    stepSnake(game);
+    expect(game.body).toEqual([{ x: 3, y: 2 }, { x: 2, y: 2 }, { x: 1, y: 2 }]);
+  });
+
+  it("grows and scores when eating, placing food only on a free cell", () => {
+    const game = state();
+    game.body = [{ x: 2, y: 2 }];
+    game.food = { x: 3, y: 2 };
+    stepSnake(game, () => 0);
+    expect(game.score).toBe(1);
+    expect(game.body).toHaveLength(2);
+    expect(game.food).not.toEqual(game.body[0]);
+  });
+
+  it("ends on a wall or self collision, but permits moving into the departing tail", () => {
+    const wall = state();
+    wall.body = [{ x: 5, y: 2 }];
+    expect(stepSnake(wall).over).toBe(true);
+    const tail = state();
+    tail.body = [{ x: 2, y: 2 }, { x: 2, y: 3 }, { x: 1, y: 3 }, { x: 1, y: 2 }];
+    tail.direction = "left";
+    expect(stepSnake(tail).over).toBe(false);
+    expect(tail.body[0]).toEqual({ x: 1, y: 2 });
+  });
+});
 
 describe("development run snapshots", () => {
   const freshSnapshot = () => {
@@ -864,7 +898,7 @@ describe("roadmap progression systems", () => {
     expect(current.cloverGardenProgress).toBe(3);
     expect(current.cloverGardenBossesDefeated).toEqual(["candy-garden-guardian"]);
     expect(current.cloverGardenCollected).toEqual([0, 1, 2]);
-    expect(current.saveVersion).toBe(18);
+    expect(current.saveVersion).toBe(19);
   });
   it("preserves individual clovers collected in any order in v18 saves", () => {
     const current = validateSave({ saveVersion: 17, cloverGardenProgress: 2, cloverGardenCollected: [3, 1, 1, 7, -1], cloverGardenBossesDefeated: ["candy-garden-guardian"] });
@@ -876,7 +910,7 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(18);
+    expect(profile.saveVersion).toBe(19);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).not.toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -885,7 +919,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(18);
+    expect(profile.saveVersion).toBe(19);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -1086,9 +1120,18 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(18);
+    expect(migrated.saveVersion).toBe(19);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
+  });
+  it("keeps Freeze unlock and claimed reward persistent without granting either on old saves", () => {
+    const legacy = validateSave({ saveVersion: 18, bossesDefeated: ["spider-queen"] });
+    expect(legacy.freezeUnlocked).toBe(false);
+    expect(legacy.freezeRewardClaimed).toBe(false);
+    const unlocked = validateSave({ saveVersion: 19, freezeUnlocked: true });
+    expect(unlocked.freezeUnlocked).toBe(true);
+    expect(unlocked.freezeRewardClaimed).toBe(true);
+    expect(validateSave({ saveVersion: 19, freezeRewardClaimed: true }).freezeUnlocked).toBe(false);
   });
   it("sanitizes nested fields and derives level from XP", () => {
     const p = validateSave({
@@ -1114,21 +1157,21 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(18);
+    expect(migrated.saveVersion).toBe(19);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(18);
+    expect(profile.saveVersion).toBe(19);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(18);
+    expect(migrated.saveVersion).toBe(19);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -1387,6 +1430,28 @@ describe("snake and powers", () => {
     expect(p.absorb()).toBe(true);
     p.update(2);
     expect(p.absorb()).toBe(false);
+  });
+  it("freezes movement with invulnerability for five seconds, then starts a twenty-second cooldown", () => {
+    const p = new PowerUpSystem();
+    expect(p.activateFreeze()).toBe(true);
+    expect(p.freezeRemaining).toBe(5);
+    expect(p.freezeCooldown).toBe(20);
+    expect(p.freezeBlocksDamage()).toBe(true);
+    expect(p.activateFreeze()).toBe(false);
+    p.update(4.99);
+    expect(p.freezeRemaining).toBeCloseTo(0.01);
+    expect(p.freezeCooldown).toBeCloseTo(20);
+    expect(p.freezeBlocksDamage()).toBe(true);
+    p.update(0.01);
+    expect(p.freezeRemaining).toBe(0);
+    expect(p.freezeBlocksDamage()).toBe(false);
+    expect(p.freezeCooldown).toBe(20);
+    p.update(10);
+    expect(p.freezeCooldown).toBe(10);
+    expect(p.activateFreeze()).toBe(false);
+    p.update(10);
+    expect(p.freezeCooldown).toBe(0);
+    expect(p.activateFreeze()).toBe(true);
   });
   it("lets Kraken attacks be blocked by ghost, shield, or active invincibility", () => {
     const ghost = new PowerUpSystem();

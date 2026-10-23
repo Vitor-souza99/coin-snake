@@ -34,7 +34,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 18;
+  saveVersion: 19;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;
@@ -72,6 +72,8 @@ export interface PlayerProfile {
   desertExpeditionCheckpoint: number;
   desertExpeditionActive: boolean;
   desertRelicFound: boolean;
+  freezeUnlocked: boolean;
+  freezeRewardClaimed: boolean;
 }
 export interface RunState {
   id: string;

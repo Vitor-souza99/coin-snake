@@ -12,6 +12,8 @@ export class PowerUpSystem {
   shield = false;
   shieldRemaining = 0;
   invincible = 0;
+  freezeRemaining = 0;
+  freezeCooldown = 0;
   slowed = 0;
   lives: number = B.power.initialLives;
   private phoenixReviveUsed = false;
@@ -55,12 +57,22 @@ export class PowerUpSystem {
     this.shieldRemaining = duration;
     return true;
   }
+  activateFreeze(duration = 5, cooldown = 20): boolean {
+    if (this.freezeRemaining > 0 || this.freezeCooldown > 0 || duration <= 0) return false;
+    this.freezeRemaining = duration;
+    this.freezeCooldown = cooldown;
+    this.invincible = Math.max(this.invincible, duration);
+    return true;
+  }
   update(dt: number) {
     this.magnet = Math.max(0, this.magnet - dt);
     this.turbo = Math.max(0, this.turbo - dt);
     this.precision = Math.max(0, this.precision - dt);
     this.luckyStar = Math.max(0, this.luckyStar - dt);
     this.invincible = Math.max(0, this.invincible - dt);
+    const freezeWasActive = this.freezeRemaining > 0;
+    this.freezeRemaining = Math.max(0, this.freezeRemaining - dt);
+    if (!freezeWasActive) this.freezeCooldown = Math.max(0, this.freezeCooldown - dt);
     if (this.shield && this.shieldRemaining > 0) {
       this.shieldRemaining = Math.max(0, this.shieldRemaining - dt);
       if (this.shieldRemaining === 0) this.shield = false;
@@ -72,6 +84,12 @@ export class PowerUpSystem {
       this.ghostWasActive = false;
       this.ghostGrace = B.power.ghostClearanceGrace;
     }
+  }
+  get frozen(): boolean {
+    return this.freezeRemaining > 0;
+  }
+  freezeBlocksDamage(): boolean {
+    return this.frozen;
   }
   updateGhost(dt: number, overlapping: boolean): boolean {
     if (this.ghost > 0) return true;

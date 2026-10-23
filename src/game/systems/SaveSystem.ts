@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 18,
+    saveVersion: 19,
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -77,12 +77,14 @@ export function defaults(): PlayerProfile {
     desertExpeditionCheckpoint: 0,
     desertExpeditionActive: false,
     desertRelicFound: false,
+    freezeUnlocked: false,
+    freezeRewardClaimed: false,
   };
 }
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bossCoinBalance = num(r.bossCoinBalance);
   p.bestScore = num(r.bestScore);
@@ -278,13 +280,15 @@ export function validateSave(input: unknown): PlayerProfile {
     };
   }
   p.desertRelicFound = bool(r.desertRelicFound, false);
+  p.freezeUnlocked = bool(r.freezeUnlocked, false);
+  p.freezeRewardClaimed = p.freezeUnlocked || bool(r.freezeRewardClaimed, false);
   p.desertExpeditionCheckpoint = p.desertRelicFound ? 3 : Math.min(2, Math.max(0, Math.floor(num(r.desertExpeditionCheckpoint))));
   p.desertExpeditionActive = !p.desertRelicFound && bool(r.desertExpeditionActive, false) && p.bossesDefeated.includes("scorpion-king");
   if (p.desertRelicFound) p.desertExpeditionActive = false;
   p.availablePets = p.availablePets.filter((id) => id !== "tiny-dragon");
   p.unlockedPets = p.unlockedPets.filter((id) => id !== "tiny-dragon");
   if (p.selectedPet === "tiny-dragon") p.selectedPet = null;
-  p.saveVersion = 18;
+  p.saveVersion = 19;
   return p;
 }
 export interface SaveStorage {
@@ -306,7 +310,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>18){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>19){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

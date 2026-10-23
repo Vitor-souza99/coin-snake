@@ -17,6 +17,7 @@ export class GameplayHUD {
   private level: HTMLElement;
   private xp: HTMLElement;
   private xpBar: HTMLElement;
+  private freezeButton: HTMLButtonElement;
   constructor(ui: ScreenUI) {
     this.score = ui.get("#score");
     this.coins = ui.get("#coins");
@@ -29,6 +30,7 @@ export class GameplayHUD {
     this.level = ui.get("#player-level-value");
     this.xp = ui.get("#player-xp-value");
     this.xpBar = ui.get("#player-xp-bar");
+    this.freezeButton = ui.get<HTMLButtonElement>("#freeze");
   }
   update(r: RunState, c: ComboSystem, p: PowerUpSystem, t: TurboSystem, profile: PlayerProfile) {
     const set = (e: HTMLElement, value: string) => {
@@ -50,6 +52,7 @@ export class GameplayHUD {
     if (p.luckyStar > 0) powers.push(`★ SORTE ${Math.ceil(p.luckyStar)}s`);
     if (p.ghost > 0 || p.ghostGrace > 0) powers.push(`FANTASMA ${Math.ceil(p.ghost + p.ghostGrace)}s`);
     if (p.invincible > 0) powers.push("PROTEGIDO");
+    if (p.freezeRemaining > 0) powers.push(`❄ FREEZE ${Math.ceil(p.freezeRemaining)}s`);
     if (p.slowed > 0) powers.push(`VENENO · ${Math.ceil(p.slowed)}s`);
     set(
       this.effects,
@@ -62,5 +65,10 @@ export class GameplayHUD {
     );
     this.button.classList.toggle("active", t.active);
     this.button.setAttribute("aria-pressed", String(t.active));
+    this.freezeButton.hidden = !profile.freezeUnlocked;
+    this.freezeButton.disabled = !profile.freezeUnlocked || p.freezeCooldown > 0 || p.freezeRemaining > 0;
+    this.freezeButton.classList.toggle("active", p.freezeRemaining > 0);
+    this.freezeButton.setAttribute("aria-pressed", String(p.freezeRemaining > 0));
+    set(this.freezeButton, p.freezeRemaining > 0 ? `❄ ${Math.ceil(p.freezeRemaining)}s` : p.freezeCooldown > 0 ? `❄ ${Math.ceil(p.freezeCooldown)}s` : "❄ FREEZE");
   }
 }

@@ -10,6 +10,7 @@ import { ShopScene } from "./scenes/ShopScene";
 import { MissionsScene } from "./scenes/MissionsScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { WorldSelectScene } from "./scenes/WorldSelectScene";
+import { ClassicSnakeScene } from "./scenes/ClassicSnakeScene";
 export const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: "game",
@@ -27,6 +28,7 @@ export const config: Phaser.Types.Core.GameConfig = {
     SettingsScene,
     CollectionScene,
     GameScene,
+    ClassicSnakeScene,
     ShopScene,
     WorldSelectScene,
     MissionsScene,

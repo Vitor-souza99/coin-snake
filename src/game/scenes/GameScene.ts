@@ -60,6 +60,11 @@ export class GameScene extends Phaser.Scene {
   private ui!: ScreenUI;
   private joystick!: FloatingJoystick;
   private turboButton!: TurboButton;
+  private freezeButton?: HTMLButtonElement;
+  private freezeReward?: Phaser.GameObjects.Container;
+  private freezePortal?: Phaser.GameObjects.Container;
+  private freezePortalCooldown = 0;
+  private freezeModalPending = false;
   private turbo!: TurboSystem;
   private steering!: SteeringSystem;
   private fruit!: ShrinkFruit;
@@ -119,7 +124,6 @@ export class GameScene extends Phaser.Scene {
   private bossEnergyHud?: HTMLElement;
   private auraStatusHud?: HTMLElement;
   private petSprite?: Phaser.GameObjects.Container;
-  private rushMode = false;
   private gameDifficulty: GameDifficulty = "normal";
   private bossDefinition?: BossDefinition;
   private portalSystem = new PortalSystem();
@@ -194,14 +198,13 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       audio.setGameplayActive(this, false),
     );
-    const initData = (this.scene.settings.data ?? {}) as { rushMode?: boolean; startWorld?: string; cloverGarden?: boolean; cloverReturn?: boolean; cloverRevenge?: boolean; cloverOrigin?: "candy-world" | "ocean"; returnWorld?: string; bossEnergy?: number; desertExpedition?: boolean; gameDifficulty?: GameDifficulty };
-    this.rushMode = initData.rushMode ?? false;
+    const initData = (this.scene.settings.data ?? {}) as { startWorld?: string; cloverGarden?: boolean; cloverReturn?: boolean; cloverRevenge?: boolean; cloverOrigin?: "candy-world" | "ocean"; returnWorld?: string; bossEnergy?: number; desertExpedition?: boolean; gameDifficulty?: GameDifficulty };
     this.gameDifficulty = initData.gameDifficulty === "easy" || initData.gameDifficulty === "hard" || initData.gameDifficulty === "normal"
       ? initData.gameDifficulty
       : save.profile.settings.gameDifficulty;
     save.profile.settings.gameDifficulty = this.gameDifficulty;
     reconcileWorldUnlocks(save.profile);
-    const requestedWorld = initData.rushMode ? "green-valley" : initData.startWorld ?? save.profile.selectedWorld;
+    const requestedWorld = initData.startWorld ?? save.profile.selectedWorld;
     const selected = worldById(requestedWorld);
     const desertExpeditionActive = initData.desertExpedition === true && save.profile.bossesDefeated.includes("scorpion-king")
       || initData.startWorld === "desert-labyrinth" && save.profile.desertExpeditionActive && save.profile.bossesDefeated.includes("scorpion-king");
@@ -290,7 +293,6 @@ export class GameScene extends Phaser.Scene {
     if (Number.isFinite(initData.bossEnergy)) this.run.bossEnergy = Math.max(0, initData.bossEnergy!);
     startMissionRun(save.profile, this.run);
     if (save.profile.missionDate === this.run.missionDate) void save.save();
-    this.run.rushMode = this.rushMode;
     this.run.gameDifficulty = this.gameDifficulty;
     this.combo = new ComboSystem();
     this.powers = new PowerUpSystem();
@@ -407,9 +409,8 @@ export class GameScene extends Phaser.Scene {
       "left-handed",
       save.profile.settings.leftHanded,
     );
-    if (this.rushMode) this.ui.root.classList.add("rush-mode");
     this.ui.html(
-      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div class="player-level"><div class="player-level__label"><b id="player-level-value">NÍVEL ${save.profile.playerLevel}</b><span id="player-xp-value"></span></div><div class="player-level__track"><i id="player-xp-bar"></i></div></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${this.rushMode ? "COIN RUSH" : worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}${this.currentWorld === "silent-abyss" && save.profile.abyssSanctuaryProgress < 3 ? `<div id="abyss-sanctuaries" class="world-tag">SANTUÁRIOS · ${save.profile.abyssSanctuaryProgress}/3</div>` : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="aura-status" class="aura-status" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">⚡ TURBO</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
+      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div class="player-level"><div class="player-level__label"><b id="player-level-value">NÍVEL ${save.profile.playerLevel}</b><span id="player-xp-value"></span></div><div class="player-level__track"><i id="player-xp-bar"></i></div></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}${this.currentWorld === "silent-abyss" && save.profile.abyssSanctuaryProgress < 3 ? `<div id="abyss-sanctuaries" class="world-tag">SANTUÁRIOS · ${save.profile.abyssSanctuaryProgress}/3</div>` : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="aura-status" class="aura-status" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">⚡ TURBO</button><button id="freeze" class="turbo-button freeze-button" aria-label="Ativar Freeze" hidden>❄ FREEZE</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
@@ -491,10 +492,13 @@ export class GameScene extends Phaser.Scene {
     this.turboButton = new TurboButton(
       this.ui.get<HTMLButtonElement>("#turbo"),
     );
+    this.freezeButton = this.ui.get<HTMLButtonElement>("#freeze");
+    this.freezeButton.addEventListener("click", () => this.activateFreeze());
+    if (this.currentWorld === "spider-lair" && save.profile.bossesDefeated.includes("spider-queen")) this.createFreezePortal();
     this.fruit = new ShrinkFruit(this);
     this.events.on("coinCollected", this.collectCoin, this);
     if (import.meta.env.DEV) this.installDebug();
-    analytics.track("gameStarted", { mode: this.rushMode ? "coin-rush" : "normal" });
+    analytics.track("gameStarted", { mode: "normal" });
     this.particles = this.add
       .particles(0, 0, "spark", {
         emitting: false,
@@ -506,7 +510,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setDepth(30);
     this.keys = this.input.keyboard?.addKeys(
-      "W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,SHIFT",
+      "W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,SHIFT,F",
     ) as Record<string, Phaser.Input.Keyboard.Key> | undefined;
     this.input.keyboard?.addCapture(["UP", "DOWN", "LEFT", "RIGHT", "SPACE"]);
     const point = (p: Phaser.Input.Pointer) => {
@@ -1656,17 +1660,26 @@ export class GameScene extends Phaser.Scene {
     }
   }
   update(_time: number, delta: number) {
-    if (
+    if (!this.halted && (
       this.keys &&
       (Phaser.Input.Keyboard.JustDown(this.keys.ESC) ||
         Phaser.Input.Keyboard.JustDown(this.keys.SPACE))
-    ) {
+    )) {
       if (this.halted && this.pauseKind === "pause") this.continue();
       else this.requestPause();
     }
+    if (this.freezeModalPending && this.powers.freezeRemaining > 0) {
+      this.powers.update(Math.min(delta / 1000, 0.05));
+      if (this.powers.freezeRemaining <= 0) {
+        this.freezeModalPending = false;
+        this.overlay?.destroy(); this.overlay = undefined;
+        this.halted = false; this.accumulator = 0; this.resetControls();
+      }
+      return;
+    }
     if (this.halted || this.dead) return;
     this.accumulator += Math.min(delta / 1000, 0.05);
-    while (this.accumulator >= 1 / 120 && !this.dead && !this.halted) {
+    while (this.accumulator >= 1 / 120 && !this.dead && (!this.halted || this.freezeModalPending)) {
       this.step(1 / 120);
       this.accumulator -= 1 / 120;
     }
@@ -1675,9 +1688,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAuraStatusHud();
     if ((this.boss?.definition.id === "spider-queen" || this.cloverGardenBoss) && this.bossEnergyHud)
       this.bossEnergyHud.hidden = true;
-    if (this.bossEnergyHud && !this.boss && !this.cloverGardenBoss && !this.bossEnergyHud.hidden) this.bossEnergyHud.textContent = this.rushMode
-      ? `COIN RUSH · ${Math.ceil(this.run.rushRemaining)} s restantes`
-      : `BOSS ENERGY ${Math.floor(this.run.bossEnergy)}/${this.currentWorld === "clover-garden" ? "—" : this.bossEnergyRequirement()}`;
+    if (this.bossEnergyHud && !this.boss && !this.cloverGardenBoss && !this.bossEnergyHud.hidden) this.bossEnergyHud.textContent = `BOSS ENERGY ${Math.floor(this.run.bossEnergy)}/${this.currentWorld === "clover-garden" ? "—" : this.bossEnergyRequirement()}`;
     this.updateCamera(Math.min(delta / 1000, 0.05));
   }
   private updateAuraStatusHud(message?: string) {
@@ -1717,21 +1728,64 @@ export class GameScene extends Phaser.Scene {
     hud.hidden = false;
     hud.classList.toggle("aura-status--ready", ready || Boolean(message?.includes("PRONTA")));
   }
-  private step(dt: number) {
-    this.passageCooldown = Math.max(0, this.passageCooldown - dt);
-    this.run.elapsed += dt;
-    if (this.rushMode) {
-      this.run.rushRemaining -= dt;
-      if (this.run.rushRemaining <= 0) {
-        this.run.rushRemaining = 0;
-        this.rushMode = false;
-        analytics.track("coinRushEnded", { coins: this.run.matchCoins, score: this.run.score });
-        this.die();
-        return;
-      }
+  private activateFreeze() {
+    if (!save.profile.freezeUnlocked || !this.powers.activateFreeze()) return;
+    this.aim = null;
+    this.feedback(this.snake.x, this.snake.y, "FREEZE · 5s", 0x9beaff, true);
+    audio.play("power"); haptic("power");
+  }
+  private collectFreezeReward() {
+    if (!this.freezeReward?.active || !save.profile.bossesDefeated.includes("spider-queen")) return;
+    const firstUnlock = !save.profile.freezeUnlocked;
+    save.profile.freezeUnlocked = true;
+    save.profile.freezeRewardClaimed = true;
+    this.freezeReward.destroy(); this.freezeReward = undefined;
+    void save.save();
+    this.feedback(this.snake.x, this.snake.y, "FREEZE DESBLOQUEADO!", 0x9beaff, true);
+    audio.play("power"); haptic("power");
+    if (firstUnlock) {
+      this.freezeModalPending = true;
+      this.halted = true; this.pauseKind = "pause"; this.resetControls();
+    this.overlay = this.ui.modal("❄ NOVO PODER: FREEZE", "A estrela de gelo desbloqueou o Freeze! Ative-o para parar a cobrinha e ficar invulnerável por 5 segundos. A recarga de 20 segundos começa após o efeito. O Ice World chega em breve!", [{ label: "Continuar", run: () => this.dismissFreezeModal() }]);
     }
+  }
+  private dismissFreezeModal() {
+    this.overlay?.destroy(); this.overlay = undefined;
+    this.freezeModalPending = false;
+    this.halted = false;
+    this.accumulator = 0;
+    this.resetControls();
+  }
+  private createFreezePortal() {
+    if (this.currentWorld !== "spider-lair" || !save.profile.bossesDefeated.includes("spider-queen") || this.freezePortal?.active) return;
+    const { left, top, right, bottom } = B.arena;
+    const x = left + (right - left) * 0.75, y = top + (bottom - top) * 0.5;
+    const ring = this.add.graphics().fillStyle(0x91eaff, 0.28).fillEllipse(0, 0, 116, 76).lineStyle(5, 0x9ceeff, 0.9).strokeEllipse(0, 0, 94, 58);
+    const label = this.add.text(0, 75, "ICE WORLD · EM BREVE", { fontSize: "11px", color: "#e5faff", fontStyle: "bold", backgroundColor: "#182d3bdd", padding: { x: 5, y: 3 } }).setOrigin(0.5);
+    this.freezePortal = this.add.container(x, y, [ring, label]).setDepth(8);
+    const star = this.add.container(0, 0, [
+      this.add.graphics().fillStyle(0xd9f8ff, 1).fillPoints([new Phaser.Geom.Point(0,-25),new Phaser.Geom.Point(7,-7),new Phaser.Geom.Point(25,0),new Phaser.Geom.Point(7,7),new Phaser.Geom.Point(0,25),new Phaser.Geom.Point(-7,7),new Phaser.Geom.Point(-25,0),new Phaser.Geom.Point(-7,-7)], true).lineStyle(2,0x71d8ff,1).strokePoints([new Phaser.Geom.Point(0,-25),new Phaser.Geom.Point(7,-7),new Phaser.Geom.Point(25,0),new Phaser.Geom.Point(7,7),new Phaser.Geom.Point(0,25),new Phaser.Geom.Point(-7,7),new Phaser.Geom.Point(-25,0),new Phaser.Geom.Point(-7,-7)], true),
+      this.add.text(0, 35, "GELO", { fontSize: "12px", color: "#e8fbff", fontStyle: "bold" }).setOrigin(0.5),
+    ]).setPosition(x, y).setDepth(12);
+    if (!save.profile.freezeRewardClaimed) {
+      this.freezeReward = star;
+      this.tweens.add({ targets: star, y: y - 16, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    } else star.destroy();
+    this.tweens.add({ targets: ring, alpha: 0.5, duration: 750, yoyo: true, repeat: -1 });
+  }
+  private step(dt: number) {
+    if (this.halted || this.dead) return;
+    this.passageCooldown = Math.max(0, this.passageCooldown - dt);
+    this.freezePortalCooldown = Math.max(0, this.freezePortalCooldown - dt);
+    this.run.elapsed += dt;
     this.combo.update(dt);
     this.powers.update(dt);
+    if (this.keys?.F && Phaser.Input.Keyboard.JustDown(this.keys.F)) this.activateFreeze();
+    if (this.powers.freezeRemaining > 0) {
+      this.snake.move(0, this.snake.angle, 0, 0);
+      this.renderSnake();
+      return;
+    }
     this.updateTidalTurtle(dt);
     const d = difficulty(this.run.elapsed, this.run.score, this.snake.length, this.gameDifficulty);
     let target = this.snake.angle;
@@ -2000,7 +2054,7 @@ export class GameScene extends Phaser.Scene {
         );
       }
     }
-    if (this.halted) return;
+    if (this.halted || this.dead) return;
     if (!this.boss && !this.cloverGardenBoss && this.bossPortal && this.bossPortalExpiresAt > 0 && this.run.elapsed >= this.bossPortalExpiresAt) {
       this.bossPortal.destroy();
       this.bossPortal = undefined;
@@ -2013,12 +2067,22 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.cloverGardenBoss) this.updateCloverGardenBoss(dt);
     if (!this.boss && !this.cloverGardenBoss && this.currentWorld === "clover-garden" && save.profile.cloverGardenBossesDefeated.includes(this.cloverGardenBossId()) && !this.cloverRevengePortal?.active) this.createCloverGardenRevengePortal();
-    if (!this.boss && !this.rushMode && this.currentWorld !== "desert-labyrinth") { this.refreshWorldPassages(); this.refreshSecretSpiderPassage(); this.refreshCloverPassage(); }
+    if (!this.boss && this.currentWorld !== "desert-labyrinth") { this.refreshWorldPassages(); this.refreshSecretSpiderPassage(); this.refreshCloverPassage(); }
     if (this.updateDesertLabyrinth()) return;
     this.updateFunctionalPets(dt);
     if (this.currentWorld === "silent-abyss") this.updateCelestialSanctuaries();
     if (this.currentWorld === "desert") this.updateDesertGusts();
     this.updateBossPickups(dt);
+    if (this.currentWorld === "spider-lair" && !this.boss) {
+      this.createFreezePortal();
+      if (!save.profile.freezeRewardClaimed && this.freezeReward?.active && distance(this.snake, this.freezeReward) < 44) this.collectFreezeReward();
+      if (this.freezePortal && distance(this.snake, this.freezePortal) < 78) {
+        if (save.profile.freezeUnlocked && this.freezePortalCooldown <= 0) {
+          this.freezePortalCooldown = 1.5;
+          this.ui.toast("Ice World · Em breve! A estrela de gelo está no centro do portal.");
+        }
+      }
+    }
     for (const o of this.obstacles) {
       if (o.warning > 0 && distance(o, this.snake) < 110)
         o.warning = Math.max(o.warning, 0.3);
@@ -2047,7 +2111,7 @@ export class GameScene extends Phaser.Scene {
     const obstacle = ghostActive ? undefined : overlappingObstacle;
     if (wall || obstacle || (!ghostActive && overlappingBody)) {
       const hadShield = this.powers.shield;
-      if (this.powers.invincible <= 0) {
+      if (this.powers.invincible <= 0 && !this.powers.freezeBlocksDamage()) {
         if (!this.powers.absorb()) {
           if (this.currentWorld === "desert-labyrinth") {
             const checkpointEntry = this.desertLabyrinthEntry();
@@ -2593,7 +2657,6 @@ export class GameScene extends Phaser.Scene {
       const bossId = worldById(this.currentWorld).bossId;
       const requiredEnergy = this.bossEnergyRequirement(bossId);
       if (
-        !this.rushMode &&
         bossId &&
         !this.bossPortal &&
         this.bossDefinition?.id !== bossId &&
@@ -2703,6 +2766,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.worldPortal.setData("blockedByWeb", false);
     }
+    this.createFreezePortal();
   }
   private drawSpiderExitWeb() {
     const web = this.spiderExitWeb;
@@ -3227,6 +3291,8 @@ export class GameScene extends Phaser.Scene {
     const world = worldById(id);
     if (this.cloverPassage) { this.cloverPassage.destroy(); this.cloverPassage = undefined; }
     if (this.currentWorld === "spider-lair" || world.id === "spider-lair") {
+      this.freezePortal?.destroy(); this.freezePortal = undefined;
+      this.freezeReward?.destroy(); this.freezeReward = undefined;
       for (const obstacle of this.obstacles) obstacle.destroy();
       this.obstacles = [];
       for (const web of this.spiderWebZones) web.graphic.destroy();
@@ -3236,6 +3302,8 @@ export class GameScene extends Phaser.Scene {
     if (this.currentWorld !== "silent-abyss") { this.worldPortal?.destroy(); this.worldPortal = undefined; }
     this.bossFight.destroy();
     this.boss?.image.destroy(); this.boss = undefined;
+    this.freezePortal?.destroy(); this.freezePortal = undefined;
+    this.freezeReward?.destroy(); this.freezeReward = undefined;
     this.bossPickups.forEach((pickup) => pickup.image.destroy()); this.bossPickups = [];
     this.bossMarkers.forEach((marker) => marker.destroy()); this.bossMarkers = [];
     this.abyssPortal?.destroy(); this.abyssPortal = undefined;
@@ -3299,7 +3367,7 @@ export class GameScene extends Phaser.Scene {
     if (world.id !== "green-valley" && world.id !== "spider-lair" && world.id !== "clover-garden") {
       save.profile.worldsUnlocked = [...new Set([...save.profile.worldsUnlocked, world.id])];
     }
-    if (!this.rushMode && world.id !== "spider-lair" && world.id !== "clover-garden") rememberWorld(save.profile, world.id);
+    if (world.id !== "spider-lair" && world.id !== "clover-garden") rememberWorld(save.profile, world.id);
     this.run.portalsUsed++;
     awardAchievement(save.profile, "world-traveler");
     this.cameras.main.setBackgroundColor(world.background);
@@ -4888,7 +4956,7 @@ export class GameScene extends Phaser.Scene {
     const protections = {
       // Each resolved sting is a distinct attack. Only explicit player powers
       // protect against it; automatic collision grace is intentionally ignored.
-      invulnerable: this.powers.invincible > 0,
+      invulnerable: this.powers.invincible > 0 || this.powers.freezeRemaining > 0,
       ghost: this.powers.ghostActive,
       shield: this.powers.shield,
     };
@@ -4965,7 +5033,7 @@ export class GameScene extends Phaser.Scene {
         const slowedInHoney = standingInHoney && this.stickySpeed < 0.99;
         this.candyHoneyZones.push({ x: targetX, y: targetY, radius: attackRadius - 2, expiresAt: this.run.elapsed + 4.9 });
         if (this.candyHoneyZones.length > 4) this.candyHoneyZones.shift();
-        if (headHit && !this.powers.ghostActive) {
+        if (headHit && !this.powers.ghostActive && !this.powers.freezeBlocksDamage()) {
           const hadShield = this.powers.shield;
           const hadInvincibility = this.powers.invincible > 0;
           if (standingInHoney && (this.candyAttackSlow > 0 || slowedInHoney)) {
@@ -4981,7 +5049,7 @@ export class GameScene extends Phaser.Scene {
             this.feedback(this.snake.x, this.snake.y, "MEL! LENTO 0,5s", 0xffd36c, true);
           } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
           else if (hadInvincibility) this.feedback(this.snake.x, this.snake.y, "PROTEGIDO!", 0x70cfff);
-        } else if (!headHit && bodyHit && !this.powers.ghostActive) {
+        } else if (!headHit && bodyHit && !this.powers.ghostActive && !this.powers.freezeBlocksDamage()) {
           if (this.powers.shield || this.powers.invincible > 0) {
             const hadShield = this.powers.shield;
             const hadInvincibility = this.powers.invincible > 0;
@@ -5064,7 +5132,7 @@ export class GameScene extends Phaser.Scene {
     if (boss.phase >= 1 && !this.bossCurrent) {
       this.bossCurrent = { x: B.arena.left + 700, y: B.arena.top + 650, direction: Math.PI, force: boss.phase >= 2 ? 20 : 13, life: 7, graphics: this.add.graphics().setDepth(5) };
     }
-    if (boss.phase >= 2) {
+    if (boss.phase >= 2 && this.powers.freezeRemaining <= 0) {
       if (!this.bossWhirlpool) { this.bossWhirlpool = this.add.graphics().setDepth(5); audio.play("current_flow"); }
       this.bossWhirlpool.clear().lineStyle(9, 0x75dce8, 0.44).strokeCircle(boss.image.x, boss.image.y, 165 + Math.sin(this.run.elapsed * 3) * 12).lineStyle(5, 0xb8f7ff, 0.55).strokeCircle(boss.image.x, boss.image.y, 108 - Math.sin(this.run.elapsed * 3) * 8);
       const vx = this.snake.x - boss.image.x, vy = this.snake.y - boss.image.y;

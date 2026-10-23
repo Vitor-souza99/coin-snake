@@ -1,4 +1,4 @@
-export type GameEvent = "gameStarted" | "gameEnded" | "coinCollected" | "portalEntered" | "bossDefeated" | "petUnlocked" | "skinPurchased" | "shrinkCollected" | "turboActivated" | "coinRushEnded";
+export type GameEvent = "gameStarted" | "gameEnded" | "coinCollected" | "portalEntered" | "bossDefeated" | "petUnlocked" | "skinPurchased" | "shrinkCollected" | "turboActivated";
 /** Local no-op analytics boundary; no personal data leaves the device. */
 export class AnalyticsService {
   private events: GameEvent[] = [];
