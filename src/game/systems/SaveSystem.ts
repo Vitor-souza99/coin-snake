@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 19,
+    saveVersion: 20,
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -57,7 +57,9 @@ export function defaults(): PlayerProfile {
     },
     missionDate: "",
     dailyMissionIds: [],
+    dailyMissionDate: "",
     missions: {},
+    pendingMissionRewards: [],
     unlockedPets: [],
     availablePets: [],
     selectedPet: null,
@@ -84,7 +86,7 @@ export function defaults(): PlayerProfile {
 export function validateSave(input: unknown): PlayerProfile {
   const p = defaults(),
     r = record(input);
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(r.saveVersion as number)) return p;
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(r.saveVersion as number)) return p;
   p.totalCoins = num(r.totalCoins);
   p.bossCoinBalance = num(r.bossCoinBalance);
   p.bestScore = num(r.bestScore);
@@ -163,7 +165,7 @@ export function validateSave(input: unknown): PlayerProfile {
   for (const key of Object.keys(p.statistics) as (keyof typeof p.statistics)[])
     p.statistics[key] = num(stats[key], p.statistics[key]);
   p.bestScore = Math.max(p.bestScore, p.statistics.highestScore);
-  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].includes(r.saveVersion as number);
+  const isV3 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(r.saveVersion as number);
   const validPetIds = new Set([...earnablePetIds, "lucky-leprechaun"]);
   const savedCloverProgress = Math.min(4, num(r.cloverGardenProgress));
   const cloverByOrigin = record(r.cloverGardenProgressByOrigin);
@@ -263,21 +265,43 @@ export function validateSave(input: unknown): PlayerProfile {
   const legacyFixedSet = ["collector", "scorer", "explorer"];
   p.dailyMissionIds = hasValidDailySelection
     ? uniqueSavedMissionIds
-    : r.saveVersion !== 8 && r.saveVersion !== 9
+    : ![8, 9, 19, 20].includes(r.saveVersion as number)
       ? legacyFixedSet
       : p.missionDate
         ? dailyMissions(p.missionDate).map((mission) => mission.id)
         : legacyFixedSet;
+  p.dailyMissionDate = typeof r.dailyMissionDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.dailyMissionDate)
+    ? r.dailyMissionDate
+    : p.missionDate;
+  const previousDailyMissionIds = p.dailyMissionIds;
+  if (p.dailyMissionDate && p.dailyMissionDate !== p.missionDate) {
+    p.dailyMissionDate = p.missionDate;
+    p.dailyMissionIds = dailyMissions(p.missionDate, previousDailyMissionIds, typeof r.dailyMissionDate === "string" ? r.dailyMissionDate : "").map((mission) => mission.id);
+  }
   const progress = record(r.missions);
   const selectedSet = new Set(p.dailyMissionIds);
   const legacySet = new Set(legacyFixedSet);
   for (const m of missions) {
     const entry = record(progress[m.id]);
-    const preserveLegacy = !hasValidDailySelection && r.saveVersion !== 8 && r.saveVersion !== 9 && legacySet.has(m.id);
+    const preserveLegacy = !hasValidDailySelection && ![8, 9, 19, 20].includes(r.saveVersion as number) && legacySet.has(m.id);
     p.missions[m.id] = {
-      progress: selectedSet.has(m.id) || preserveLegacy ? Math.min(m.target, num(entry.progress)) : 0,
-      claimed: (selectedSet.has(m.id) || preserveLegacy) && bool(entry.claimed, false) && num(entry.progress) >= m.target,
+      progress: selectedSet.has(m.id) || preserveLegacy || previousDailyMissionIds.includes(m.id) ? Math.min(m.target, num(entry.progress)) : 0,
+      claimed: (selectedSet.has(m.id) || preserveLegacy || previousDailyMissionIds.includes(m.id)) && bool(entry.claimed, false) && num(entry.progress) >= m.target,
     };
+  }
+  p.pendingMissionRewards = typeof r.saveVersion === "number" && r.saveVersion >= 20 && Array.isArray(r.pendingMissionRewards)
+    ? r.pendingMissionRewards.filter((token): token is string => {
+        if (typeof token !== "string") return false;
+        const separator = token.indexOf(":");
+        return separator > 0 && /^\d{4}-\d{2}-\d{2}$/.test(token.slice(0, separator)) && missions.some((mission) => mission.id === token.slice(separator + 1));
+      }).slice(0, missions.length * 100)
+    : [];
+  for (const id of p.dailyMissionIds) {
+    const entry = p.missions[id];
+    const mission = missions.find((candidate) => candidate.id === id);
+    if (!entry || !mission || entry.claimed || entry.progress < mission.target || !p.missionDate || p.completedMissions.includes(`${p.missionDate}:${id}`) || !hasValidDailySelection && ![8, 9, 19, 20].includes(r.saveVersion as number)) continue;
+    const token = `${p.missionDate}:${id}`;
+    if (!p.pendingMissionRewards.includes(token)) p.pendingMissionRewards.push(token);
   }
   p.desertRelicFound = bool(r.desertRelicFound, false);
   p.freezeUnlocked = bool(r.freezeUnlocked, false);
@@ -288,7 +312,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.availablePets = p.availablePets.filter((id) => id !== "tiny-dragon");
   p.unlockedPets = p.unlockedPets.filter((id) => id !== "tiny-dragon");
   if (p.selectedPet === "tiny-dragon") p.selectedPet = null;
-  p.saveVersion = 19;
+  p.saveVersion = 20;
   return p;
 }
 export interface SaveStorage {
@@ -310,7 +334,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>19){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>20){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

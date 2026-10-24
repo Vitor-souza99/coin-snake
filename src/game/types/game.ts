@@ -34,7 +34,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 19;
+  saveVersion: 20;
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;
@@ -52,7 +52,9 @@ export interface PlayerProfile {
   statistics: GameStatistics;
   missionDate: string;
   dailyMissionIds: string[];
+  dailyMissionDate: string;
   missions: Record<string, MissionProgress>;
+  pendingMissionRewards: string[];
   unlockedPets: string[];
   availablePets: string[];
   selectedPet: string | null;
@@ -90,7 +92,7 @@ export interface RunState {
   revived: boolean;
   creditedCoins: number;
   finished: boolean;
-  reported: { coins: number; powerups: number; golden: number; magnet: number };
+  reported: { coins: number; powerups: number; golden: number; magnet: number; turboUses: number; shrinkFruits: number; portalsUsed: number; bossDefeats: number };
   missionFinalized: boolean;
   bossEnergy: number;
   bossCoins: number;
@@ -120,7 +122,7 @@ export function newRun(): RunState {
     revived: false,
     creditedCoins: 0,
     finished: false,
-    reported: { coins: 0, powerups: 0, golden: 0, magnet: 0 },
+    reported: { coins: 0, powerups: 0, golden: 0, magnet: 0, turboUses: 0, shrinkFruits: 0, portalsUsed: 0, bossDefeats: 0 },
     missionFinalized: false,
     bossEnergy: 0,
     bossCoins: 0,

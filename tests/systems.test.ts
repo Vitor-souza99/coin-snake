@@ -10,6 +10,8 @@ import {
   addXP,
   creditBossCoins,
   claimShopReward,
+  claimPetShopReward,
+  PET_SHOP_REWARDED_BOSS_COINS,
   SHOP_REWARDED_COINS,
   creditCoins,
   coinCollectionXP,
@@ -18,6 +20,7 @@ import {
 } from "../src/game/systems/EconomySystem";
 import { ComboSystem } from "../src/game/systems/ComboSystem";
 import {
+  claimMission,
   ensureDay,
   reportRun,
   startMissionRun,
@@ -32,6 +35,7 @@ import { candyCoinSpawnAllowed, candyFinalSpeed, candyObstacleSafe, candyWorldCo
 import { oceanCurrentZones, currentForceAt, oceanMovement, isSafeOceanSpawn, pearlCoinSpawnAllowed, deepTrenchCoinChance, containKrakenArenaPoint, isOutsideKrakenArena, krakenAttackTarget, krakenHitZone, oceanWorldConfig, oceanRegions } from "../src/game/data/oceanWorld";
 import { containDesertArenaPoint, blockDesertArenaCrossing, circleIntersectsDesertWall, isDesertArenaPickupAccessible, desertGustAt, desertGusts, desertRouteGustAt, desertRegions, desertRouteAt, desertRareCoinSpots, inDesertOasis, scorpionStingHitZone, scorpionStingEffect, scorpionJumpHitZone, scorpionJumpEffect, scorpionPoisonStrikeEffect } from "../src/game/data/desertWorld";
 import { B, candyWorldCoinWeights } from "../src/game/data/balance";
+import { scorpionlingEnvironmentalResistance, scorpionlingSlowMultiplier, scorpionlingWindForce } from "../src/game/systems/ScorpionlingSystem";
 import { dailyMissions, missions } from "../src/game/data/missions";
 import { levelForXP, totalXPForLevel, xpForNextLevel, xpProgressForLevel } from "../src/game/systems/ExperienceSystem";
 import { newRun } from "../src/game/types/game";
@@ -147,6 +151,20 @@ describe("Spiderling coin assistance", () => {
     expect(pets.find((pet) => pet.id === "spiderling")?.description).toContain("atrai moedas comuns");
   });
 });
+describe("Scorpionling environmental resistance", () => {
+  it("reduces environmental wind and slows by 20% outside boss fights", () => {
+    expect(scorpionlingEnvironmentalResistance).toBe(0.2);
+    expect(scorpionlingWindForce({ x: 10, y: -5 }, true, false)).toEqual({ x: 8, y: -4 });
+    expect(scorpionlingSlowMultiplier(0.5, true, false)).toBeCloseTo(0.6);
+  });
+  it("does not change movement effects without the pet or during a boss encounter", () => {
+    const force = { x: 10, y: -5 };
+    expect(scorpionlingWindForce(force, true, true)).toEqual(force);
+    expect(scorpionlingSlowMultiplier(0.5, true, true)).toBe(0.5);
+    expect(scorpionlingWindForce(force, false, false)).toEqual(force);
+    expect(scorpionlingSlowMultiplier(0.5, false, false)).toBe(0.5);
+  });
+});
 import {
   distance,
   weighted,
@@ -198,6 +216,17 @@ describe("economy", () => {
     expect(claimShopReward(profile, "2026-10-08")).toBe(false);
     expect(profile.totalCoins).toBe(SHOP_REWARDED_COINS);
     expect(claimShopReward(profile, "2026-10-09")).toBe(true);
+  });
+  it("grants pet shop Boss Coins once daily and shares the claim limit with the skin shop", () => {
+    const profile = defaults();
+    expect(claimPetShopReward(profile, "2026-10-08")).toBe(true);
+    expect(profile.bossCoinBalance).toBe(PET_SHOP_REWARDED_BOSS_COINS);
+    expect(profile.totalCoins).toBe(0);
+    expect(claimShopReward(profile, "2026-10-08")).toBe(false);
+    expect(profile.bossCoinBalance).toBe(PET_SHOP_REWARDED_BOSS_COINS);
+    expect(claimPetShopReward(profile, "2026-10-08")).toBe(false);
+    expect(claimPetShopReward(profile, "2026-10-09")).toBe(true);
+    expect(profile.bossCoinBalance).toBe(PET_SHOP_REWARDED_BOSS_COINS * 2);
   });
   it("rejects insufficient funds and unknown skins", () => {
     const p = defaults();
@@ -691,6 +720,16 @@ describe("roadmap progression systems", () => {
     expect(desertSave.selectedWorld).toBe("desert");
     expect(validateSave({ saveVersion: 11, playerLevel: 14, bossesDefeated: ["kraken"], worldsUnlocked: ["ocean"] }).worldsUnlocked).not.toContain("desert");
   });
+  it("recovers a previously selected implemented world missing from the saved unlock list", () => {
+    const profile = defaults();
+    profile.playerLevel = 15;
+    profile.bossesDefeated.push("king-snake", "candy-monster", "kraken");
+    profile.selectedWorld = "desert";
+    profile.worldsUnlocked = ["green-valley", "candy-world", "ocean"];
+    reconcileWorldUnlocks(profile);
+    expect(profile.worldsUnlocked).toContain("desert");
+    expect(worldStatus(worldById("desert"), profile, profile.selectedWorld)).toBe("SELECTED");
+  });
   it("keeps the Abyss secret, unlocks it after Kraken, and persists its challenge reward", () => {
     const profile = defaults();
     profile.worldsUnlocked.push("ocean", "candy-world");
@@ -820,6 +859,21 @@ describe("roadmap progression systems", () => {
     expect(phoenix.loseLife()).toBe(true);
     expect(phoenix.reviveWithLife()).toBe(false);
   });
+  it("Boreal Pup shield absorbs two hits while timed turtle shields remain single-use", () => {
+    const powers = new PowerUpSystem();
+    powers.activate("shield", 0, undefined, 2);
+    expect(powers.absorb()).toBe(true);
+    expect(powers.shield).toBe(true);
+    powers.invincible = 0;
+    expect(powers.blocksAttack()).toBe(true);
+    expect(powers.shield).toBe(false);
+
+    powers.invincible = 0;
+    expect(powers.activateTimedShield(B.power.turtleShieldDuration)).toBe(true);
+    expect(powers.absorb()).toBe(true);
+    expect(powers.shield).toBe(false);
+    expect(pets.find((pet) => pet.id === "snow-pup")?.description).toMatch(/golpe extra/i);
+  });
   it("gives Tiny Dragon a bounded attack cadence and preserves every boss vulnerability rule", () => {
     expect(dragonAttackCooldown).toBe(5.5);
     expect(dragonAttackDuration).toBeLessThan(dragonAttackCooldown);
@@ -898,7 +952,7 @@ describe("roadmap progression systems", () => {
     expect(current.cloverGardenProgress).toBe(3);
     expect(current.cloverGardenBossesDefeated).toEqual(["candy-garden-guardian"]);
     expect(current.cloverGardenCollected).toEqual([0, 1, 2]);
-    expect(current.saveVersion).toBe(19);
+    expect(current.saveVersion).toBe(20);
   });
   it("preserves individual clovers collected in any order in v18 saves", () => {
     const current = validateSave({ saveVersion: 17, cloverGardenProgress: 2, cloverGardenCollected: [3, 1, 1, 7, -1], cloverGardenBossesDefeated: ["candy-garden-guardian"] });
@@ -910,7 +964,7 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(19);
+    expect(profile.saveVersion).toBe(20);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).not.toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -919,7 +973,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(19);
+    expect(profile.saveVersion).toBe(20);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -1120,7 +1174,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(19);
+    expect(migrated.saveVersion).toBe(20);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
   });
@@ -1157,21 +1211,34 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(19);
+    expect(migrated.saveVersion).toBe(20);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(19);
+    expect(profile.saveVersion).toBe(20);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
   });
+  it("preserves boss victories and unlocked worlds in version 19 saves", () => {
+    const profile = validateSave({
+      saveVersion: 19,
+      xp: 1150,
+      bossesDefeated: ["king-snake", "candy-monster", "kraken", "scorpion-king"],
+      worldsUnlocked: ["green-valley", "candy-world", "ocean", "desert"],
+      selectedWorld: "desert",
+    });
+    expect(profile.bossesDefeated).toEqual(["king-snake", "candy-monster", "kraken", "scorpion-king"]);
+    expect(profile.worldsUnlocked).toContain("candy-world");
+    expect(profile.worldsUnlocked).toContain("desert");
+    expect(profile.selectedWorld).toBe("desert");
+  });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(19);
+    expect(migrated.saveVersion).toBe(20);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -1213,6 +1280,19 @@ describe("missions", () => {
     expect(new Set(first.map((mission) => mission.difficulty)).size).toBe(3);
     expect(next.map((mission) => mission.id)).not.toEqual(first.map((mission) => mission.id));
     expect(first).toHaveLength(3);
+    expect(missions.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(first.map((mission) => mission.id)).size).toBe(3);
+  });
+  it("offers the new measurable mission categories in the daily rotation", () => {
+    for (let day = 1; day <= 90; day++) {
+      const date = `2026-11-${String(day).padStart(2, "0")}`;
+      const selected = dailyMissions(date);
+      expect(selected).toHaveLength(3);
+      expect(new Set(selected.map((mission) => mission.difficulty))).toEqual(new Set(["easy", "medium", "challenge"]));
+    }
+    for (const type of ["turbo", "shrink", "portals", "bosses"] as const) {
+      expect(missions.some((mission) => mission.type === type)).toBe(true);
+    }
   });
   it("migrates fixed-mission saves without losing their current progress", () => {
     const profile = validateSave({ saveVersion: 7, missionDate: "2026-10-08", missions: { collector: { progress: 70, claimed: false }, scorer: { progress: 800, claimed: false } } });
@@ -1229,7 +1309,7 @@ describe("missions", () => {
     expect(profile.totalCoins).toBe(0);
     expect(profile.xp).toBe(0);
   });
-  it("accumulates delta across revives and rewards once", () => {
+  it("accumulates delta across revives, completes without paying, and allows one manual claim", () => {
     const p = defaults(), r = newRun();
     ensureDay(p, "2026-10-08");
     p.dailyMissionIds = ["collector", "scorer", "explorer"];
@@ -1242,8 +1322,36 @@ describe("missions", () => {
     r.matchCoins = 110;
     expect(reportRun(p, r)).toEqual(["collector"]);
     expect(reportRun(p, r)).toEqual([]);
+    expect(p.totalCoins).toBe(0);
+    expect(p.xp).toBe(0);
+    expect(p.pendingMissionRewards).toContain("2026-10-08:collector");
+    expect(claimMission(p, "collector", "2026-10-08")).toBe(true);
+    expect(claimMission(p, "collector", "2026-10-08")).toBe(false);
     expect(p.totalCoins).toBe(100);
     expect(p.xp).toBe(75);
+  });
+  it("preserves completed unclaimed rewards when the daily missions rotate", () => {
+    const p = defaults(), run = newRun();
+    ensureDay(p, "2026-10-08");
+    p.dailyMissionIds = ["collector", "scorer", "explorer"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    startMissionRun(p, run, "2026-10-08");
+    run.matchCoins = 100;
+    expect(reportRun(p, run)).toContain("collector");
+    updateMissionDay(p, "2026-10-09");
+    expect(p.pendingMissionRewards).toContain("2026-10-08:collector");
+    expect(p.missions.collector).toBeUndefined();
+    expect(claimMission(p, "collector", "2026-10-08")).toBe(true);
+    expect(p.totalCoins).toBe(100);
+  });
+  it("recovers a completed current-day reward when loading an older save", () => {
+    const p = validateSave({
+      saveVersion: 19,
+      missionDate: "2026-10-08",
+      dailyMissionIds: ["collector", "explorer", "scorer"],
+      missions: { collector: { progress: 100, claimed: false } },
+    });
+    expect(p.pendingMissionRewards).toContain("2026-10-08:collector");
   });
   it("does not add scores across different runs", () => {
     const p = defaults(), a = newRun(), b = newRun();
@@ -1259,6 +1367,29 @@ describe("missions", () => {
     expect(p.missions.scorer.progress).toBe(1200);
     expect(p.totalCoins).toBe(0);
   });
+  it("tracks Turbo, shrink fruit, portal, and boss objectives without double-counting revives", () => {
+    const p = defaults(), run = newRun();
+    ensureDay(p, "2026-10-08");
+    p.dailyMissionIds = ["turbo-tap", "shrink-once", "first-portal"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    startMissionRun(p, run, "2026-10-08");
+    run.turboUses = 1;
+    run.shrinkFruits = 1;
+    run.portalsUsed = 1;
+    expect(reportRun(p, run)).toEqual(["turbo-tap", "shrink-once", "first-portal"]);
+    expect(reportRun(p, run)).toEqual([]);
+    expect(p.missions["turbo-tap"].progress).toBe(1);
+    expect(p.missions["shrink-once"].progress).toBe(1);
+    expect(p.missions["first-portal"].progress).toBe(1);
+
+    p.dailyMissionIds = ["boss-hunter", "scorer", "explorer"];
+    p.missions = Object.fromEntries(p.dailyMissionIds.map((id) => [id, { progress: 0, claimed: false }]));
+    const bossRun = newRun();
+    startMissionRun(p, bossRun, "2026-10-08");
+    bossRun.bossDefeats = 1;
+    expect(reportRun(p, bossRun)).toContain("boss-hunter");
+    expect(p.missions["boss-hunter"].progress).toBe(1);
+  });
   it("keeps a run tied to its start day and starts fresh on the next run", () => {
     const p = defaults();
     ensureDay(p, "2026-10-05");
@@ -1269,10 +1400,10 @@ describe("missions", () => {
     run.matchCoins = 60;
     reportRun(p, run);
     updateMissionDay(p, "2026-10-06");
-    expect(p.missions["daily-player"]).toEqual({ progress: 0, claimed: false });
+    expect(p.missions["daily-player"]).toBeUndefined();
     run.matchCoins = 100;
     expect(reportRun(p, run)).toEqual([]);
-    expect(p.missions["daily-player"].progress).toBe(0);
+    expect(p.missions["daily-player"]).toBeUndefined();
     const nextRun = newRun();
     startMissionRun(p, nextRun, "2026-10-06");
     expect(nextRun.missionDate).toBe("2026-10-06");
@@ -1298,6 +1429,8 @@ describe("missions", () => {
     const secondRun = newRun();
     startMissionRun(p, secondRun, "2026-10-08");
     expect(reportRun(p, secondRun, true)).toEqual(["daily-player"]);
+    expect(p.totalCoins).toBe(0);
+    expect(claimMission(p, "daily-player", "2026-10-08")).toBe(true);
     expect(p.totalCoins).toBe(100);
   });
 });

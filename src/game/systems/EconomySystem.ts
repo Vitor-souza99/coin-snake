@@ -96,10 +96,18 @@ export function pendingRunXP(p: PlayerProfile, run: RunState) {
 }
 
 export const SHOP_REWARDED_COINS = 250;
+export const PET_SHOP_REWARDED_BOSS_COINS = 5;
 
 export function claimShopReward(p: PlayerProfile, today = localDay()): boolean {
   if (p.rewardedShopDate === today) return false;
   p.rewardedShopDate = today;
   p.totalCoins += SHOP_REWARDED_COINS;
+  return true;
+}
+
+export function claimPetShopReward(p: PlayerProfile, today = localDay()): boolean {
+  if (p.rewardedShopDate === today) return false;
+  p.rewardedShopDate = today;
+  creditBossCoins(p, PET_SHOP_REWARDED_BOSS_COINS);
   return true;
 }

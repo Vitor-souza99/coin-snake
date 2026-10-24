@@ -21,6 +21,15 @@ export function worldRequirementText(world: WorldDefinition, state: WorldPlayerS
 export function reconcileWorldUnlocks(state: WorldPlayerState) {
   const newlyUnlocked: WorldDefinition[] = [];
   if (!state.worldsUnlocked.includes("green-valley")) state.worldsUnlocked.push("green-valley");
+  // Entering a world proves the player had access, even if an earlier build
+  // failed to persist the unlock list. Recover that access for the menu.
+  const selectedId = (state as WorldPlayerState & { selectedWorld?: string }).selectedWorld;
+  if (selectedId) {
+    const selected = worldById(selectedId);
+    if (selected.id !== "green-valley" && selected.isImplemented && selected.category !== "SECRET" && selected.unlockType !== "PREMIUM" && !state.worldsUnlocked.includes(selected.id)) {
+      state.worldsUnlocked.push(selected.id);
+    }
+  }
   for (const world of worlds) {
     if (world.category === "SECRET") {
       if (world.id === "silent-abyss" && state.bossesDefeated.includes("kraken") && state.worldsUnlocked.includes("ocean") && !state.worldsUnlocked.includes(world.id)) {

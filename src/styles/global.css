@@ -661,6 +661,15 @@ canvas {
   background: linear-gradient(145deg, #f1f5e6, #e5edda);
   font-size: 42px;
 }
+.pet-card .boreal-pet-art { width: 66px; height: 62px; }
+.collection-pet-art { display: inline-grid; width: 48px; height: 42px; margin-right: 8px; vertical-align: middle; }
+.collection-pet-art .boreal-pet-art { width: 48px; height: 42px; }
+.pet-card .tidal-turtle-pet-art { width: 66px; height: 62px; }
+.collection-pet-art .tidal-turtle-pet-art { width: 48px; height: 42px; }
+.pet-card .phoenix-pet-art { width: 66px; height: 62px; }
+.collection-pet-art .phoenix-pet-art { width: 48px; height: 42px; }
+.pet-card .celestial-serpent-pet-art { width: 66px; height: 62px; }
+.collection-pet-art .celestial-serpent-pet-art { width: 48px; height: 42px; }
 .pet-state { display: inline-flex; align-items: center; min-height: 26px; padding: 5px 9px; border-radius: 99px; background: #edf0e8; color: #526354; font-size: 10px; font-weight: 900; letter-spacing: .45px; }
 .pet-owned .pet-state { background: #e1f0db; color: #28633d; }
 .pet-equipped { border-color: #8cbd69; box-shadow: 0 0 0 2px #8cbd6928; }

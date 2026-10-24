@@ -90,7 +90,7 @@ describe("v1 migration", () => {
       missions: { collector: { progress: 70, claimed: false } },
     };
     const p = validateSave(old);
-    expect(p.saveVersion).toBe(19);
+    expect(p.saveVersion).toBe(20);
     expect(p.totalCoins).toBe(812);
     expect(p.selectedSkin).toBe("cat");
     expect(p.xp).toBe(900);

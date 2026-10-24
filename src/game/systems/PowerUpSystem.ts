@@ -11,6 +11,7 @@ export class PowerUpSystem {
   private ghostRemaining = 0;
   shield = false;
   shieldRemaining = 0;
+  private shieldHitsRemaining = 0;
   invincible = 0;
   freezeRemaining = 0;
   freezeCooldown = 0;
@@ -36,10 +37,11 @@ export class PowerUpSystem {
     this.lives--;
     return true;
   }
-  activate(kind: PowerKind, durationBonus = 0, durationOverride?: number) {
+  activate(kind: PowerKind, durationBonus = 0, durationOverride?: number, shieldHits = 1) {
     if (kind === "shield") {
       this.shield = true;
       this.shieldRemaining = 0;
+      this.shieldHitsRemaining = Math.max(1, Math.floor(shieldHits));
     } else if (kind === "magnet") this.magnet = durationOverride ?? B.power.magnetDuration * (1 + durationBonus);
     else if (kind === "turbo") this.turbo = B.power.turboDuration * (1 + durationBonus);
     else if (kind === "precision") this.precision = B.power.precisionDuration * (1 + durationBonus);
@@ -55,6 +57,7 @@ export class PowerUpSystem {
     if (this.shield || duration <= 0) return false;
     this.shield = true;
     this.shieldRemaining = duration;
+    this.shieldHitsRemaining = 1;
     return true;
   }
   activateFreeze(duration = 5, cooldown = 20): boolean {
@@ -107,20 +110,22 @@ export class PowerUpSystem {
   blocksAttack(): boolean {
     if (this.ghostActive) return true;
     if (this.invincible > 0) return true;
-    if (!this.shield) return false;
-    this.shield = false;
-    this.shieldRemaining = 0;
-    this.invincible = B.power.shieldGrace;
-    return true;
+    return this.consumeShieldHit();
   }
   applyPoison(duration = B.hazard.poisonDuration) {
     this.slowed = Math.max(this.slowed, duration);
   }
   absorb(): boolean {
     if (this.invincible > 0) return true;
+    return this.consumeShieldHit();
+  }
+  private consumeShieldHit(): boolean {
     if (!this.shield) return false;
-    this.shield = false;
-    this.shieldRemaining = 0;
+    this.shieldHitsRemaining = Math.max(0, this.shieldHitsRemaining - 1);
+    if (this.shieldHitsRemaining === 0) {
+      this.shield = false;
+      this.shieldRemaining = 0;
+    }
     this.invincible = B.power.shieldGrace;
     return true;
   }

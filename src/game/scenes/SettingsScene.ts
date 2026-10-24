@@ -72,25 +72,25 @@ export class SettingsScene extends Phaser.Scene {
       s.musicVolume = Number((event.target as HTMLInputElement).value);
       audio.sync();
       void save.save();
-     ui.on("#tutorial", () => {
-       const confirmation = ui.modal(
-         t("tutorialConfirmTitle"),
-         t("tutorialConfirmBody"),
-         [
-           {
-             label: t("tutorialConfirm"),
-             run: () => {
-               confirmation.destroy();
-               save.profile.hints = { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false, desertGust: false };
-               void save.save();
-               ui.toast(t("tutorialResetNotice"));
-             },
-           },
-           { label: t("cancel"), run: () => confirmation.destroy() },
-         ],
-         { initialFocus: 1 },
-       );
-     });
+    });
+    ui.on("#tutorial", () => {
+      const confirmation = ui.modal(
+        t("tutorialConfirmTitle"),
+        t("tutorialConfirmBody"),
+        [
+          {
+            label: t("tutorialConfirm"),
+            run: () => {
+              confirmation.destroy();
+              save.profile.hints = { joystick: false, turbo: false, shrink: false, ocean: false, oceanCurrent: false, pearl: false, deepTrench: false, desertGust: false };
+              void save.save();
+              ui.toast(t("tutorialResetNotice"));
+            },
+          },
+          { label: t("cancel"), run: () => confirmation.destroy() },
+        ],
+        { initialFocus: 1 },
+      );
     });
     ui.on("#classic-snake", () => this.scene.start("ClassicSnake"));
     ui.on("#collection", () => this.scene.start("Collection"));

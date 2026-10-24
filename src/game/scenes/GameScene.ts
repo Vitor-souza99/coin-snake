@@ -42,6 +42,7 @@ import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawn
 import { oceanWorldConfig as OW, oceanRegions, oceanCurrentZones, currentForceAt, isSafeOceanSpawn, isOutsideKrakenArena, pearlCoinSpawnAllowed, containKrakenArenaPoint, krakenAttackTarget, krakenHitZone, type CurrentZone, type CoralObstacle } from "../data/oceanWorld";
 import { applyWorldOrientation } from "../services/OrientationService";
 import { missionsForProfile } from "../data/missions";
+import { scorpionlingSlowMultiplier, scorpionlingWindForce } from "../systems/ScorpionlingSystem";
 import { desertWorldConfig as DW, desertRegions, desertGusts, desertRouteGustAt, desertRouteAt, desertRareCoinSpots, inDesertOasis, containDesertArenaPoint, blockDesertArenaCrossing, circleIntersectsDesertWall, isDesertArenaPickupAccessible, scorpionStingHitZone, scorpionStingEffect, scorpionJumpHitZone, scorpionJumpEffect, scorpionPoisonStrikeEffect, type SandGust } from "../data/desertWorld";
 export class GameScene extends Phaser.Scene {
   snake!: Snake;
@@ -124,6 +125,7 @@ export class GameScene extends Phaser.Scene {
   private bossEnergyHud?: HTMLElement;
   private auraStatusHud?: HTMLElement;
   private petSprite?: Phaser.GameObjects.Container;
+  private celestialSerpentBody: Point[] = [];
   private gameDifficulty: GameDifficulty = "normal";
   private bossDefinition?: BossDefinition;
   private portalSystem = new PortalSystem();
@@ -148,6 +150,7 @@ export class GameScene extends Phaser.Scene {
   private pearlTimer: number = OW.pearlCooldown;
   private currentZoneId?: string;
   private deepTrenchActive = false;
+  private abyssPortalNeedsExit = false;
   private clam?: { x: number; y: number; state: "CLOSED" | "OPENING" | "OPEN" | "EMPTY"; image: Phaser.GameObjects.Container; timer: number; coin?: Coin };
   private krakenBarrier?: Phaser.GameObjects.Container;
   private krakenBarrierGate?: Phaser.GameObjects.Graphics;
@@ -183,6 +186,7 @@ export class GameScene extends Phaser.Scene {
   private phoenixRevived = false;
   private phoenixReviving = false;
   private phoenixAuras: Phaser.GameObjects.Arc[] = [];
+  private phoenixWings: Phaser.GameObjects.Container | undefined;
   private petRewardCount = 0;
   private cloverGardenBoss?: Phaser.GameObjects.Container;
   private cloverGardenHazard?: Phaser.GameObjects.Container;
@@ -279,6 +283,7 @@ export class GameScene extends Phaser.Scene {
     this.bossDefinition = undefined;
     this.petSprite?.destroy();
     this.petSprite = undefined;
+    this.celestialSerpentBody = [];
     this.snake = new Snake();
     this.selectedCosmetic = getSkin(save.profile.selectedSkin) ?? getSkin("classic")!;
     const labyrinthStart = this.currentWorld === "desert-labyrinth" ? this.desertLabyrinthEntry() : undefined;
@@ -299,6 +304,8 @@ export class GameScene extends Phaser.Scene {
     this.turtleShieldCooldown = B.power.turtleShieldInterval;
     this.phoenixRevived = false;
     this.phoenixReviving = false;
+    this.phoenixWings?.destroy();
+    this.phoenixWings = undefined;
     this.coins = [];
     this.obstacles = [];
     this.abyssMovingObstacles = [];
@@ -414,17 +421,91 @@ export class GameScene extends Phaser.Scene {
     );
     if (save.profile.selectedPet) {
       const petGraphic = this.add.graphics();
-      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xaaa59b : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0xb875ed : save.profile.selectedPet === "scorpionling" ? 0xf5a642 : save.profile.selectedPet === "baby-octopus" ? 0x9f7aea : 0xe783d0;
-      if (save.profile.selectedPet === "phoenix") {
-        petGraphic.fillStyle(0xffcf55).fillEllipse(0, 4, 18, 13).fillStyle(0xff7138).fillTriangle(-3, 0, -18, -10, -11, 8).fillTriangle(4, 0, 18, -10, 12, 8)
-          .fillStyle(0xff9e32).fillTriangle(-4, 7, -17, 18, -2, 14).fillTriangle(4, 7, 17, 18, 2, 14)
-          .fillStyle(0xffe8a0).fillTriangle(-4, -3, -2, -14, 2, -4).fillTriangle(1, -4, 7, -12, 5, -1)
-          .fillStyle(0x203044).fillCircle(4, 1, 1.5).fillStyle(0xffdf65).fillTriangle(7, 3, 13, 5, 7, 7);
+      const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xaaa59b : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0x42c978 : save.profile.selectedPet === "scorpionling" ? 0xf5a642 : save.profile.selectedPet === "baby-octopus" ? 0x9f7aea : 0xe783d0;
+      if (save.profile.selectedPet === "snow-pup") {
+        // A small aurora spirit: rounded icy body, luminous crest, and frost sparkles.
+        petGraphic.fillStyle(0x78e8e1, 0.2).fillCircle(0, 0, 20);
+        petGraphic.fillStyle(0x5487d9, 1).fillEllipse(0, 3, 25, 22)
+          .fillStyle(0x9be9f0, 1).fillEllipse(0, 0, 21, 20)
+          .fillStyle(0xe2fcff, 1).fillEllipse(-2, 5, 12, 10)
+          .fillStyle(0x7edfcf, 1).fillTriangle(-8, -7, -5, -19, 0, -6)
+          .fillStyle(0x85c9ff, 1).fillTriangle(-1, -7, 7, -20, 8, -5)
+          .fillStyle(0xc296ff, 1).fillTriangle(4, -7, 15, -13, 10, -2)
+          .fillStyle(0x263d69, 1).fillCircle(-5, -1, 1.7).fillCircle(5, -1, 1.7)
+          .fillStyle(0xffffff, 1).fillCircle(-5.4, -1.5, 0.55).fillCircle(4.6, -1.5, 0.55)
+          .fillStyle(0x5279b7, 1).fillCircle(0, 4, 1.5)
+          .lineStyle(1.4, 0xecffff, 0.95).strokeEllipse(0, 1, 27, 25)
+          .fillStyle(0xffffff, 0.95).fillCircle(-16, -8, 1.5).fillCircle(16, -5, 1.2).fillCircle(11, 13, 1);
+      } else if (save.profile.selectedPet === "tidal-turtle") {
+        // Recognizable sea turtle: segmented domed shell, forward head, and four flippers.
+        petGraphic.fillStyle(0x42c8bd, 0.16).fillEllipse(0, 1, 38, 34);
+        petGraphic.fillStyle(0x2b8f83, 1).fillTriangle(-7, -3, -20, -12, -13, 3)
+          .fillTriangle(8, -3, 21, -12, 14, 4)
+          .fillTriangle(-7, 7, -17, 18, -3, 13)
+          .fillTriangle(7, 7, 17, 18, 3, 13);
+        petGraphic.lineStyle(1.5, 0x174f5a, 1).beginPath().moveTo(-7, -3).lineTo(-20, -12).lineTo(-13, 3)
+          .moveTo(8, -3).lineTo(21, -12).lineTo(14, 4).moveTo(-7, 7).lineTo(-17, 18).lineTo(-3, 13)
+          .moveTo(7, 7).lineTo(17, 18).lineTo(3, 13).strokePath();
+        petGraphic.fillStyle(0x155d69, 1).fillEllipse(0, 1, 25, 24)
+          .fillStyle(0x36a99a, 1).fillEllipse(0, 0, 21, 20)
+          .fillStyle(0x78d9bd, 1).fillEllipse(0, -2, 15, 13)
+          .lineStyle(1.4, 0xd0ffe7, 0.9).strokeEllipse(0, 0, 23, 22);
+        petGraphic.lineStyle(1.2, 0x176c70, 1).beginPath().moveTo(0, -10).lineTo(0, 10)
+          .moveTo(-8, -6).lineTo(8, -6).moveTo(-10, 1).lineTo(10, 1).moveTo(-7, 8).lineTo(7, 8).strokePath();
+        petGraphic.fillStyle(0x67cfb4, 1).fillEllipse(0, -11, 14, 13)
+          .fillStyle(0x173e54, 1).fillCircle(-3, -13, 1.5).fillCircle(3, -13, 1.5)
+          .fillStyle(0xffffff, 1).fillCircle(-3.4, -13.5, 0.5).fillCircle(2.6, -13.5, 0.5)
+          .lineStyle(1, 0x287b7d, 1).lineBetween(-2, -8, 2, -8);
+      } else if (save.profile.selectedPet === "celestial-serpent") {
+        // The head is separate; animated body segments follow behind it below.
+        petGraphic.fillStyle(0x38bc71, 1).fillEllipse(7, -2, 18, 14)
+          .fillStyle(0x91e777, 1).fillEllipse(7, -4, 14, 10)
+          .fillStyle(0x4acb78, 1).fillTriangle(1, -7, 1, -14, 7, -7)
+          .fillStyle(0x38bc71, 1).fillTriangle(8, -7, 13, -13, 13, -4)
+          .fillStyle(0x173e38, 1).fillCircle(10, -4, 1.4)
+          .fillStyle(0xffffff, 1).fillCircle(10.4, -4.5, 0.45)
+          .fillStyle(0xf3d66f, 1).fillTriangle(13, -2, 20, 0, 13, 2)
+          .fillStyle(0xfff1a3, 1).fillCircle(4, -9, 1.1);
+      } else if (save.profile.selectedPet === "phoenix") {
+        petGraphic.fillStyle(0xff6b35).fillTriangle(-3, 9, -13, 22, 1, 16).fillTriangle(3, 9, 14, 22, -1, 16)
+          .fillTriangle(-1, 8, -4, 25, 2, 18).fillTriangle(1, 8, 5, 25, -2, 18)
+          .fillStyle(0xffcf55).fillEllipse(0, 2, 16, 20)
+          .fillStyle(0xff9e32).fillEllipse(0, 6, 10, 12)
+          .fillStyle(0xffe8a0).fillTriangle(-3, -5, -2, -15, 1, -5).fillTriangle(0, -5, 7, -12, 4, -3)
+          .fillStyle(0x203044).fillCircle(3, -1, 1.5)
+          .fillStyle(0xd94b32).fillTriangle(4, 1, 11, 3, 5, 5)
+          .fillStyle(0xffdf65).fillTriangle(5, 1, 10, 3, 5, 4)
+          .lineStyle(0.8, 0x9e382f, 1).lineBetween(5, 3, 9, 3)
+          .fillStyle(0x9e382f).fillCircle(4.5, 1.5, 0.55);
+        const leftWing = this.add.graphics().setPosition(-5, 0);
+        leftWing.fillStyle(0xb93836).fillTriangle(0, 0, -19, -12, -13, 5)
+          .fillStyle(0xff6a32).fillTriangle(-2, 1, -22, -5, -12, 8)
+          .fillStyle(0xffbd42).fillTriangle(-2, 2, -17, 3, -9, 11)
+          .lineStyle(1, 0xffe89a, 0.9).lineBetween(-4, 1, -18, -9).lineBetween(-5, 4, -18, 0);
+        const rightWing = this.add.graphics().setPosition(5, 0);
+        rightWing.fillStyle(0xb93836).fillTriangle(0, 0, 19, -12, 13, 5)
+          .fillStyle(0xff6a32).fillTriangle(2, 1, 22, -5, 12, 8)
+          .fillStyle(0xffbd42).fillTriangle(2, 2, 17, 3, 9, 11)
+          .lineStyle(1, 0xffe89a, 0.9).lineBetween(4, 1, 18, -9).lineBetween(5, 4, 18, 0);
+        this.phoenixWings = this.add.container(0, -1, [leftWing, rightWing]);
+      } else if (save.profile.selectedPet === "bee") {
+        // A tiny, clearly striped bee with translucent wings, antennae, and a stinger.
+        petGraphic.fillStyle(0xdff8ff, 0.82).fillEllipse(-6, -12, 12, 18).fillEllipse(6, -12, 12, 18);
+        petGraphic.lineStyle(1.5, 0xffffff, 0.95).strokeEllipse(-6, -12, 12, 18).strokeEllipse(6, -12, 12, 18);
+        petGraphic.fillStyle(0xffd92e, 1).fillEllipse(0, 1, 24, 19);
+        petGraphic.fillStyle(0x171717, 1).fillEllipse(-5, 1, 4, 17).fillEllipse(2, 1, 4, 18).fillEllipse(8, 1, 3, 15);
+        petGraphic.fillStyle(0xffe24a, 1).fillCircle(0, -8, 7);
+        petGraphic.lineStyle(1.7, 0x171717, 1).beginPath().moveTo(-3, -13).lineTo(-6, -18).lineTo(-8, -18)
+          .moveTo(3, -13).lineTo(6, -18).lineTo(8, -18).strokePath();
+        petGraphic.fillStyle(0x171717, 1).fillCircle(-2.5, -9, 1.15).fillCircle(2.5, -9, 1.15);
+        petGraphic.fillStyle(0xffffff, 1).fillCircle(-2.8, -9.4, 0.38).fillCircle(2.2, -9.4, 0.38);
+        petGraphic.fillStyle(0x171717, 1).fillTriangle(11, 1, 17, 3, 11, 5);
+        petGraphic.lineStyle(1.5, 0x171717, 1).lineBetween(-5, 8, -7, 11).lineBetween(1, 9, 1, 12).lineBetween(7, 7, 9, 10);
       } else if (save.profile.selectedPet !== "scorpionling" && save.profile.selectedPet !== "tiny-dragon") {
         petGraphic.fillStyle(petColor).fillCircle(0, 0, 12);
         petGraphic.lineStyle(2, 0xffffff).strokeCircle(0, 0, 12);
       }
-      if (["bee", "firefly"].includes(save.profile.selectedPet ?? "")) petGraphic.lineStyle(2, 0xffffff).lineBetween(-17, -8, -9, -3).lineBetween(9, -3, 17, -8);
+      if (save.profile.selectedPet === "firefly") petGraphic.lineStyle(2, 0xffffff).lineBetween(-17, -8, -9, -3).lineBetween(9, -3, 17, -8);
       if (save.profile.selectedPet === "scorpionling") {
         // Miniature of the Scorpion King's silhouette: broad armored shell,
         // forward claws, six side legs, and a large curled tail overhead.
@@ -476,7 +557,25 @@ export class GameScene extends Phaser.Scene {
           .fillStyle(0xf18735).fillTriangle(21, 5, 28, 6, 21, 8)
           .lineStyle(1.5, 0x625e58, 0.85).lineBetween(-6, 8, 5, 8).lineBetween(-3, 10, 6, 10);
       }
-      this.petSprite = this.add.container(this.snake.x, this.snake.y + 28, [petGraphic]).setDepth(25).setScale(save.profile.selectedPet === "phoenix" ? 1.35 : 1);
+      const serpentSegments: Phaser.GameObjects.Graphics[] = [];
+      if (save.profile.selectedPet === "celestial-serpent") {
+        this.celestialSerpentBody = Array.from({ length: 6 }, () => ({ x: this.snake.x + 42, y: this.snake.y + 28 }));
+        for (let index = 0; index < this.celestialSerpentBody.length - 1; index++) {
+          const segment = this.add.graphics();
+          const width = 15;
+          const height = 13;
+          const green = index % 2 === 0 ? 0x38bc71 : 0x4acb78;
+          segment.fillStyle(0x173e38, 1).fillEllipse(0, 0, width + 3, height + 2.8)
+            .fillStyle(green, 1).fillEllipse(0, -0.2, width, height)
+            .fillStyle(0x91e777, 0.96).fillEllipse(-1.3, -1.8, width * 0.62, height * 0.48)
+            .fillStyle(0xd4ee9a, 1).fillEllipse(0, height * 0.2, width * 0.74, height * 0.42)
+            .lineStyle(1, 0x24754a, 0.9).strokeEllipse(0, 0, width * 0.88, height * 0.88);
+          serpentSegments.push(segment);
+        }
+      }
+      this.petSprite = this.add.container(this.snake.x, this.snake.y + 28, [
+        ...(this.phoenixWings ? [this.phoenixWings] : []), ...serpentSegments, petGraphic,
+      ]).setDepth(25).setScale(save.profile.selectedPet === "phoenix" ? 1.35 : 1);
       if (save.profile.selectedPet === "tiny-dragon") this.dragonFlame = this.add.graphics().setDepth(26);
     }
     this.ui.on("#pause", () => this.requestPause());
@@ -1820,16 +1919,20 @@ export class GameScene extends Phaser.Scene {
       audio.setTurbo(this.turbo.active);
       if (this.turbo.active) haptic("power");
     }
-    const playerSpeed = d.speed * this.worldSpeedMultiplier * (this.powers.slowed > 0 ? B.hazard.slowMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionSpeed : 1) *
+    const scorpionlingActive = save.profile.selectedPet === "scorpionling";
+    const outsideBossEncounter = !this.boss;
+    const environmentalSlow = (this.powers.slowed > 0 ? B.hazard.slowMultiplier : 1) * (this.candyAttackSlow > 0 && this.currentWorld === "candy-world" ? 0.72 : 1);
+    const playerSpeed = d.speed * this.worldSpeedMultiplier * scorpionlingSlowMultiplier(environmentalSlow, scorpionlingActive, outsideBossEncounter) * (this.powers.precision > 0 ? B.power.precisionSpeed : 1) *
       (this.currentWorld === "candy-world"
-        ? candyFinalSpeed(1, this.turbo.active ? B.power.turboSpeed : 1, this.stickySpeed) * (inCandyRiver(this.snake, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom) ? CW.river.slowMultiplier : 1)
-        : this.currentWorld === "spider-lair" ? (this.turbo.active ? B.power.turboSpeed : 1) * this.spiderWebSlow
-        : this.currentWorld === "desert" ? (this.turbo.active ? B.power.turboSpeed : 1) * (inDesertOasis(this.snake, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) ? DW.oasisSlowMultiplier : 1)
+        ? candyFinalSpeed(1, this.turbo.active ? B.power.turboSpeed : 1, scorpionlingSlowMultiplier(this.stickySpeed * (inCandyRiver(this.snake, B.arena.left, B.arena.top, B.arena.right, B.arena.bottom) ? CW.river.slowMultiplier : 1), scorpionlingActive, outsideBossEncounter))
+        : this.currentWorld === "spider-lair" ? (this.turbo.active ? B.power.turboSpeed : 1) * scorpionlingSlowMultiplier(this.spiderWebSlow, scorpionlingActive, outsideBossEncounter)
+        : this.currentWorld === "desert" ? (this.turbo.active ? B.power.turboSpeed : 1) * scorpionlingSlowMultiplier(inDesertOasis(this.snake, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) ? DW.oasisSlowMultiplier : 1, scorpionlingActive, outsideBossEncounter)
         : this.turbo.active ? B.power.turboSpeed : 1);
     const steeringTarget = this.steering.update(target, dt);
     const previousSnakePosition = { x: this.snake.x, y: this.snake.y };
     if (this.currentWorld === "ocean" || this.currentWorld === "silent-abyss" || this.currentWorld === "desert") {
-      const force = this.currentWorld === "desert" ? desertRouteGustAt(this.snake, this.run.elapsed, this.desertGustZones, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) : currentForceAt(this.snake, this.oceanCurrents);
+      const environmentalForce = this.currentWorld === "desert" ? desertRouteGustAt(this.snake, this.run.elapsed, this.desertGustZones, desertRegions(B.arena.left, B.arena.top, B.arena.right, B.arena.bottom)) : currentForceAt(this.snake, this.oceanCurrents);
+      const force = scorpionlingWindForce(environmentalForce, scorpionlingActive, !outsideBossEncounter);
       const speedCap = this.currentWorld === "desert" ? DW.maxEffectiveSpeed : OW.maxEffectiveSpeed;
       this.snake.moveVector(dt, steeringTarget, playerSpeed, force, controls.turnSpeed * (this.turbo.active ? controls.turboTurnMultiplier : 1) * (this.powers.precision > 0 ? B.power.precisionTurn : 1), speedCap);
     } else {
@@ -1913,12 +2016,17 @@ export class GameScene extends Phaser.Scene {
       if(!this.candyCoinSpawned&&this.candyCoinTimer<=0&&candyCoinSpawnAllowed(this.currentWorld,Math.random(),CW.candyCoin.chance)){const slot=this.coins.find(c=>!c.active),p=this.validPoint(B.spawn.bodyClearance,110);if(slot&&p){slot.spawnCandy(p.x,p.y);this.candyCoinSpawned=true;}}
     }
     this.updateOcean(dt);
+    if (this.abyssPortalNeedsExit && this.abyssPortal && distance(this.snake, this.abyssPortal) >= 110) {
+      this.abyssPortalNeedsExit = false;
+    }
     const passage = this.currentWorld === "spider-lair" ? undefined : this.worldPassages.find((item) => item.visible && distance(this.snake, item) < 68);
     if (passage && !this.worldTransitioning && this.passageCooldown <= 0) {
       const arena = B.arena;
-      const sourceSide = passage.x <= (arena.left + arena.right) / 2 ? "left" : "right";
-      const direction = sourceSide === "left" ? Math.PI : 0;
-      this.enterWorld(passage.getData("destination") as string, sourceSide, passage.y, direction);
+      const destination = passage.getData("destination") as string;
+      const abyssReturn = this.currentWorld === "silent-abyss" && destination === "ocean";
+      const sourceSide = abyssReturn ? "abyss" : passage.x <= (arena.left + arena.right) / 2 ? "left" : "right";
+      const direction = abyssReturn ? -Math.PI / 2 : sourceSide === "left" ? Math.PI : 0;
+      this.enterWorld(destination, sourceSide, passage.y, direction);
       return;
     }
     if (!this.boss && this.currentWorld === "green-valley" && this.secretSpiderPassage?.visible && distance(this.snake, this.secretSpiderPassage) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
@@ -2006,7 +2114,7 @@ export class GameScene extends Phaser.Scene {
       this.scene.restart({ startWorld: "candy-world", cloverReturn: true, cloverOrigin: "candy-world", bossEnergy: this.run.bossEnergy });
       return;
     }
-    if (!this.boss && this.currentWorld === "ocean" && this.abyssPortal?.visible && distance(this.snake, this.abyssPortal) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
+    if (!this.boss && this.currentWorld === "ocean" && this.abyssPortal?.visible && !this.abyssPortalNeedsExit && distance(this.snake, this.abyssPortal) < 78 && !this.worldTransitioning && this.passageCooldown <= 0) {
       this.enterWorld("silent-abyss", "left", this.abyssPortal.y, Math.PI);
       return;
     }
@@ -2179,7 +2287,8 @@ export class GameScene extends Phaser.Scene {
           const pet = save.profile.selectedPet;
           const bonus = kind.id === "turbo" && pet === "tiny-dragon" ? 0.05 : 0;
           const fixedDuration = kind.id === "magnet" && pet === "baby-octopus" ? B.power.octopusMagnetDuration : kind.id === "ghost" && pet === "tidal-turtle" ? B.power.turtleGhostDuration : undefined;
-          this.powers.activate(kind.id, bonus, fixedDuration);
+          const shieldHits = kind.id === "shield" && save.profile.selectedPet === "snow-pup" ? 2 : 1;
+          this.powers.activate(kind.id, bonus, fixedDuration, shieldHits);
           const powerMessage = kind.id === "precision" ? "FREIO PRECISO!" : kind.id === "lucky-star" ? "ESTRELA DA SORTE!" : kind.id === "ghost" ? "FANTASMA!" : kind.name;
           this.feedback(this.power.x, this.power.y, powerMessage, kind.color);
         }
@@ -2338,8 +2447,19 @@ export class GameScene extends Phaser.Scene {
       const interceptedSpiderling = this.scorpionlingAttack?.phase === "outbound"
         ? this.spiderlings.find((spiderling) => spiderling.image === this.scorpionlingAttack?.target)
         : undefined;
-      const targetX = this.dragonAttack ? this.petSprite.x : interceptedSpiderling?.x ?? nearbyCoin?.x ?? tail.x + Math.cos(phase) * 13;
-      const targetY = this.dragonAttack ? this.petSprite.y : interceptedSpiderling?.y ?? nearbyCoin?.y ?? tail.y + 26 + Math.sin(phase) * 5;
+      const serpentSide = this.snake.angle + Math.PI / 2;
+      const serpentOffset = 58;
+      const followIndex = Math.min(this.snake.length - 1, 2);
+      const serpentAnchor = this.snake.body[followIndex];
+      const serpentWave = save.profile.settings.reducedMotion ? 0 : Math.sin(phase * 1.8) * 7;
+      const defaultPetX = save.profile.selectedPet === "celestial-serpent"
+        ? serpentAnchor.x + Math.cos(serpentSide) * (serpentOffset + serpentWave)
+        : tail.x + Math.cos(phase) * 13;
+      const defaultPetY = save.profile.selectedPet === "celestial-serpent"
+        ? serpentAnchor.y + Math.sin(serpentSide) * (serpentOffset + serpentWave)
+        : tail.y + 26 + Math.sin(phase) * 5;
+      const targetX = this.dragonAttack ? this.petSprite.x : interceptedSpiderling?.x ?? nearbyCoin?.x ?? defaultPetX;
+      const targetY = this.dragonAttack ? this.petSprite.y : interceptedSpiderling?.y ?? nearbyCoin?.y ?? defaultPetY;
       const follow = Math.min(1, (this.game.loop.delta / 1000) * 5);
       if (!this.phoenixReviving && !this.scorpionlingAttack && !this.dragonAttack) {
         this.petSprite.setPosition(
@@ -2347,7 +2467,59 @@ export class GameScene extends Phaser.Scene {
           Phaser.Math.Linear(this.petSprite.y, targetY, follow),
         );
       }
+      if (save.profile.selectedPet === "celestial-serpent") {
+        const segments = this.petSprite.list.filter(
+          (item): item is Phaser.GameObjects.Graphics => item instanceof Phaser.GameObjects.Graphics,
+        ).slice(0, this.celestialSerpentBody.length - 1);
+        const headX = this.petSprite.x;
+        const headY = this.petSprite.y;
+        const first = this.celestialSerpentBody[0];
+        if (first) {
+          first.x += (headX - first.x) * Math.min(1, (this.game.loop.delta / 1000) * 12);
+          first.y += (headY - first.y) * Math.min(1, (this.game.loop.delta / 1000) * 12);
+        }
+        for (let index = 1; index < this.celestialSerpentBody.length; index++) {
+          const previous = this.celestialSerpentBody[index - 1];
+          const current = this.celestialSerpentBody[index];
+          const dx = current.x - previous.x;
+          const dy = current.y - previous.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const spacing = 8.5;
+          current.x = previous.x + dx / length * spacing;
+          current.y = previous.y + dy / length * spacing;
+        }
+        const headAngle = Math.atan2(
+          this.celestialSerpentBody[1].y - headY || Math.sin(this.snake.angle),
+          this.celestialSerpentBody[1].x - headX || Math.cos(this.snake.angle),
+        );
+        segments.forEach((segment, index) => {
+          const point = this.celestialSerpentBody[index + 1];
+          const next = this.celestialSerpentBody[index];
+          if (!point || !next) return;
+          const direction = Math.atan2(next.y - point.y, next.x - point.x);
+          const dx = point.x - headX;
+          const dy = point.y - headY;
+          segment.setPosition(
+            dx * Math.cos(headAngle) + dy * Math.sin(headAngle),
+            -dx * Math.sin(headAngle) + dy * Math.cos(headAngle),
+          );
+          segment.setRotation(direction - headAngle);
+        });
+        this.petSprite.setRotation(headAngle);
+      }
       if (!this.phoenixReviving) this.petSprite.setScale((save.profile.selectedPet === "phoenix" ? 1.35 : 1) * (1 + Math.sin(phase) * 0.06));
+      if (save.profile.selectedPet === "tidal-turtle" && this.petSprite.list[0] instanceof Phaser.GameObjects.Graphics) {
+        const turtle = this.petSprite.list[0];
+        const swim = save.profile.settings.reducedMotion ? 0 : Math.sin(phase * 2.2) * 1.8;
+        turtle.setAngle(swim);
+      }
+      if (save.profile.selectedPet === "phoenix" && this.phoenixWings) {
+        const flap = save.profile.settings.reducedMotion ? 0 : Math.sin(phase * 10) * 0.42;
+        const leftWing = this.phoenixWings.list[0];
+        const rightWing = this.phoenixWings.list[1];
+        if (leftWing instanceof Phaser.GameObjects.Graphics) leftWing.setRotation(-0.12 - flap);
+        if (rightWing instanceof Phaser.GameObjects.Graphics) rightWing.setRotation(0.12 + flap);
+      }
       if (save.profile.selectedPet === "tiny-dragon") {
         const wings = this.petSprite.list[0];
         if (wings instanceof Phaser.GameObjects.Graphics) {
@@ -2433,7 +2605,7 @@ export class GameScene extends Phaser.Scene {
     void save.save();
     for (const id of completedMissions) {
       const mission = missionsForProfile(save.profile.dailyMissionIds).find((entry) => entry.id === id);
-      if (mission) this.ui.toast(`Missão concluída: ${mission.title} · +${mission.reward} moedas e +${B.xp.perMission} XP`);
+      if (mission) this.ui.toast(t("missionReadyToast", { mission: mission.title }));
     }
     void save.save();
     this.renderSnake();
@@ -2604,7 +2776,7 @@ export class GameScene extends Phaser.Scene {
     if (save.profile.hints.turbo) return;
     save.profile.hints.turbo = true;
     void save.save();
-    this.ui.toast("Segure Turbo para acelerar. No teclado, use Shift.");
+      this.ui.toast(t("turboHint"));
   }
   private spawnFruit() {
     let p = this.validPoint(60, 90, true);
@@ -2626,7 +2798,7 @@ export class GameScene extends Phaser.Scene {
     if (!save.profile.hints.shrink) {
       save.profile.hints.shrink = true;
       void save.save();
-      this.ui.toast("A fruta roxa reduz seu tamanho em 25%.");
+      this.ui.toast(t("shrinkHint"));
     }
   }
   private collectCoin(coin: Coin) {
@@ -2751,10 +2923,14 @@ export class GameScene extends Phaser.Scene {
     });
     const label = this.add.text(a.left + w * 0.5, a.top + h * 0.16, "COVIL DA ARANHA · CAVERNA SUBTERRÂNEA", { fontSize: "20px", color: "#dfc7f1", fontStyle: "bold", backgroundColor: "#171923bb", padding: { x: 10, y: 6 } }).setOrigin(0.5).setDepth(3);
     this.desertObjects.push(g, label);
-    const exit = this.add.graphics().fillStyle(0xffffff, 0.96).fillEllipse(0, 3, 74, 38)
-      .lineStyle(6, 0xffffff, 1).strokeEllipse(0, 0, 82, 44)
-      .lineStyle(3, 0xe5d9f5, 0.95).strokeEllipse(0, -3, 70, 35);
-    const exitLabel = this.add.text(0, 32, "SAÍDA · GREEN VALLEY", { fontSize: "12px", color: "#f7f1ff", fontStyle: "bold", backgroundColor: "#171923dd", padding: { x: 5, y: 3 } }).setOrigin(0.5);
+    const exit = this.add.graphics().fillStyle(0x36533a, 0.2).fillEllipse(0, 33, 180, 48)
+      .fillStyle(0x252a28, 1).fillEllipse(0, 5, 110, 68)
+      .fillStyle(0x080b0b, 1).fillEllipse(0, 10, 76, 42)
+      .lineStyle(7, 0x777b70, 0.98).strokeEllipse(0, 0, 112, 68)
+      .fillStyle(0x4d7046, 1)
+      .fillTriangle(-67, -5, -44, -51, -22, -8).fillTriangle(45, -4, 65, -48, 82, 2)
+      .fillStyle(0x8a8b7a, 1).fillTriangle(-47, -8, -28, -38, -13, -9).fillTriangle(52, -9, 65, -37, 74, -7);
+    const exitLabel = this.add.text(0, 52, "SAÍDA · GREEN VALLEY", { fontSize: "13px", color: "#f0e6c8", fontStyle: "bold", backgroundColor: "#20241dcc", padding: { x: 7, y: 4 } }).setOrigin(0.5);
     this.worldPortal = this.add.container(a.left + 90, a.top + 90, [exit, exitLabel]).setDepth(9);
     this.worldPortal.setData("destination", "green-valley");
     if (!save.profile.bossesDefeated.includes("spider-queen")) {
@@ -3320,12 +3496,13 @@ export class GameScene extends Phaser.Scene {
     this.krakenReturnAngle = undefined; this.krakenReturnTimer = 0;
     this.bossDefinition = undefined;
     this.bossPortalExpiresAt = 0;
+    const previousWorld = this.currentWorld;
     this.currentWorld = world.id;
     this.abyssChallengeTimer?.remove(); this.abyssChallengeTimer = undefined;
     void applyWorldOrientation(world.id, save.profile.settings.orientation);
     const arena = B.arena;
     const entrySide = sourceSide === "abyss" ? "left" : sourceSide === "left" ? "right" : "left";
-    const spiderReturn = id === "green-valley" && this.currentWorld === "spider-lair";
+    const spiderReturn = id === "green-valley" && previousWorld === "spider-lair";
     const spiderArrival = id === "spider-lair";
     const spiderWeb = this.spiderExitWeb;
     if (spiderReturn && spiderWeb) {
@@ -3333,14 +3510,22 @@ export class GameScene extends Phaser.Scene {
       spiderWeb.destroy();
       this.spiderExitWeb = undefined;
     }
-    const abyssReturn = id === "ocean" && sourceSide === "abyss";
-    const oceanAbyssExit = abyssReturn ? oceanRegions(arena.left, arena.top, arena.right, arena.bottom).find((region) => region.id === "deep_trench") : undefined;
+    const abyssReturn = id === "ocean" && sourceSide === "abyss" && previousWorld === "silent-abyss";
     const desertLabyrinthArrival = id === "desert-labyrinth";
     const labyrinthEntry = desertLabyrinthArrival ? this.desertLabyrinthEntry() : undefined;
-    const entryX = desertLabyrinthArrival ? labyrinthEntry!.x : spiderReturn ? arena.right - 140 : spiderArrival ? arena.left + 90 : oceanAbyssExit?.x ?? (entrySide === "left" ? arena.left + 48 : arena.right - 48);
-    const entryY = desertLabyrinthArrival ? labyrinthEntry!.y : spiderReturn ? arena.top + 140 : spiderArrival ? arena.top + 180 : oceanAbyssExit?.y ?? Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
-    this.snake.reset(entryX, entryY, direction);
-    this.steering.reset(direction);
+    const entryX = desertLabyrinthArrival ? labyrinthEntry!.x
+      : spiderReturn ? arena.right - 140
+      : spiderArrival ? arena.left + 90
+      : abyssReturn ? (arena.left + arena.right) / 2
+      : (entrySide === "left" ? arena.left + 48 : arena.right - 48);
+    const entryY = desertLabyrinthArrival ? labyrinthEntry!.y
+      : spiderReturn ? arena.top + 140
+      : spiderArrival ? arena.top + 180
+      : abyssReturn ? arena.bottom - 100
+      : Phaser.Math.Clamp(sourceY, arena.top + 100, arena.bottom - 100);
+    const entryDirection = spiderArrival ? Math.PI / 2 : spiderReturn ? Math.PI : abyssReturn ? -Math.PI / 2 : direction;
+    this.snake.reset(entryX, entryY, entryDirection);
+    this.steering.reset(entryDirection);
     this.resetControls();
     this.cameraX = entryX;
     this.cameraY = entryY;
@@ -3440,12 +3625,16 @@ export class GameScene extends Phaser.Scene {
       void save.save();
     }
     if (world.id !== "spider-lair") this.ui.worldArrival(world.id, world.name);
-    this.worldPortal?.destroy(); this.worldPortal = undefined;
+    if (world.id !== "spider-lair") {
+      this.worldPortal?.destroy();
+      this.worldPortal = undefined;
+    }
     this.refreshWorldPassages({ side: entrySide, y: entryY });
     this.refreshSecretSpiderPassage();
     if (world.id === "candy-world" || world.id === "ocean") this.refreshCloverPassage();
     if (world.id === "ocean") {
       this.revealAbyssPortal();
+      if (abyssReturn) this.abyssPortalNeedsExit = true;
     }
     if (world.id === "desert") this.refreshDesertExpeditionEntrance();
     if (world.id === "desert-labyrinth") {
@@ -5310,12 +5499,17 @@ export class GameScene extends Phaser.Scene {
       this.spiderWebTimer = Number.POSITIVE_INFINITY;
       this.renderStickyZones();
       if (this.worldPortal?.active) {
-        this.worldPortal.setVisible(true).setAlpha(1);
+        this.worldPortal.setVisible(true).setAlpha(1).setDepth(21);
         this.worldPortal.setData("blockedByWeb", false);
+        this.worldPortal.setData("entryHint", "Saída aberta para Green Valley.");
         const exitLabel = this.worldPortal.getAt(1);
-        if (exitLabel instanceof Phaser.GameObjects.Text) exitLabel.setText("SAÍDA ABERTA");
+        if (exitLabel instanceof Phaser.GameObjects.Text) exitLabel.setText("SAÍDA · GREEN VALLEY");
         const web = this.worldPortal.getAt(2);
         if (web?.active) web.destroy();
+        // Keep the opened exit in view immediately after the victory overlay closes.
+        this.cameraX = this.worldPortal.x;
+        this.cameraY = this.worldPortal.y;
+        this.updateCamera(0, true);
       }
       if (this.spiderArena) {
         this.tweens.killTweensOf(this.spiderArena);
@@ -5522,7 +5716,7 @@ export class GameScene extends Phaser.Scene {
     }
     for (const id of completedMissions) {
       const mission = missionsForProfile(save.profile.dailyMissionIds).find((entry) => entry.id === id);
-      if (mission) this.ui.toast(`Missão concluída: ${mission.title} · +${mission.reward} moedas e +${B.xp.perMission} XP`);
+      if (mission) this.ui.toast(t("missionReadyToast", { mission: mission.title }));
     }
     awardAchievement(save.profile, "first-run");
     analytics.track("gameEnded", { score: this.run.score, coins: this.run.matchCoins });

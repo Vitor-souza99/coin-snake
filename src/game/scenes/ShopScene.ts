@@ -1,9 +1,12 @@
 import Phaser from "phaser";
 import { skins, skinRarities, skinUnlockStatus, isMysterySkin, skinMysteryClues, type SkinRarity } from "../data/skins";
 import { pets } from "../data/pets";
+import { borealPetArt } from "../ui/BorealPetArt";
+import { tidalTurtlePetArt } from "../ui/TidalTurtlePetArt";
+import { phoenixPetArt } from "../ui/PhoenixPetArt";
 import { worlds } from "../data/worlds";
 import { save } from "../systems/SaveSystem";
-import { buyPet, buySkin, claimShopReward, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
+import { buyPet, buySkin, claimPetShopReward, claimShopReward, PET_SHOP_REWARDED_BOSS_COINS, SHOP_REWARDED_COINS } from "../systems/EconomySystem";
 import { ads } from "../services/AdsService";
 import { localDay } from "../utils/math";
 import { reconcileWorldUnlocks, selectWorld, worldRequirementText, worldStatus } from "../systems/WorldSystem";
@@ -117,6 +120,7 @@ export class ShopScene extends Phaser.Scene {
         <div><span class="kicker">SUA COLEÇÃO</span><h2>${ownedCount} de ${pets.length} mascotes</h2><p>Derrote chefes e descubra passagens secretas para liberar mascotes; compras disponíveis usam Boss Coins.</p></div>
         <div class="pet-wallet"><span>◆ SALDO</span><strong>${profile.bossCoinBalance.toLocaleString("pt-BR")}</strong><small>Boss Coins</small></div>
       </section>
+      <article class="card shop-ad-reward"><h2>🎬 Bônus diário</h2><p>Assista a um anúncio recompensado e receba ${PET_SHOP_REWARDED_BOSS_COINS} Boss Coins. Opcional · disponível uma vez por dia.</p><button class="action" data-shop-reward="pets" ${profile.rewardedShopDate !== localDay() ? "" : "disabled"}>${profile.rewardedShopDate !== localDay() ? `ASSISTIR · +${PET_SHOP_REWARDED_BOSS_COINS} BOSS COINS` : "RESGATADO HOJE"}</button></article>
       <div class="pet-collection-grid">${visiblePets.map((pet) => {
         const unlocked = profile.unlockedPets.includes(pet.id);
         const available = profile.availablePets.includes(pet.id);
@@ -127,7 +131,7 @@ export class ShopScene extends Phaser.Scene {
         const comingSoon = pet.id === "tiny-dragon";
         const purchasable = discovered && !comingSoon && available && pet.unlockType === "BOSS" && Boolean(pet.coinPrice);
         const stateClass = !discovered ? "pet-locked" : permanent && unlocked || selected ? "pet-equipped" : unlocked ? "pet-owned" : purchasable ? "pet-available" : "pet-locked";
-        const stateLabel = comingSoon ? "EM BREVE" : !discovered ? "???" : permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? "COMPRADO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
+        const stateLabel = comingSoon ? "EM BREVE" : !discovered ? "???" : permanent && unlocked ? "EQUIPADO PERMANENTE" : selected ? "EQUIPADO" : unlocked ? pet.coinPrice ? "COMPRADO" : "ADQUIRIDO" : premium ? "PREMIUM" : purchasable ? "À VENDA" : "BLOQUEADO";
         const action = permanent && unlocked
           ? `<button class="action secondary" disabled>EQUIPADO PERMANENTE</button>`
           : unlocked && !comingSoon
@@ -137,7 +141,11 @@ export class ShopScene extends Phaser.Scene {
             : `<button class="action secondary" disabled>${comingSoon ? "EM BREVE" : !discovered ? "???" : premium ? "PREMIUM · EM BREVE" : "BLOQUEADO"}</button>`;
         const detail = comingSoon ? "O Labirinto do Deserto e o Dragãozinho estarão disponíveis em breve." : !discovered ? "Uma oferta misteriosa. Descubra a relíquia secreta no Deserto." : permanent && unlocked ? "Sempre ativo · não pode ser desequipado." : unlocked ? (selected ? "Seu mascote ativo nesta partida." : "Disponível para equipar quando quiser.") : pet.unlockedBy;
         const rarityClass = pet.rarity === "PREMIUM" ? "rarity-mythic" : `rarity-${pet.rarity.toLowerCase()}`;
-         const petArt = pet.id === "phoenix" ? `<svg class="phoenix-pet-art" viewBox="0 0 120 100" role="img" aria-label="Solar Phoenix"><defs><linearGradient id="phoenix-fire" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#ff542e"/><stop offset=".55" stop-color="#ffad32"/><stop offset="1" stop-color="#fff1a0"/></linearGradient></defs><path fill="url(#phoenix-fire)" d="M54 56C28 72 30 89 8 93c13-15 2-26 21-40-13 1-20-7-25-17 17 11 29 5 43 12L42 20l17 18 14-25 2 31c17-5 28-2 39-14-4 15-13 25-29 29 12 15 7 27 20 40-22-5-23-22-48-43z"/><path fill="#fff0b0" d="m65 43 9-17 5 21-8 8z"/><circle cx="71" cy="42" r="2.5" fill="#28334a"/><path fill="#ffdb65" d="m76 46 14 4-14 4z"/></svg>` : pet.symbol;
+         const petArt = pet.id === "tidal-turtle" ? tidalTurtlePetArt()
+           : pet.id === "snow-pup" ? borealPetArt()
+           : pet.id === "phoenix" ? phoenixPetArt()
+           : pet.id === "firefly" ? `<svg class="firefly-pet-art" viewBox="0 0 120 100" role="img" aria-label="Vaga-lume verde"><defs><radialGradient id="firefly-glow"><stop stop-color="#efffa0" stop-opacity=".95"/><stop offset="1" stop-color="#a3ed42" stop-opacity="0"/></radialGradient><linearGradient id="firefly-body" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b9ff57"/><stop offset="1" stop-color="#4cac25"/></linearGradient></defs><circle cx="65" cy="58" r="38" fill="url(#firefly-glow)"/><ellipse cx="47" cy="43" rx="13" ry="23" fill="#dffff0" fill-opacity=".88" stroke="#fff" stroke-width="2" transform="rotate(-34 47 43)"/><ellipse cx="68" cy="40" rx="12" ry="21" fill="#eafff4" fill-opacity=".78" stroke="#fff" stroke-width="2" transform="rotate(28 68 40)"/><ellipse cx="58" cy="58" rx="24" ry="18" fill="url(#firefly-body)" stroke="#397d26" stroke-width="2"/><path d="M45 48q7 10 1 19M57 42q8 15 2 31M69 43q7 14 2 29" fill="none" stroke="#38782b" stroke-width="3" stroke-linecap="round"/><ellipse cx="77" cy="52" rx="14" ry="12" fill="#a8f044" stroke="#397d26" stroke-width="2"/><circle cx="82" cy="49" r="2" fill="#16351d"/><circle cx="82.5" cy="48.5" r=".7" fill="#fff"/><path d="M78 40q4-11 11-9M72 39q0-11 6-14" fill="none" stroke="#397d26" stroke-width="2" stroke-linecap="round"/><circle cx="39" cy="59" r="4" fill="#e5ff75"/><path d="M31 72l-7 7m17-3-3 9m37-3 3 7" stroke="#397d26" stroke-width="2" stroke-linecap="round"/></svg>`
+           : pet.symbol;
          return `<article class="card rarity-card pet-card ${stateClass} ${rarityClass}">
           <div class="pet-card-top"><div class="pet-symbol" aria-hidden="true">${petArt}</div><span class="pet-state" aria-label="Status: ${stateLabel}">${stateLabel}</span></div>
           <span class="skin-rarity ${rarityClass}">${discovered ? pet.rarity : "???"}</span><h2>${!discovered ? pet.mysteryName ?? "???" : localizedPet(pet.id, "name", pet.name)}</h2><p class="pet-description">${!discovered ? "Uma relíquia misteriosa guarda algo ainda não descoberto." : localizedPet(pet.id, "description", pet.description)}</p>
@@ -176,24 +184,26 @@ export class ShopScene extends Phaser.Scene {
         audio.play("click");
         render();
       }));
+      ui.root.querySelector<HTMLButtonElement>("[data-shop-reward]")?.addEventListener("click", async (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        const rewardsBossCoins = button.dataset.shopReward === "pets";
+        if (profile.rewardedShopDate === localDay() || !ads.isRewardedAdReady()) {
+          ui.toast("Anúncio indisponível neste dispositivo ou já resgatado hoje.");
+          return;
+        }
+        button.disabled = true;
+        if (!await ads.showRewardedAd("shop-coins")) {
+          if (ui.root.isConnected) button.disabled = false;
+          ui.toast("Anúncio não disponível. Nenhuma moeda foi adicionada.");
+          return;
+        }
+        const claimed = rewardsBossCoins ? claimPetShopReward(profile) : claimShopReward(profile);
+        if (claimed) {
+          await save.save(); audio.play("coin"); haptic("coin");
+          if (ui.root.isConnected) render();
+        }
+      });
       if (category === "skins") {
-        ui.root.querySelector<HTMLButtonElement>("[data-shop-reward]")?.addEventListener("click", async (event) => {
-          const button = event.currentTarget as HTMLButtonElement;
-          if (profile.rewardedShopDate === localDay() || !ads.isRewardedAdReady()) {
-            ui.toast("Anúncio indisponível neste dispositivo ou já resgatado hoje.");
-            return;
-          }
-          button.disabled = true;
-          if (!await ads.showRewardedAd("shop-coins")) {
-            if (ui.root.isConnected) button.disabled = false;
-            ui.toast("Anúncio não disponível. Nenhuma moeda foi adicionada.");
-            return;
-          }
-          if (claimShopReward(profile)) {
-            await save.save(); audio.play("coin"); haptic("coin");
-            if (ui.root.isConnected) render();
-          }
-        });
         ui.root.querySelectorAll<HTMLButtonElement>("[data-mystery-clue]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation();
           button.closest(".details")?.querySelector("p")?.replaceChildren(document.createTextNode(skinMysteryClues.clear));
