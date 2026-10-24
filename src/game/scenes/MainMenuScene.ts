@@ -19,7 +19,8 @@ export class MainMenuScene extends Phaser.Scene {
     }
     const p = save.profile,
       ui = new ScreenUI(this),
-      xpProgress = xpProgressForLevel(p.xp);
+      xpProgress = xpProgressForLevel(p.xp),
+      pendingMissionCount = p.pendingMissionRewards.length;
     reconcileWorldUnlocks(p);
     this.cameras.main.setBackgroundColor("#f6f5e6");
     this.events.on("androidBackButton", this.confirmExit, this);
@@ -27,7 +28,7 @@ export class MainMenuScene extends Phaser.Scene {
       this.events.off("androidBackButton", this.confirmExit, this),
     );
     ui.html(
-      `<div class="home"><div class="hero"><img class="brand-menu-logo" src="${stackedLogoUrl}" alt="Coin Snake"/><span class="pill">● ${worldById(p.selectedWorld).name}</span></div><div class="home-actions"><div class="card"><div class="wallet"><span>◉ ${formatNumber(p.totalCoins)}</span><span>${t("level")} ${p.playerLevel}</span></div><p class="muted">${t("best")} <b>${formatNumber(p.bestScore)}</b> · XP ${formatNumber(xpProgress.current)}/${formatNumber(xpProgress.required)}</p><div class="xp-track"><i style="width:${(100 * xpProgress.current) / xpProgress.required}%"></i></div></div>${action("play", t("play"), "play")}${action("worlds", `${t("worlds")} · ${worldById(p.selectedWorld).name}`, "secondary")}<div class="button-row">${action("shop", t("shop"), "secondary")}${action("missions", t("missions"), "gold")}</div>${action("settings", t("settings"), "secondary small")}<p class="footnote">${t("collect")}<br>${t("virtualCoins")}</p></div></div>`,
+      `<div class="home"><div class="hero"><img class="brand-menu-logo" src="${stackedLogoUrl}" alt="Coin Snake"/><span class="pill">● ${worldById(p.selectedWorld).name}</span></div><div class="home-actions"><div class="card"><div class="wallet"><span>◉ ${formatNumber(p.totalCoins)}</span><span>${t("level")} ${p.playerLevel}</span></div><p class="muted">${t("best")} <b>${formatNumber(p.bestScore)}</b> · XP ${formatNumber(xpProgress.current)}/${formatNumber(xpProgress.required)}</p><div class="xp-track"><i style="width:${(100 * xpProgress.current) / xpProgress.required}%"></i></div></div>${action("play", t("play"), "play")}${action("worlds", `${t("worlds")} · ${worldById(p.selectedWorld).name}`, "secondary")}<div class="button-row">${action("shop", t("shop"), "secondary")}<button id="missions" class="action gold missions-action" aria-label="${t("missions")}${pendingMissionCount ? `: ${pendingMissionCount} recompensa${pendingMissionCount === 1 ? "" : "s"} disponível${pendingMissionCount === 1 ? "" : "is"} para resgate` : ""}">${t("missions")}${pendingMissionCount ? `<span class="mission-notification" aria-hidden="true">${pendingMissionCount > 9 ? "9+" : pendingMissionCount}</span>` : ""}</button></div>${action("settings", t("settings"), "secondary small")}<p class="footnote">${t("collect")}<br>${t("virtualCoins")}</p></div></div>`,
     );
     ui.on("#play", () => {
       clearDevRunSnapshot(import.meta.env.DEV);

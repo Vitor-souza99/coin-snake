@@ -460,6 +460,25 @@ canvas {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.missions-action { position: relative; }
+.mission-notification {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  min-width: 23px;
+  height: 23px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #d62839;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 2px 6px #172b244d;
+}
 .home .play {
   font-size: 20px;
   padding: 21px;

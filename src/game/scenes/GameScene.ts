@@ -3115,33 +3115,11 @@ export class GameScene extends Phaser.Scene {
     this.worldPortal = undefined;
     this.cloverRevengePortal?.destroy(); this.cloverRevengePortal = undefined;
     const initData = (this.scene.settings.data ?? {}) as { cloverRevenge?: boolean };
-    if (!save.profile.cloverGardenBossesDefeated.includes(bossId) || initData.cloverRevenge === true) {
-      const boss = this.add.container(B.arena.left + (B.arena.right - B.arena.left) * 0.68, B.arena.top + (B.arena.bottom - B.arena.top) * 0.5).setDepth(19);
-      const shell = this.add.graphics();
-      {
-        // Hand-drawn frog silhouette: broad body, powerful folded hind legs,
-        // raised eyes, nostrils and a warm cream throat.
-        shell.fillStyle(0x315d32).fillEllipse(-38, 32, 49, 31).fillEllipse(38, 32, 49, 31);
-        shell.fillStyle(0x438d3e).fillEllipse(0, 7, 103, 81).lineStyle(7, 0x20532f).strokeEllipse(0, 7, 103, 81);
-        shell.fillStyle(0xc9e88a).fillEllipse(0, 22, 61, 42);
-        shell.fillStyle(0x55a947).fillEllipse(-29, -25, 39, 37).fillEllipse(29, -25, 39, 37);
-        shell.fillStyle(0xe6f6c5).fillCircle(-30, -29, 13).fillCircle(30, -29, 13);
-        shell.fillStyle(0x172b24).fillEllipse(-30, -28, 5, 9).fillEllipse(30, -28, 5, 9);
-        shell.fillStyle(0x183e2b).fillCircle(-10, -3, 3).fillCircle(10, -3, 3);
-        shell.lineStyle(5, 0x245b36).beginPath().arc(0, 8, 24, 0.18, Math.PI - 0.18).strokePath();
-        shell.lineStyle(4, 0x326d37).lineBetween(-39, 39, -53, 51).lineBetween(-53, 51, -42, 53)
-          .lineBetween(39, 39, 53, 51).lineBetween(53, 51, 42, 53);
-        shell.fillStyle(0xf6a2a0, 0.8).fillEllipse(-45, 4, 12, 7).fillEllipse(45, 4, 12, 7);
-      }
-      boss.add(shell);
-      const name = "SAPO-REI DO TREVO";
-      const hp = this.add.text(0, -78, `${name} · 4 HP`, { fontSize: "16px", color: "#ffffff", fontStyle: "bold", backgroundColor: "#24452fee", padding: { x: 8, y: 4 } }).setOrigin(0.5);
-      boss.add(hp); boss.setData("gardenBoss", true); boss.setData("health", 4); boss.setData("attackTimer", 2.2);
-      this.cloverGardenBoss = boss;
-      this.bossFight.start(); this.bossFight.combat.bossId = bossId;
-      this.bossCoinsTimer = 2;
-      this.ui.toast("SAPO-REI: desvie do salto marcado e da língua puxadora; use a aura para atacar!");
-    } else this.createCloverGardenRevengePortal();
+    if (save.profile.cloverGardenBossesDefeated.includes(bossId) && initData.cloverRevenge !== true) {
+      this.createCloverGardenRevengePortal();
+    } else {
+      this.openCloverGardenBossIntro();
+    }
     if (save.profile.cloverGardenProgress >= 4) this.createCloverGardenExit();
   }
   private startCloverGardenBoss() {
@@ -3204,6 +3182,28 @@ export class GameScene extends Phaser.Scene {
         this.resetControls(); this.accumulator = 0; this.halted = false;
       } },
     ]);
+  }
+  private openCloverGardenBossIntro() {
+    this.halted = true;
+    this.bossIntroOpen = true;
+    this.resetControls();
+    this.overlay = this.ui.modal(
+      `${getLanguage() === "en" ? "Challenge" : "Desafio"}: SAPO-REI DO TREVO`,
+      `O Sapo-Rei guarda os trevos do Jardim Secreto. Desvie do salto marcado e da língua puxadora; use a aura para atacar.\n\n${t("bossOptional")}`,
+      [
+        { label: t("bossStart"), run: () => {
+          if (!this.bossIntroOpen || this.cloverGardenBoss || !this.scene.isActive()) return;
+          this.overlay?.destroy(); this.overlay = undefined; this.bossIntroOpen = false;
+          this.resetControls(); this.accumulator = 0;
+          this.startCloverGardenBoss(); this.halted = false;
+        } },
+        { label: t("bossLater"), run: () => {
+          if (!this.bossIntroOpen) return;
+          this.overlay?.destroy(); this.overlay = undefined; this.bossIntroOpen = false;
+          this.continue();
+        } },
+      ],
+    );
   }
   private activateGardenAttackAura() {
     const bossId = this.cloverGardenBossId();

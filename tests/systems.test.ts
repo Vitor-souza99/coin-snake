@@ -50,7 +50,7 @@ import { logoLayout } from "../src/game/ui/LogoLayout";
 import { getSkin, getSkinPreviewConfig, isSkinRarity, isSkinUnlockType, isMysterySkin, skinMysteryClues, skinRarities, skins, skinsByFamily, skinUnlockStatus } from "../src/game/data/skins";
 import { purchases } from "../src/game/services/PurchaseService";
 import { clearDevRunSnapshot, loadDevRunSnapshot, saveDevRunSnapshot, validateDevRunSnapshot } from "../src/game/systems/DevRunSnapshot";
-import { stepSnake, turnSnake, type ClassicSnakeState } from "../src/game/systems/ClassicSnakeSystem";
+import { continueClassicSnake, stepSnake, turnSnake, type ClassicSnakeState } from "../src/game/systems/ClassicSnakeSystem";
 
 describe("classic snake grid rules", () => {
   const state = (): ClassicSnakeState => ({ width: 6, height: 6, body: [{ x: 2, y: 2 }, { x: 1, y: 2 }, { x: 0, y: 2 }], direction: "right", food: { x: 4, y: 4 }, score: 0, over: false });
@@ -82,6 +82,17 @@ describe("classic snake grid rules", () => {
     tail.direction = "left";
     expect(stepSnake(tail).over).toBe(false);
     expect(tail.body[0]).toEqual({ x: 1, y: 2 });
+  });
+
+  it("continues after an ad from a safe center position without losing score", () => {
+    const game = state();
+    game.score = 12;
+    game.over = true;
+    continueClassicSnake(game);
+    expect(game.body).toEqual([{ x: 3, y: 3 }, { x: 2, y: 3 }, { x: 1, y: 3 }]);
+    expect(game.direction).toBe("right");
+    expect(game.over).toBe(false);
+    expect(game.score).toBe(12);
   });
 });
 
@@ -961,6 +972,23 @@ describe("roadmap progression systems", () => {
     const reloaded = validateSave(JSON.parse(JSON.stringify(current)));
     expect(reloaded.cloverGardenCollected).toEqual([1, 3]);
     expect(reloaded.cloverGardenProgress).toBe(2);
+  });
+  it("preserves the defeated Clover Garden guardian in current completed saves", () => {
+    for (const saveVersion of [19, 20, 21]) {
+      const profile = validateSave({
+        saveVersion,
+        cloverGardenProgress: 4,
+        cloverGardenCollected: [0, 1, 2, 3],
+        cloverGardenBossesDefeated: ["candy-garden-guardian"],
+      });
+
+      expect(profile.cloverGardenBossesDefeated).toContain("candy-garden-guardian");
+      expect(profile.cloverGardenProgress).toBe(4);
+      expect(profile.unlockedPets).toContain("lucky-leprechaun");
+
+      const reloaded = validateSave(JSON.parse(JSON.stringify(profile)));
+      expect(reloaded.cloverGardenBossesDefeated).toContain("candy-garden-guardian");
+    }
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
+import { ads } from "../services/AdsService";
 import { t } from "../services/LocalizationService";
-import { stepSnake, turnSnake, type ClassicSnakeState, type SnakeDirection } from "../systems/ClassicSnakeSystem";
+import { continueClassicSnake, stepSnake, turnSnake, type ClassicSnakeState, type SnakeDirection } from "../systems/ClassicSnakeSystem";
 import { ScreenUI } from "../ui/ScreenUI";
 
 const GRID = { width: 24, height: 30 };
@@ -17,6 +18,8 @@ export class ClassicSnakeScene extends Phaser.Scene {
   private ui!: ScreenUI;
   private active = true;
   private turnedThisStep = false;
+  private continuationUsed = false;
+  private adBusy = false;
 
   constructor() { super("ClassicSnake"); }
 
@@ -49,6 +52,8 @@ export class ClassicSnakeScene extends Phaser.Scene {
     this.accumulator = 0;
     this.turnedThisStep = false;
     this.active = true;
+    this.continuationUsed = false;
+    this.adBusy = false;
     this.draw();
     this.ui.root.querySelector("#classic-overlay")?.remove();
   }
@@ -114,9 +119,35 @@ export class ClassicSnakeScene extends Phaser.Scene {
 
   private showGameOver() {
     this.active = false;
-    this.showOverlay(t("classicGameOver"), `<p>${t("classicScore", { score: this.state.score, best: this.best })}</p><button class="action gold" id="classic-restart">${t("restart")}</button><button class="action secondary" id="classic-menu">${t("pauseMenu")}</button>`);
+    const continueButton = !this.continuationUsed
+      ? `<button class="action gold" id="classic-continue-ad">${t("classicContinueAd")}</button>`
+      : "";
+    this.showOverlay(t("classicGameOver"), `<p>${t("classicScore", { score: this.state.score, best: this.best })}</p>${continueButton}<button class="action gold" id="classic-restart">${t("restart")}</button><button class="action secondary" id="classic-menu">${t("pauseMenu")}</button>`);
+    this.ui.root.querySelector("#classic-continue-ad")?.addEventListener("click", () => { void this.continueAfterAd(); });
     this.ui.root.querySelector("#classic-restart")?.addEventListener("click", () => this.reset());
     this.ui.root.querySelector("#classic-menu")?.addEventListener("click", () => this.scene.start("Menu"));
+  }
+
+  private async continueAfterAd() {
+    if (this.adBusy || this.continuationUsed) return;
+    this.adBusy = true;
+    const button = this.ui.root.querySelector<HTMLButtonElement>("#classic-continue-ad");
+    if (button) button.disabled = true;
+    const rewarded = await ads.showRewardedAd("revive");
+    if (!this.scene.isActive()) return;
+    this.adBusy = false;
+    if (!rewarded) {
+      if (button?.isConnected) button.disabled = false;
+      this.ui.toast(t("classicAdUnavailable"));
+      return;
+    }
+    this.continuationUsed = true;
+    continueClassicSnake(this.state);
+    this.accumulator = 0;
+    this.turnedThisStep = false;
+    this.active = true;
+    this.draw();
+    this.ui.root.querySelector("#classic-overlay")?.remove();
   }
 
   private showOverlay(title: string, content: string) {

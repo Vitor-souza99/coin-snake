@@ -184,7 +184,7 @@ export function validateSave(input: unknown): PlayerProfile {
     if (nextUncollected === undefined) break;
     p.cloverGardenCollected.push(nextUncollected);
   }
-  const savedGardenBosses = (r.saveVersion === 16 || r.saveVersion === 17 || r.saveVersion === 18) && Array.isArray(r.cloverGardenBossesDefeated) && r.cloverGardenBossesDefeated.some((id) => id === "candy-garden-guardian" || id === "ocean-garden-guardian") ? ["candy-garden-guardian"] : [];
+  const savedGardenBosses = isV3 && (r.saveVersion as number) >= 16 && Array.isArray(r.cloverGardenBossesDefeated) && r.cloverGardenBossesDefeated.some((id) => id === "candy-garden-guardian" || id === "ocean-garden-guardian") ? ["candy-garden-guardian"] : [];
   p.cloverGardenBossesDefeated = [...new Set(savedGardenBosses)];
   const savedPets = isV3 && Array.isArray(r.unlockedPets) ? r.unlockedPets.filter((id): id is string => typeof id === "string" && validPetIds.has(id) && (id !== "lucky-leprechaun" || p.cloverGardenProgress >= 4)) : [];
   p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";

@@ -15,6 +15,14 @@ export interface ClassicSnakeState {
   over: boolean;
 }
 
+export function continueClassicSnake(state: ClassicSnakeState): ClassicSnakeState {
+  const x = Math.floor(state.width / 2), y = Math.floor(state.height / 2);
+  state.body = [{ x, y }, { x: x - 1, y }, { x: x - 2, y }];
+  state.direction = "right";
+  state.over = false;
+  return state;
+}
+
 const vectors: Record<SnakeDirection, GridPoint> = {
   up: { x: 0, y: -1 },
   right: { x: 1, y: 0 },
