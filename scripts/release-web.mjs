@@ -46,12 +46,21 @@ const entries = files.filter((entry) => entry.isFile()).map((entry) => ({ entry,
 if (!entries.some(({ relative }) => relative === "index.html")) throw new Error("dist/index.html must be at the ZIP root.");
 for (const entry of entries) await access(path.join(distDir, entry.relative));
 
-execFileSync("powershell.exe", ["-NoProfile", "-Command", `Compress-Archive -Path '${distDir.replaceAll("'", "''")}\\*' -DestinationPath '${zipPath.replaceAll("'", "''")}' -CompressionLevel Optimal`], { cwd: root, stdio: "inherit" });
-const zipListing = execFileSync("tar.exe", ["-tf", zipPath], { cwd: root, encoding: "utf8" });
-const zipEntries = zipListing.split(/\r?\n/).filter(Boolean).map((entry) => entry.replaceAll("\\", "/"));
+// Compress-Archive stores Windows path separators in ZIP entries. Some HTML5
+// hosts (including itch.io) then fail to resolve nested assets, so ask tar to
+// write canonical forward-slash paths and omit the leading ./ from entries.
+execFileSync("tar.exe", ["-a", "-c", "-f", zipPath, "-C", distDir, ...new Set(entries.map(({ relative }) => relative.split(path.sep)[0]))], { cwd: root, stdio: "inherit" });
+const zipListing = execFileSync("tar.exe", ["-tf", zipPath], { cwd: root, encoding: "utf8" }).split(/\r?\n/).filter(Boolean);
+const zipEntries = zipListing.map((entry) => entry.replaceAll("\\", "/").replace(/^\.\//, ""));
 const normalizeEntry = (entry) => entry.replaceAll("\\", "/").replace(/^\.\//, "");
 if (!zipEntries.includes("index.html")) throw new Error("ZIP validation failed: index.html is not at the archive root.");
-for (const entry of entries) if (!zipEntries.includes(normalizeEntry(entry.relative))) throw new Error(`ZIP validation failed: missing ${entry.relative}`);
+for (const entry of entries) {
+  const normalized = normalizeEntry(entry.relative);
+  if (!zipEntries.includes(normalized)) throw new Error(`ZIP validation failed: missing ${entry.relative}`);
+  if (zipListing.includes(`./${normalized}`) || zipListing.includes(`${normalized.replaceAll("/", "\\")}\r`)) {
+    throw new Error(`ZIP validation failed: non-portable entry path for ${entry.relative}`);
+  }
+}
 
 const commit = (() => { try { return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(); } catch { return null; } })();
 const manifest = { version: releaseVersion, buildChannel: "itch-web", buildDate: new Date().toISOString(), gitCommit: commit, testsPassed: true, typecheckPassed: true, lintPassed: true, buildPassed: true, artifact: path.basename(zipPath), sha256: execFileSync("certutil", ["-hashfile", zipPath, "SHA256"], { cwd: root, encoding: "utf8" }).split(/\r?\n/)[1]?.trim() ?? null };

@@ -17,6 +17,8 @@ describe("web release contract", () => {
     expect(packageJson.scripts["release:web"]).toBe("node scripts/release-web.mjs");
     const script = await readFile(new URL("../scripts/release-web.mjs", import.meta.url), "utf8");
     expect(script).toContain('"index.html"');
+    expect(script).toContain('"tar.exe"');
+    expect(script).toContain("non-portable entry path");
     expect(script).toContain("testsPassed: true");
     await writeFile(path.join(temp, "contract.txt"), "ZIP index contract validated");
     expect(await readFile(path.join(temp, "contract.txt"), "utf8")).toContain("ZIP index");
