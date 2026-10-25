@@ -18,6 +18,7 @@ const bool = (v: unknown, fallback: boolean) =>
 export function defaults(): PlayerProfile {
   return {
     saveVersion: 20,
+    feedbackPrompts: { games: false, ocean: false },
     totalCoins: 0,
     bossCoinBalance: 0,
     bestScore: 0,
@@ -123,6 +124,11 @@ export function validateSave(input: unknown): PlayerProfile {
       ].slice(-100)
     : [];
   p.firstLaunch = bool(r.firstLaunch, true);
+  const feedbackPrompts = record(r.feedbackPrompts);
+  p.feedbackPrompts = {
+    games: bool(feedbackPrompts.games, false),
+    ocean: bool(feedbackPrompts.ocean, false),
+  };
   p.tutorialCompleted = bool(r.tutorialCompleted, false);
   const s = record(r.settings);
   p.settings.muted = bool(s.muted, false);

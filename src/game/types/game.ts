@@ -37,6 +37,7 @@ export interface MissionProgress {
 }
 export interface PlayerProfile {
   saveVersion: 20;
+  feedbackPrompts: { games: boolean; ocean: boolean };
   totalCoins: number;
   bossCoinBalance: number;
   bestScore: number;

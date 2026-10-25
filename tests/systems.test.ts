@@ -52,6 +52,19 @@ import { purchases } from "../src/game/services/PurchaseService";
 import { clearDevRunSnapshot, loadDevRunSnapshot, saveDevRunSnapshot, validateDevRunSnapshot } from "../src/game/systems/DevRunSnapshot";
 import { continueClassicSnake, stepSnake, turnSnake, type ClassicSnakeState } from "../src/game/systems/ClassicSnakeSystem";
 
+describe("feedback prompt save state", () => {
+  it("defaults both optional prompts to pending", () => {
+    expect(defaults().feedbackPrompts).toEqual({ games: false, ocean: false });
+  });
+
+  it("persists dismissed prompts and defaults invalid flags to pending", () => {
+    expect(validateSave({ saveVersion: 20, feedbackPrompts: { games: true, ocean: false } }).feedbackPrompts)
+      .toEqual({ games: true, ocean: false });
+    expect(validateSave({ saveVersion: 20, feedbackPrompts: { games: "yes", ocean: true } }).feedbackPrompts)
+      .toEqual({ games: false, ocean: true });
+  });
+});
+
 describe("classic snake grid rules", () => {
   const state = (): ClassicSnakeState => ({ width: 6, height: 6, body: [{ x: 2, y: 2 }, { x: 1, y: 2 }, { x: 0, y: 2 }], direction: "right", food: { x: 4, y: 4 }, score: 0, over: false });
 

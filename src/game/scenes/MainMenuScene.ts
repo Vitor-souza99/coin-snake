@@ -9,6 +9,7 @@ import stackedLogoUrl from "../../../assets/branding/coin-snake-logo-stacked.svg
 import { clearDevRunSnapshot, loadDevRunSnapshot } from "../systems/DevRunSnapshot";
 import { analytics, platform } from "../services/AnalyticsService";
 import { releaseConfig } from "../config/release";
+import { feedback } from "../services/FeedbackService";
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
     super("Menu");
@@ -42,7 +43,8 @@ export class MainMenuScene extends Phaser.Scene {
     ui.on("#shop", () => this.scene.start("Shop"));
     ui.on("#missions", () => this.scene.start("Missions"));
     ui.on("#settings", () => this.scene.start("Settings"));
-    if (!p.settings.analyticsPromptDismissed && !p.settings.analyticsConsent) {
+    const analyticsPromptShown = !p.settings.analyticsPromptDismissed && !p.settings.analyticsConsent;
+    if (analyticsPromptShown) {
       const analyticsAvailable = releaseConfig.analyticsEnabled && releaseConfig.posthogKeyConfigured && releaseConfig.posthogHostConfigured;
       const prompt = ui.modal(
         t("analyticsPromptTitle"),
@@ -74,6 +76,42 @@ export class MainMenuScene extends Phaser.Scene {
         const enableButton = ui.root.querySelector<HTMLButtonElement>(".dialog-actions button:first-child");
         if (enableButton) enableButton.disabled = true;
       }
+    }
+    const feedbackAvailable = feedback.getUrl().startsWith("https://");
+    const eligiblePrompt = p.worldsUnlocked.includes("ocean") && !p.feedbackPrompts.ocean
+      ? "ocean"
+      : p.statistics.totalGames >= 3 && !p.feedbackPrompts.games
+        ? "games"
+        : undefined;
+    if (feedbackAvailable && eligiblePrompt && !analyticsPromptShown) {
+      const isOceanPrompt = eligiblePrompt === "ocean";
+      const english = p.settings.language === "en";
+      const prompt = ui.modal(
+        english ? "Enjoying Coin Snake?" : "Curtindo o Coin Snake?",
+        isOceanPrompt
+          ? english ? "You unlocked Ocean World! If you like, share your feedback through Settings. It is completely optional." : "Você desbloqueou o Ocean World! Se quiser, envie sua opinião por Configurações. É totalmente voluntário."
+          : english ? "After a few runs, would you like to share feedback? You can do so anytime through Settings. It is completely optional." : "Depois de algumas partidas, quer compartilhar sua opinião? Você pode fazer isso quando quiser em Configurações. É totalmente voluntário.",
+        [
+          {
+            label: english ? "Open Settings" : "Abrir Configurações",
+            run: () => {
+              prompt.destroy();
+              p.feedbackPrompts[eligiblePrompt] = true;
+              void save.save();
+              this.scene.start("Settings");
+            },
+          },
+          {
+            label: t("notNow"),
+            run: () => {
+              prompt.destroy();
+              p.feedbackPrompts[eligiblePrompt] = true;
+              void save.save();
+            },
+          },
+        ],
+        { initialFocus: 1 },
+      );
     }
     if (save.error) ui.toast(save.error);
   }
