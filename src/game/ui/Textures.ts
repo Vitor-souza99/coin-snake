@@ -20,6 +20,12 @@ export function generateTextures(s: Phaser.Scene) {
         .lineBetween(14, 21, 49, 21)
         .lineBetween(14, 39, 49, 39);
     }
+    if (skin.id === "frajola-cat") {
+      g.fillStyle(skin.bodyConfig.accent).fillCircle(20, 22, 6).fillCircle(42, 39, 6);
+    }
+    if (skin.id === "giraffe") {
+      g.fillStyle(skin.bodyConfig.accent).fillCircle(19, 20, 6).fillCircle(43, 39, 7).fillCircle(39, 16, 4);
+    }
     if (skin.id === "robot") {
       g.lineStyle(3, skin.dark).strokeRoundedRect(14, 13, 36, 36, 10);
       g.fillStyle(0xffffff).fillRect(27, 16, 5, 5);
@@ -50,6 +56,13 @@ export function generateTextures(s: Phaser.Scene) {
         .fillTriangle(35, 10, 54, 0, 56, 20);
       g.fillStyle(0xec8d91).fillTriangle(14, 14, 14, 5, 24, 12);
     }
+    if (skin.id === "frajola-cat") {
+      g.fillStyle(skin.dark).fillEllipse(20, 29, 13, 22).fillEllipse(43, 29, 13, 22);
+      g.fillStyle(skin.color)
+        .fillTriangle(8, 18, 10, 0, 29, 11)
+        .fillTriangle(35, 11, 54, 0, 57, 19);
+      g.fillStyle(0xf0a3a7).fillTriangle(14, 14, 14, 5, 24, 12).fillTriangle(40, 12, 50, 5, 50, 15);
+    }
     if (skin.id === "robot") {
       g.fillStyle(skin.dark).fillRoundedRect(8, 6, 49, 47, 10);
       g.fillStyle(skin.color).fillRoundedRect(12, 10, 41, 38, 8);
@@ -62,6 +75,19 @@ export function generateTextures(s: Phaser.Scene) {
     }
     if (skin.id === "dino")
       g.fillStyle(skin.dark).fillTriangle(9, 13, 0, 30, 9, 48);
+    if (skin.id === "giraffe") {
+      g.fillStyle(skin.color)
+        .fillEllipse(21, 12, 8, 15)
+        .fillEllipse(43, 12, 8, 15)
+        .fillEllipse(32, 32, 26, 24);
+      g.fillStyle(skin.dark).fillCircle(22, 10, 4).fillCircle(43, 10, 4);
+      g.fillStyle(skin.bodyConfig.accent).fillCircle(20, 26, 5).fillCircle(43, 37, 5);
+    }
+    if (skin.id === "capybara") {
+      g.fillStyle(skin.dark).fillEllipse(18, 20, 12, 13).fillEllipse(48, 20, 12, 13);
+      g.fillStyle(skin.color).fillEllipse(32, 31, 26, 22).fillEllipse(44, 42, 17, 12);
+      g.fillStyle(0x251b15).fillCircle(49, 40, 2).fillCircle(53, 42, 2);
+    }
     if (skin.id === "sakura") g.fillStyle(skin.bodyConfig.accent).fillCircle(19, 19, 4).fillCircle(48, 41, 4);
     if (skin.id === "storm") g.lineStyle(4, skin.bodyConfig.accent).lineBetween(13, 20, 28, 28).lineBetween(28, 28, 21, 38).lineBetween(39, 14, 50, 23);
     if (skin.id === "magma") g.lineStyle(4, skin.bodyConfig.accent).lineBetween(14, 17, 24, 25).lineBetween(24, 25, 20, 37).lineBetween(40, 29, 51, 40);
@@ -104,7 +130,10 @@ export function generateTextures(s: Phaser.Scene) {
     g.clear();
     g.fillStyle(skin.dark).fillCircle(32, 34, 28);
     g.fillStyle(skin.color).fillCircle(32, 30, 27);
-    if (skin.detail === "cat") g.fillStyle(skin.color).fillTriangle(8, 22, 10, 0, 29, 15).fillTriangle(35, 15, 54, 0, 56, 22);
+    if (skin.detail === "cat" || skin.detail === "frajola-cat") g.fillStyle(skin.color).fillTriangle(8, 22, 10, 0, 29, 15).fillTriangle(35, 15, 54, 0, 56, 22);
+    if (skin.detail === "frajola-cat") g.fillStyle(skin.dark).fillEllipse(20, 29, 12, 20).fillEllipse(43, 29, 12, 20);
+    if (skin.detail === "giraffe") g.fillStyle(skin.color).fillEllipse(20, 10, 6, 13).fillEllipse(44, 10, 6, 13).fillStyle(skin.dark).fillCircle(20, 8, 3).fillCircle(44, 8, 3);
+    if (skin.detail === "capybara") g.fillStyle(skin.dark).fillEllipse(16, 20, 12, 14).fillEllipse(48, 20, 12, 14);
     if (skin.detail === "robot") g.fillStyle(skin.dark).fillRoundedRect(7, 6, 50, 48, 12);
     if (skin.detail === "dino") g.fillStyle(skin.dark).fillTriangle(8, 17, 0, 30, 8, 45);
     if (skin.detail === "dragon" || skin.detail.includes("dragon") || skin.detail === "frost-wyvern" || skin.detail === "inferno-titan") g.fillStyle(skin.bodyConfig.accent).fillTriangle(8, 21, 8, 0, 27, 15).fillTriangle(37, 15, 56, 0, 56, 21);

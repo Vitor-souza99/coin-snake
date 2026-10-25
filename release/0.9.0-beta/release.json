@@ -1,12 +1,12 @@
 {
   "version": "0.9.0-beta",
   "buildChannel": "itch-web",
-  "buildDate": "2026-10-25T02:30:15.487Z",
-  "gitCommit": "3e29471d710f218314d0b8306a686c43d5d6bb2b",
+  "buildDate": "2026-10-25T03:23:11.041Z",
+  "gitCommit": "4292122c955ea19c61e57b6ddd3bf72303910938",
   "testsPassed": true,
   "typecheckPassed": true,
   "lintPassed": true,
   "buildPassed": true,
   "artifact": "coin-snake-web-0.9.0-beta.zip",
-  "sha256": "23d29148273261bcf39221a3957122f3c7bce33136d3e5c731a2adc60308c9c1"
+  "sha256": "76039030cfb0c99332ded1fd9c679919aee554849750924576b0dec960b68966"
 }

@@ -175,7 +175,7 @@ export class ShopScene extends Phaser.Scene {
           analytics.track("shop_opened", { category });
       const title: Record<Category, string> = { skins: "Loja", pets: "Loja", maps: "Loja", packs: "Loja" };
       const content = category === "skins" ? renderSkins() : category === "pets" ? renderPets() : category === "maps" ? renderMaps() : renderPacks();
-      ui.html(`${header(title[category], `SALDO · ${profile.totalCoins.toLocaleString("pt-BR")} MOEDAS`)}${categoryNav()}<section class="shop-content" role="tabpanel">${content}</section>`);
+      ui.html(`${header(title[category], `SALDO · ${profile.totalCoins.toLocaleString("pt-BR")} MOEDAS · 👑 ${profile.bossCoinBalance.toLocaleString("pt-BR")} BOSS COINS`)}${categoryNav()}<section class="shop-content" role="tabpanel">${content}</section>`);
       const restoreScroll = category === "skins" ? this.skinScrollY : previous?.scrollY;
       if (restoreScroll !== undefined) {
         ui.root.scrollTop = restoreScroll;

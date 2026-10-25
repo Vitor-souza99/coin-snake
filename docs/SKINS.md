@@ -20,6 +20,9 @@ Toda raridade é comunicada em texto nos cards e no preview; cor e borda são ap
 | Green Snake | COMMON | Grátis |
 | Orange Snake | COMMON | 1.000 Coins |
 | Cat Snake | RARE | 500 Coins (preço legado preservado) |
+| Gato Frajola | RARE | 1.000 Coins |
+| Girafa | RARE | 2.000 Coins |
+| Capivara | RARE | 3.000 Coins |
 | Robot Snake | RARE | 1.000 Coins |
 | Dino Snake | RARE | 2.000 Coins |
 | Ghost Snake | EPIC | Derrotar qualquer chefe |

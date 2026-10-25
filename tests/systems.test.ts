@@ -220,6 +220,18 @@ describe("economy", () => {
     expect(profile.unlockedSkins).toEqual(expect.arrayContaining(["sakura", "storm", "magma", "prism"]));
     expect(skins.find((skin) => skin.id === "cat")?.coinPrice).toBe(500);
   });
+  it("adds the frajola cat, giraffe, and capybara as coin-purchasable skins", () => {
+    const profile = defaults();
+    profile.totalCoins = 6_000;
+    expect(buySkin(profile, "frajola-cat")).toBe(true);
+    expect(buySkin(profile, "giraffe")).toBe(true);
+    expect(buySkin(profile, "capybara")).toBe(true);
+    expect(profile.totalCoins).toBe(0);
+    expect(profile.unlockedSkins).toEqual(expect.arrayContaining(["frajola-cat", "giraffe", "capybara"]));
+    expect(getSkin("frajola-cat")?.coinPrice).toBe(1_000);
+    expect(getSkin("giraffe")?.coinPrice).toBe(2_000);
+    expect(getSkin("capybara")?.coinPrice).toBe(3_000);
+  });
   it("grants the shop rewarded-ad coins once per local day", () => {
     const profile = defaults();
     expect(claimShopReward(profile, "2026-10-08")).toBe(true);

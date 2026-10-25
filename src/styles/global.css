@@ -96,8 +96,8 @@ canvas {
   position: absolute;
   z-index: 2;
   bottom: max(12px, env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
+  left: max(12px, env(safe-area-inset-left));
+  transform: none;
   display: none;
   justify-items: center;
   gap: 4px;
