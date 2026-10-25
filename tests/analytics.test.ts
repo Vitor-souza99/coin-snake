@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { AnalyticsService, FakeAnalyticsProvider, NoopAnalyticsProvider } from "../src/game/services/AnalyticsService";
+import { defaults, validateSave } from "../src/game/systems/SaveSystem";
 import { sanitizeRunMetrics, SessionMetrics } from "../src/game/services/RunSummary";
 
 describe("beta analytics contracts", () => {
+  it("keeps analytics opt-in and the first-run prompt eligible until dismissed", () => {
+    const fresh = defaults();
+    expect(fresh.settings.analyticsConsent).toBe(false);
+    expect(fresh.settings.analyticsPromptDismissed).toBe(false);
+    const optedOut = validateSave({ ...fresh, settings: { ...fresh.settings, analyticsPromptDismissed: true } });
+    expect(optedOut.settings.analyticsConsent).toBe(false);
+    expect(optedOut.settings.analyticsPromptDismissed).toBe(true);
+    const legacy = validateSave({ saveVersion: 20, settings: { analyticsConsent: false } });
+    expect(legacy.settings.analyticsPromptDismissed).toBe(false);
+  });
+
   it("records only events explicitly sent to the offline fake provider", () => {
     const fake = new FakeAnalyticsProvider();
     fake.capture("run_started", { gameVersion: "0.9.0-beta", platform: "web_itch", worldId: "green-valley", gameMode: "standard", difficulty: "normal", orientation: "portrait", controlMode: "touch_right_handed", selectedSkin: "classic", selectedPet: null, runNumberInSession: 1 });

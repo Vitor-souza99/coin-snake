@@ -8,6 +8,7 @@ import { formatNumber, t } from "../services/LocalizationService";
 import stackedLogoUrl from "../../../assets/branding/coin-snake-logo-stacked.svg";
 import { clearDevRunSnapshot, loadDevRunSnapshot } from "../systems/DevRunSnapshot";
 import { analytics, platform } from "../services/AnalyticsService";
+import { releaseConfig } from "../config/release";
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
     super("Menu");
@@ -41,6 +42,39 @@ export class MainMenuScene extends Phaser.Scene {
     ui.on("#shop", () => this.scene.start("Shop"));
     ui.on("#missions", () => this.scene.start("Missions"));
     ui.on("#settings", () => this.scene.start("Settings"));
+    if (!p.settings.analyticsPromptDismissed && !p.settings.analyticsConsent) {
+      const analyticsAvailable = releaseConfig.analyticsEnabled && releaseConfig.posthogKeyConfigured && releaseConfig.posthogHostConfigured;
+      const prompt = ui.modal(
+        t("analyticsPromptTitle"),
+        `${t("analyticsPromptBody")}${analyticsAvailable ? "" : `\n\n${t("analyticsUnavailable")}`}`,
+        [
+          {
+            label: t("analyticsPromptEnable"),
+            run: () => {
+              if (!analyticsAvailable) return;
+              prompt.destroy();
+              p.settings.analyticsConsent = true;
+              p.settings.analyticsPromptDismissed = true;
+              analytics.setConsent(true);
+              void save.save();
+            },
+          },
+          {
+            label: t("analyticsPromptDecline"),
+            run: () => {
+              prompt.destroy();
+              p.settings.analyticsPromptDismissed = true;
+              void save.save();
+            },
+          },
+        ],
+        { initialFocus: 1 },
+      );
+      if (!analyticsAvailable) {
+        const enableButton = ui.root.querySelector<HTMLButtonElement>(".dialog-actions button:first-child");
+        if (enableButton) enableButton.disabled = true;
+      }
+    }
     if (save.error) ui.toast(save.error);
   }
   private confirmExit() {

@@ -17,6 +17,7 @@ export interface Settings {
   orientation: "auto" | "portrait" | "landscape";
   language: LanguagePreference;
   analyticsConsent: boolean;
+  analyticsPromptDismissed: boolean;
 }
 export interface GameStatistics {
   totalGames: number;

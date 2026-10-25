@@ -12,6 +12,7 @@ android/**/build/
 *.keystore
 key.properties
 .env
+.env.local
 .env.*
 !.env.example
 release/*/*.apk

@@ -40,6 +40,7 @@ export function defaults(): PlayerProfile {
       orientation: "auto",
       language: "auto",
       analyticsConsent: false,
+      analyticsPromptDismissed: false,
     },
     firstLaunch: true,
     tutorialCompleted: false,
@@ -146,6 +147,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.settings.orientation = s.orientation === "portrait" || s.orientation === "landscape" ? s.orientation : "auto";
   p.settings.language = s.language === "pt-BR" || s.language === "en" ? s.language : "auto";
   p.settings.analyticsConsent = bool(s.analyticsConsent, false);
+  p.settings.analyticsPromptDismissed = bool(s.analyticsPromptDismissed, false);
   const volume = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v)
       ? Math.max(0, Math.min(1, v))

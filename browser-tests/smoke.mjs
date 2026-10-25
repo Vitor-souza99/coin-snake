@@ -17,6 +17,11 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(process.env.COIN_TEST_URL || "http://127.0.0.1:5173");
   await page.waitForSelector('[data-scene="Menu"] #play');
+  const analyticsPrompt = page.locator('[data-scene="Menu"] .dialog-backdrop');
+  if (await analyticsPrompt.count()) {
+    const decline = analyticsPrompt.getByRole("button", { name: "Agora não" });
+    if (await decline.count()) await decline.click();
+  }
 
   for (const [width, height] of [[360, 640], [390, 844], [412, 915], [720, 1280], [844, 390], [915, 412], [1280, 720]]) {
     await page.setViewportSize({ width, height });
