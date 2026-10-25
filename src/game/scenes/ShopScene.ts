@@ -14,6 +14,7 @@ import { audio } from "../services/AudioService";
 import { haptic } from "../services/HapticsService";
 import { ScreenUI, header, textureURL } from "../ui/ScreenUI";
 import { getLanguage, localizedPet, localizedWorld, t } from "../services/LocalizationService";
+import { analytics } from "../services/AnalyticsService";
 
 type Category = "skins" | "pets" | "maps" | "packs";
 
@@ -171,6 +172,7 @@ export class ShopScene extends Phaser.Scene {
     const renderPacks = () => `<article class="card shop-coming-soon"><div class="pet-symbol" aria-hidden="true">📦</div><h2>Pacotes</h2><p>Pacotes temáticos poderão reunir skins, mascotes e outros itens no futuro.</p><p class="muted">Ainda não há pacotes, preços ou compras disponíveis. Nenhuma transação será simulada.</p><button class="action secondary" disabled>EM BREVE</button></article>`;
 
     const render = () => {
+          analytics.track("shop_opened", { category });
       const title: Record<Category, string> = { skins: "Loja", pets: "Loja", maps: "Loja", packs: "Loja" };
       const content = category === "skins" ? renderSkins() : category === "pets" ? renderPets() : category === "maps" ? renderMaps() : renderPacks();
       ui.html(`${header(title[category], `SALDO · ${profile.totalCoins.toLocaleString("pt-BR")} MOEDAS`)}${categoryNav()}<section class="shop-content" role="tabpanel">${content}</section>`);
@@ -220,8 +222,21 @@ export class ShopScene extends Phaser.Scene {
         ui.root.querySelectorAll<HTMLButtonElement>("[data-equip-skin]").forEach((button) => button.addEventListener("click", (event) => {
           event.stopPropagation();
           this.captureSkinScroll();
+          const skin = skins.find((entry) => entry.id === button.dataset.equipSkin);
+          const wasUnlocked = skin ? profile.unlockedSkins.includes(skin.id) : false;
           if (!buySkin(profile, button.dataset.equipSkin!)) return;
+          if (skin && wasUnlocked) analytics.track("skin_equipped", { skinId: skin.id, rarity: skin.rarity, unlockType: skin.unlockType });
+          if (skin && !wasUnlocked && skin.unlockType === "COINS") {
+            analytics.track("skin_unlocked", { skinId: skin.id, rarity: skin.rarity, unlockType: skin.unlockType });
+            analytics.track("skin_purchased_with_coins", { skinId: skin.id, coinPrice: skin.coinPrice ?? 0, balanceAfter: profile.totalCoins });
+          }
           void save.save(); audio.play("click"); haptic("power"); render();
+        }));
+        ui.root.querySelectorAll<HTMLElement>("[data-skin]").forEach((card) => card.addEventListener("click", () => {
+          const skin = skins.find((entry) => entry.id === card.dataset.skin);
+          if (!skin) return;
+          analytics.track("skin_previewed", { skinId: skin.id, rarity: skin.rarity, unlockType: skin.unlockType });
+          if (skin.unlockType === "PREMIUM") analytics.track("premium_skin_previewed", { skinId: skin.id, rarity: skin.rarity, unlockType: skin.unlockType });
         }));
         ui.root.querySelectorAll<HTMLButtonElement>("[data-filter]").forEach((button) => button.addEventListener("click", () => {
           filter = button.dataset.filter as "ALL" | "OWNED" | "LOCKED"; render();
@@ -245,7 +260,7 @@ export class ShopScene extends Phaser.Scene {
         ui.root.querySelectorAll<HTMLButtonElement>("[data-equip-pet]").forEach((button) => button.addEventListener("click", () => {
           const id = button.dataset.equipPet;
           if (!id || !profile.unlockedPets.includes(id)) return;
-          profile.selectedPet = id; audio.play("click"); haptic("power");
+          profile.selectedPet = id; analytics.track("pet_equipped", { petId: id }); audio.play("click"); haptic("power");
           void save.save().then(render);
         }));
       }

@@ -7,6 +7,7 @@ import { worldById } from "../data/worlds";
 import { formatNumber, t } from "../services/LocalizationService";
 import stackedLogoUrl from "../../../assets/branding/coin-snake-logo-stacked.svg";
 import { clearDevRunSnapshot, loadDevRunSnapshot } from "../systems/DevRunSnapshot";
+import { analytics, platform } from "../services/AnalyticsService";
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
     super("Menu");
@@ -22,6 +23,8 @@ export class MainMenuScene extends Phaser.Scene {
       xpProgress = xpProgressForLevel(p.xp),
       pendingMissionCount = p.pendingMissionRewards.length;
     reconcileWorldUnlocks(p);
+    analytics.setConsent(p.settings.analyticsConsent);
+    analytics.track("main_menu_viewed", { gameVersion: "0.9.0-beta", platform });
     this.cameras.main.setBackgroundColor("#f6f5e6");
     this.events.on("androidBackButton", this.confirmExit, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>

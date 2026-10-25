@@ -39,6 +39,7 @@ export function defaults(): PlayerProfile {
       gameDifficulty: "normal",
       orientation: "auto",
       language: "auto",
+      analyticsConsent: false,
     },
     firstLaunch: true,
     tutorialCompleted: false,
@@ -144,6 +145,7 @@ export function validateSave(input: unknown): PlayerProfile {
           : "normal";
   p.settings.orientation = s.orientation === "portrait" || s.orientation === "landscape" ? s.orientation : "auto";
   p.settings.language = s.language === "pt-BR" || s.language === "en" ? s.language : "auto";
+  p.settings.analyticsConsent = bool(s.analyticsConsent, false);
   const volume = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v)
       ? Math.max(0, Math.min(1, v))

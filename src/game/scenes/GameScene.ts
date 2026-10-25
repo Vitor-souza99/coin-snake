@@ -34,8 +34,10 @@ import { dragonAttackCooldown, dragonAttackDuration, dragonBossDamage, dragonCan
 import { activateCandyAura, bossAuraPickupKind, bossUsesTimedCoins, regularCoinAuraCharge, resolveCandyAuraHit } from "../systems/BossCombatSystem";
 import { pets } from "../data/pets";
 import { PortalSystem } from "../systems/PortalSystem";
+import { App } from "@capacitor/app";
 import { awardAchievement } from "../systems/AchievementSystem";
-import { analytics } from "../services/AnalyticsService";
+import { analytics, platform } from "../services/AnalyticsService";
+import { sanitizeRunMetrics } from "../services/RunSummary";
 import { getBossSkinRewards, getSkin } from "../data/skins";
 import { reconcileWorldUnlocks, rememberWorld, traversableWorlds } from "../systems/WorldSystem";
 import { candyWorldConfig as CW, candyRegions, candyObstacleSafe, candyCoinSpawnAllowed, candyFinalSpeed, inCandyRiver, stickySpeedMultiplier, type StickyZone } from "../data/candyWorld";
@@ -90,6 +92,31 @@ export class GameScene extends Phaser.Scene {
   private dead = false;
   private overlay?: { destroy: () => void };
   private currentWorld = "green-valley";
+  private runNumberInSession = 0;
+  private startingWorld = "green-valley";
+  private worldEnteredAt = 0;
+  private visitedWorlds = new Set<string>();
+  private worldEntryType: "normal_portal" | "secret_portal" | "return" = "return";
+  private coinCounts: Record<string, number> = { normal: 0, blue: 0, diamond: 0, golden: 0, special: 0 };
+  private maxSnakeLength = 5;
+  private bossAttempts: Record<string, number> = {};
+  private bossStartedAt = 0;
+  private bossDamageTaken = 0;
+  private shieldUses = 0;
+  private lastReportedTurboUses = 0;
+  private currentEndReason: "death" | "quit" | "restart" | "app_background_timeout" | "unknown" = "unknown";
+  private currentDeathReason = "unknown";
+  private backgroundTimer?: ReturnType<typeof setTimeout>;
+  private appStateHandle?: { remove: () => Promise<void> };
+  private appStateListenerToken = 0;
+  private runFinalized = false;
+  private runStarted = false;
+  private activeElapsed = 0;
+  private sessionStartedAt = 0;
+  private attemptedBossCount = 0;
+  private completedBossCount = 0;
+  private secretWorldsVisited = new Set<string>();
+  private firstPortalEntered = false;
   private abyssChallengeElapsed = 0;
   private abyssObstacleTimer = 0;
   private abyssMovingObstacles: Array<{ obstacle: Obstacle; graphics: Phaser.GameObjects.Graphics; moveIn: number; start?: Point; target?: Point; moveDuration: number; moveElapsed: number }> = [];
@@ -198,10 +225,39 @@ export class GameScene extends Phaser.Scene {
     super("Game");
   }
   create() {
+    const listenerToken = ++this.appStateListenerToken;
+    void App.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive && !this.dead && !this.run.finished) {
+        this.halted = true;
+        if (this.backgroundTimer) clearTimeout(this.backgroundTimer);
+        this.backgroundTimer = setTimeout(() => {
+          if (this.run.finished) return;
+          this.currentEndReason = "app_background_timeout";
+          if (this.runStarted) {
+            analytics.track("run_abandoned", { endReason: "app_background_timeout", worldId: this.currentWorld, durationSeconds: Math.max(0, Math.round(this.activeElapsed)) });
+            this.finalize();
+          }
+        }, 120_000);
+      } else if (isActive) {
+        if (this.backgroundTimer) clearTimeout(this.backgroundTimer);
+        this.backgroundTimer = undefined;
+        if (!this.dead && !this.run.finished && !this.overlay) this.halted = false;
+      }
+    }).then((handle) => { if (listenerToken !== this.appStateListenerToken) void handle.remove(); else this.appStateHandle = handle; });
     audio.setGameplayActive(this, true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       audio.setGameplayActive(this, false),
     );
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { if (this.backgroundTimer) clearTimeout(this.backgroundTimer); void this.appStateHandle?.remove(); });
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => { this.appStateListenerToken++; void this.appStateHandle?.remove(); });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.backgroundTimer) clearTimeout(this.backgroundTimer);
+      if (this.runStarted && !this.runFinalized && !this.run.finished) {
+        const abandonmentReason = this.currentEndReason === "restart" || this.currentEndReason === "app_background_timeout" ? this.currentEndReason : "quit";
+        analytics.track("run_abandoned", { endReason: abandonmentReason, worldId: this.currentWorld, durationSeconds: Math.max(0, Math.round(this.activeElapsed)) });
+        this.finalize();
+      }
+    });
     const initData = (this.scene.settings.data ?? {}) as { startWorld?: string; cloverGarden?: boolean; cloverReturn?: boolean; cloverRevenge?: boolean; cloverOrigin?: "candy-world" | "ocean"; returnWorld?: string; bossEnergy?: number; desertExpedition?: boolean; gameDifficulty?: GameDifficulty };
     this.gameDifficulty = initData.gameDifficulty === "easy" || initData.gameDifficulty === "hard" || initData.gameDifficulty === "normal"
       ? initData.gameDifficulty
@@ -295,6 +351,27 @@ export class GameScene extends Phaser.Scene {
     this.cameraX = this.snake.x;
     this.cameraY = this.snake.y;
     this.run = newRun();
+    analytics.resetSession();
+    this.sessionStartedAt = this.sessionStartedAt || Date.now();
+    this.runNumberInSession = analytics.getRunNumber();
+    this.activeElapsed = 0;
+    this.runStarted = false;
+    this.activeElapsed = 0;
+    this.runFinalized = false;
+    this.startingWorld = this.currentWorld;
+    this.visitedWorlds = new Set([this.currentWorld]);
+    this.worldEntryType = "return";
+    this.coinCounts = { normal: 0, blue: 0, diamond: 0, golden: 0, special: 0 };
+    this.secretWorldsVisited = new Set();
+    this.bossAttempts = {};
+    this.shieldUses = 0;
+    this.lastReportedTurboUses = 0;
+    this.worldEnteredAt = this.run.elapsed;
+    this.maxSnakeLength = this.snake.length;
+    this.firstPortalEntered = false;
+    this.currentEndReason = "unknown";
+    this.currentDeathReason = "unknown";
+    this.runFinalized = false;
     if (Number.isFinite(initData.bossEnergy)) this.run.bossEnergy = Math.max(0, initData.bossEnergy!);
     startMissionRun(save.profile, this.run);
     if (save.profile.missionDate === this.run.missionDate) void save.save();
@@ -420,8 +497,8 @@ export class GameScene extends Phaser.Scene {
       `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div class="player-level"><div class="player-level__label"><b id="player-level-value">NÍVEL ${save.profile.playerLevel}</b><span id="player-xp-value"></span></div><div class="player-level__track"><i id="player-xp-bar"></i></div></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}${this.currentWorld === "silent-abyss" && save.profile.abyssSanctuaryProgress < 3 ? `<div id="abyss-sanctuaries" class="world-tag">SANTUÁRIOS · ${save.profile.abyssSanctuaryProgress}/3</div>` : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="aura-status" class="aura-status" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">⚡ TURBO</button><button id="freeze" class="turbo-button freeze-button" aria-label="Ativar Freeze" hidden>❄ FREEZE</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
-      const petGraphic = this.add.graphics();
       const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xaaa59b : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0x42c978 : save.profile.selectedPet === "scorpionling" ? 0xf5a642 : save.profile.selectedPet === "baby-octopus" ? 0x9f7aea : 0xe783d0;
+      const petGraphic = this.add.graphics();
       if (save.profile.selectedPet === "snow-pup") {
         // A small aurora spirit: rounded icy body, luminous crest, and frost sparkles.
         petGraphic.fillStyle(0x78e8e1, 0.2).fillCircle(0, 0, 20);
@@ -597,7 +674,7 @@ export class GameScene extends Phaser.Scene {
     this.fruit = new ShrinkFruit(this);
     this.events.on("coinCollected", this.collectCoin, this);
     if (import.meta.env.DEV) this.installDebug();
-    analytics.track("gameStarted", { mode: "normal" });
+    this.startAnalyticsRun();
     this.particles = this.add
       .particles(0, 0, "spark", {
         emitting: false,
@@ -658,7 +735,7 @@ export class GameScene extends Phaser.Scene {
         this.updateCamera(0, true);
       }
     });
-    if (!save.profile.hints.joystick) {
+    if (!save.profile.tutorialCompleted || !save.profile.hints.joystick) {
       this.halted = true;
       this.pauseKind = "tutorial";
       this.overlay = this.ui.modal(
@@ -668,6 +745,9 @@ export class GameScene extends Phaser.Scene {
           {
             label: t("tutorialStart"),
             run: () => {
+              this.startAnalyticsRun();
+              analytics.track("tutorial_started", { tutorialId: "initial_controls" });
+              if (!save.profile.tutorialCompleted) analytics.track("tutorial_completed", { tutorialId: "initial_controls" });
               save.profile.tutorialCompleted = true;
               save.profile.firstLaunch = false;
               save.profile.hints.joystick = true;
@@ -680,6 +760,13 @@ export class GameScene extends Phaser.Scene {
       );
     } else this.turboHint();
     this.renderSnake();
+  }
+  private startAnalyticsRun() {
+    if (this.runStarted) return;
+    this.runStarted = true;
+    analytics.beginRun(this.runNumberInSession);
+    this.sessionStartedAt ||= Date.now();
+    analytics.track("run_started", { gameVersion: "0.9.0-beta", platform, worldId: this.startingWorld, gameMode: this.run.rushMode ? "coin_rush" : "standard", difficulty: this.gameDifficulty, orientation: this.scale.width > this.scale.height ? "landscape" : "portrait", controlMode: save.profile.settings.leftHanded ? "touch_left_handed" : "touch_right_handed", selectedSkin: save.profile.selectedSkin, selectedPet: save.profile.selectedPet, runNumberInSession: this.runNumberInSession });
   }
   private validPoint(
     clearance: number,
@@ -1167,7 +1254,8 @@ export class GameScene extends Phaser.Scene {
       : checkpoint === 1 ? { x: a.left + w * 0.25, y: a.top + h * 0.25 }
         : { x: a.left + w * 0.75, y: a.top + h * 0.75 };
   }
-  private buildDesertLabyrinth(_arenaGraphics: Phaser.GameObjects.Graphics) {
+  private buildDesertLabyrinth(arenaGraphics: Phaser.GameObjects.Graphics) {
+    arenaGraphics.setDepth(1);
     this.currentWorld = "desert-labyrinth";
     this.worldPortal?.destroy(); this.worldPortal = undefined;
     this.worldPassages = [];
@@ -1877,6 +1965,8 @@ export class GameScene extends Phaser.Scene {
     this.passageCooldown = Math.max(0, this.passageCooldown - dt);
     this.freezePortalCooldown = Math.max(0, this.freezePortalCooldown - dt);
     this.run.elapsed += dt;
+    this.activeElapsed += dt;
+    this.maxSnakeLength = Math.max(this.maxSnakeLength, this.snake.length);
     this.combo.update(dt);
     this.powers.update(dt);
     if (this.keys?.F && Phaser.Input.Keyboard.JustDown(this.keys.F)) this.activateFreeze();
@@ -1914,6 +2004,10 @@ export class GameScene extends Phaser.Scene {
       this.powers.turbo > 0,
     );
     this.run.turboUses = this.turbo.activations;
+    if (this.run.turboUses > 0 && this.run.turboUses !== this.lastReportedTurboUses) {
+      this.lastReportedTurboUses = this.run.turboUses;
+      analytics.track("turbo_used", { worldId: this.currentWorld, activationCount: this.run.turboUses });
+    }
     if (wasTurbo !== this.turbo.active) {
       audio.play(this.turbo.active ? "turbo_start" : "turbo_end");
       audio.setTurbo(this.turbo.active);
@@ -2082,6 +2176,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (!this.boss && this.currentWorld === "spider-lair" && this.worldPortal?.visible && !this.worldPortal.getData("blockedByWeb") && distance(this.snake, this.worldPortal) < 58 && !this.worldTransitioning && this.passageCooldown <= 0) {
+      if (this.runStarted) analytics.track("portal_entered", { portalType: "return", destinationWorld: "green-valley" });
       this.enterWorld("green-valley", "left", B.arena.top + 140, 0);
       return;
     }
@@ -2164,6 +2259,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.halted || this.dead) return;
     if (!this.boss && !this.cloverGardenBoss && this.bossPortal && this.bossPortalExpiresAt > 0 && this.run.elapsed >= this.bossPortalExpiresAt) {
+      if (this.bossDefinition) analytics.track("portal_ignored", { portalType: "boss", destinationWorld: this.currentWorld, bossId: this.bossDefinition.id });
       this.bossPortal.destroy();
       this.bossPortal = undefined;
       this.bossDefinition = undefined;
@@ -2289,6 +2385,7 @@ export class GameScene extends Phaser.Scene {
           const fixedDuration = kind.id === "magnet" && pet === "baby-octopus" ? B.power.octopusMagnetDuration : kind.id === "ghost" && pet === "tidal-turtle" ? B.power.turtleGhostDuration : undefined;
           const shieldHits = kind.id === "shield" && save.profile.selectedPet === "snow-pup" ? 2 : 1;
           this.powers.activate(kind.id, bonus, fixedDuration, shieldHits);
+          if (kind.id === "shield") this.shieldUses++;
           const powerMessage = kind.id === "precision" ? "FREIO PRECISO!" : kind.id === "lucky-star" ? "ESTRELA DA SORTE!" : kind.id === "ghost" ? "FANTASMA!" : kind.name;
           this.feedback(this.power.x, this.power.y, powerMessage, kind.color);
         }
@@ -2327,6 +2424,7 @@ export class GameScene extends Phaser.Scene {
       const before = this.snake.length;
       this.snake.length = shrunkLength(before);
       this.run.shrinkFruits++;
+        analytics.track("shrink_fruit_used", { worldId: this.currentWorld });
       this.feedback(
         this.fruit.x,
         this.fruit.y,
@@ -2595,6 +2693,10 @@ export class GameScene extends Phaser.Scene {
   private die() {
     if (this.phoenixReviving) return;
     this.dead = true;
+    this.currentEndReason = "death";
+    this.currentDeathReason = this.boss ? "boss_damage_or_collision" : "collision_or_gameplay";
+    if (this.boss) analytics.track("boss_failed", { bossId: this.boss.definition.id, worldId: this.currentWorld, durationSeconds: Math.max(0, Math.round((this.run.elapsed - this.bossStartedAt) * 100) / 100), phaseReached: this.boss.phase, deathReason: this.currentDeathReason, attemptNumber: this.bossAttempts[this.boss.definition.id] ?? 1 });
+    analytics.track("player_death", { reason: this.currentDeathReason, worldId: this.currentWorld, score: this.run.score, durationSeconds: Math.max(0, Math.round(this.run.elapsed)), ...(this.boss ? { bossId: this.boss.definition.id } : {}) });
     this.resetControls();
     audio.setTurbo(false);
     this.ui.root.hidden = true;
@@ -2674,6 +2776,7 @@ export class GameScene extends Phaser.Scene {
     this.turtleShieldCooldown = B.power.turtleShieldInterval;
     if (this.powers.shield) return;
     const appeared = this.powers.activateTimedShield(B.power.turtleShieldDuration);
+    if (appeared) this.shieldUses++;
     if (!appeared) return;
     this.feedback(this.snake.x, this.snake.y, "TARTARUGA · ESCUDO!", 0x56c9b0, true);
     audio.play("power");
@@ -2718,7 +2821,9 @@ export class GameScene extends Phaser.Scene {
         run: () => {
           this.overlay?.destroy();
           this.overlay = undefined;
-          save.profile.settings.cameraMode = save.profile.settings.cameraMode === "standard" ? "panoramic" : "standard";
+          const previous = save.profile.settings.cameraMode;
+          save.profile.settings.cameraMode = previous === "standard" ? "panoramic" : "standard";
+          analytics.track("camera_mode_changed", { from: previous, to: save.profile.settings.cameraMode });
           this.applyCameraZoom(this.scale.width, this.scale.height);
           this.updateCamera(0, true);
           void save.save();
@@ -2739,6 +2844,7 @@ export class GameScene extends Phaser.Scene {
       {
         label: t("restart"),
         run: () => {
+          this.currentEndReason = "restart";
           this.finalize();
           this.scene.restart();
         },
@@ -2746,6 +2852,7 @@ export class GameScene extends Phaser.Scene {
       {
         label: t("pauseMenu"),
         run: () => {
+          this.currentEndReason = "quit";
           this.finalize();
           this.scene.start("Menu");
         },
@@ -2805,6 +2912,8 @@ export class GameScene extends Phaser.Scene {
     if (coin.kind.id === "candy_coin" && this.currentWorld !== "candy-world") return;
     if (coin.kind.id === "pearl_coin" && this.currentWorld !== "ocean") return;
     const combo = this.combo.collect();
+    const coinCountKey = coin.kind.id === "blue" ? "blue" : coin.kind.id === "diamond" ? "diamond" : coin.kind.id === "golden" ? "golden" : coin.kind.id === "normal" ? "normal" : "special";
+    this.coinCounts[coinCountKey] = (this.coinCounts[coinCountKey] ?? 0) + 1;
     this.run.score +=
       coin.kind.score *
       combo *
@@ -2847,7 +2956,6 @@ export class GameScene extends Phaser.Scene {
     );
     audio.play(coin.kind.id === "candy_coin" ? "candy_coin" : coin.kind.id === "pearl_coin" ? "pearl_coin" : `coin_${coin.kind.id}`, combo);
     haptic(coin.kind.id === "golden" ? "golden" : coin.kind.id === "candy_coin" || coin.kind.id === "pearl_coin" ? "power" : "coin");
-    analytics.track("coinCollected", { kind: coin.kind.id, value: coin.kind.value });
     if (this.run.matchCoins >= 100) awardAchievement(save.profile, "coin-hunter");
     if (combo >= 5) awardAchievement(save.profile, "combo-master");
   }
@@ -2993,6 +3101,7 @@ export class GameScene extends Phaser.Scene {
       web.strokePath();
     }
     this.secretSpiderPassage = this.add.container(x, y, [cave, label, web]).setDepth(9).setSize(112, 76);
+    analytics.track("secret_portal_found", { worldId: "spider-lair", runNumber: this.runNumberInSession, playerLevel: save.profile.playerLevel });
     for (const obstacle of [...this.obstacles]) {
       if (distance(obstacle, this.secretSpiderPassage) >= 150) continue;
       obstacle.destroy();
@@ -3477,7 +3586,6 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.currentWorld !== "silent-abyss") { this.worldPortal?.destroy(); this.worldPortal = undefined; }
     this.bossFight.destroy();
-    this.boss?.image.destroy(); this.boss = undefined;
     this.freezePortal?.destroy(); this.freezePortal = undefined;
     this.freezeReward?.destroy(); this.freezeReward = undefined;
     this.bossPickups.forEach((pickup) => pickup.image.destroy()); this.bossPickups = [];
@@ -3497,7 +3605,18 @@ export class GameScene extends Phaser.Scene {
     this.bossDefinition = undefined;
     this.bossPortalExpiresAt = 0;
     const previousWorld = this.currentWorld;
+    const timeInPreviousWorld = Math.max(0, Math.round((this.run.elapsed - this.worldEnteredAt) * 100) / 100);
+    if (this.runStarted) analytics.track("world_exited", { worldId: previousWorld, timeSpentSeconds: timeInPreviousWorld });
     this.currentWorld = world.id;
+    this.worldEntryType = previousWorld === "green-valley" && world.id === "spider-lair" ? "secret_portal" : world.id === "green-valley" ? "return" : "normal_portal";
+    this.worldEnteredAt = this.run.elapsed;
+    this.visitedWorlds.add(world.id);
+    const secretWorld = worldById(world.id).category === "SECRET";
+    if (secretWorld && !this.secretWorldsVisited.has(world.id)) {
+      if (this.runStarted) analytics.track("secret_world_discovered", { worldId: world.id, runNumber: this.runNumberInSession, playerLevel: save.profile.playerLevel });
+      this.secretWorldsVisited.add(world.id);
+    }
+    if (this.runStarted) analytics.track("world_entered", { worldId: world.id, entryType: secretWorld ? "secret_portal" : this.worldEntryType });
     this.abyssChallengeTimer?.remove(); this.abyssChallengeTimer = undefined;
     void applyWorldOrientation(world.id, save.profile.settings.orientation);
     const arena = B.arena;
@@ -3533,7 +3652,6 @@ export class GameScene extends Phaser.Scene {
     for (const object of new Set([...this.oceanObjects, ...this.oceanDecorations])) object.destroy();
     this.oceanObjects = []; this.oceanDecorations = []; this.oceanCurrents = []; this.oceanCorals = []; this.currentGraphics = undefined;
     if (this.clam) this.tweens.killTweensOf(this.clam.image);
-    this.clam?.image.destroy(); this.clam = undefined;
     this.currentZoneId = undefined; this.deepTrenchActive = false;
     this.pearlTimer = OW.pearlCooldown;
     for(const obstacle of this.obstacles) obstacle.destroy();
@@ -3614,7 +3732,8 @@ export class GameScene extends Phaser.Scene {
     this.ui.get("#world-tag").textContent = world.name.toUpperCase();
     this.ui.get<HTMLElement>("#world-tag").style.backgroundColor = "transparent";
     this.createCloverReturnPortal();
-    analytics.track("portalEntered", { world: world.id });
+    if (this.runStarted) analytics.track("portal_entered", { portalType: "world", destinationWorld: world.id });
+    if (this.runStarted && !this.firstPortalEntered) { this.firstPortalEntered = true; analytics.track("first_portal_entered", { destinationWorld: world.id }); }
     void save.save();
     if (world.id === "ocean" && !save.profile.hints.ocean) {
       save.profile.hints.ocean = true;
@@ -3702,6 +3821,7 @@ export class GameScene extends Phaser.Scene {
     this.bossPortal = this.add.container(p.x, p.y, [g, t]).setDepth(9);
     this.bossDefinition = bosses.find((boss) => boss.id === bossId);
     this.bossPortalExpiresAt = this.run.elapsed + 25;
+    if (this.runStarted) analytics.track("portal_spawned", { portalType: "boss", destinationWorld: this.currentWorld, bossId });
   }
   private bossEnergyRequirement(bossId = worldById(this.currentWorld).bossId) {
     if (bossId === "spider-queen") return 0;
@@ -3722,6 +3842,14 @@ export class GameScene extends Phaser.Scene {
     const isScorpionKing = definition.id === "scorpion-king";
     const isSpiderQueen = definition.id === "spider-queen";
     this.bossFight.start();
+    this.bossStartedAt = this.run.elapsed;
+    this.bossDamageTaken = 0;
+    this.completedBossCount = 0;
+    this.attemptedBossCount = 0;
+    this.bossAttempts[definition.id] = (this.bossAttempts[definition.id] ?? 0) + 1;
+    this.attemptedBossCount++;
+    if (this.runStarted) analytics.track("boss_started", { bossId: definition.id, worldId: this.currentWorld, playerLevel: save.profile.playerLevel, snakeLength: this.snake.length, attemptNumber: this.bossAttempts[definition.id] });
+    if (this.runStarted) analytics.track("portal_entered", { portalType: "boss", destinationWorld: this.currentWorld, bossId: definition.id });
     this.bossCollisionGrace = 0;
     const initialX = isKraken
       ? B.arena.left + (B.arena.right - B.arena.left) * OW.krakenArena.x
@@ -4270,7 +4398,7 @@ export class GameScene extends Phaser.Scene {
           const hadShield = this.powers.shield;
           if (!this.powers.absorb()) {
             if (!this.loseLife()) { this.die(); return; }
-          } else if (hadShield) this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff);
+          } else if (hadShield) { this.shieldUses++; this.feedback(this.snake.x, this.snake.y, "ESCUDO!", 0x70cfff); }
           this.bossCollisionGrace = cfg.hitInvulnerability;
         }
       }
@@ -4674,10 +4802,12 @@ export class GameScene extends Phaser.Scene {
         this.feedback(pickup.x, pickup.y, "AURA! PERSIGA O CHEFE!", 0xffa52f, true);
       } else if (pickup.kind === "candy-shield") {
         this.powers.activate("shield");
+        this.shieldUses++;
         audio.play("power"); haptic("power");
         this.feedback(pickup.x, pickup.y, "ESCUDO!", 0x70cfff, true);
       } else if (pickup.kind === "sugar-shield") {
         this.powers.activate("shield");
+        this.shieldUses++;
         audio.play("power"); haptic("power");
         this.feedback(pickup.x, pickup.y, "ESCUDO!", 0x70cfff, true);
       } else {
@@ -5624,7 +5754,9 @@ export class GameScene extends Phaser.Scene {
         [{ label: t("victoryContinue"), run: () => this.continue() }],
       );
     }
-    analytics.track("bossDefeated", { boss: defeated.id });
+    if (this.runStarted) analytics.track("boss_defeated", { bossId: defeated.id, worldId: defeated.worldId, durationSeconds: Math.max(0, Math.round((this.run.elapsed - this.bossStartedAt) * 100) / 100), damageTaken: this.bossDamageTaken, attemptNumber: this.bossAttempts[defeated.id] ?? 1, rewardPetUnlocked: first && petRewards.length > 0, remainingSnakeLength: this.snake.length });
+    if (this.runStarted) this.completedBossCount++;
+    if (this.runStarted && first) for (const petId of petRewards) analytics.track("pet_unlocked", { petId, sourceBossId: defeated.id });
     void save.save();
   }
   private updateCamera(dt: number, snap = false) {
@@ -5701,7 +5833,8 @@ export class GameScene extends Phaser.Scene {
     }
   }
   finalize() {
-    if (this.run.finished) return;
+    if (this.run.finished || this.runFinalized) return;
+    this.runFinalized = true;
     const completedMissions = reportRun(save.profile, this.run, true);
     finishRun(save.profile, this.run);
     if (!this.masteryCredited) {
@@ -5719,7 +5852,12 @@ export class GameScene extends Phaser.Scene {
       if (mission) this.ui.toast(t("missionReadyToast", { mission: mission.title }));
     }
     awardAchievement(save.profile, "first-run");
-    analytics.track("gameEnded", { score: this.run.score, coins: this.run.matchCoins });
+    const metrics = sanitizeRunMetrics({ elapsedSeconds: this.run.elapsed, score: this.run.score, coinsCollected: this.run.matchCoins, coinCounts: this.coinCounts, maxCombo: this.run.maxCombo, maxSnakeLength: this.maxSnakeLength, turboUses: this.run.turboUses, shrinkFruitUses: this.run.shrinkFruits, magnetUses: this.run.magnet, portalsEntered: this.run.portalsUsed, secretWorldsVisited: this.secretWorldsVisited.size, bossAttempts: Object.values(this.bossAttempts).reduce((sum, attempts) => sum + attempts, 0), bossWins: this.run.bossDefeats, endReason: this.currentEndReason, deathReason: this.currentDeathReason });
+    const runProperties = { gameVersion: "0.9.0-beta", platform, mode: this.run.rushMode ? "coin_rush" : "standard", startingWorld: this.startingWorld, durationSeconds: metrics.elapsedSeconds, score: metrics.score, coinsCollected: metrics.coinsCollected, normalCoins: metrics.coinCounts.normal ?? 0, blueCoins: metrics.coinCounts.blue ?? 0, diamondCoins: metrics.coinCounts.diamond ?? 0, goldenCoins: metrics.coinCounts.golden ?? 0, specialCoins: metrics.coinCounts.special ?? 0, maxCombo: metrics.maxCombo, snakeMaxLength: metrics.maxSnakeLength, turboUses: metrics.turboUses, shrinkFruitUses: metrics.shrinkFruitUses, magnetUses: metrics.magnetUses, shieldUses: this.shieldUses, portalsEntered: metrics.portalsEntered, secretWorldsVisited: metrics.secretWorldsVisited, bossAttempts: metrics.bossAttempts, bossWins: metrics.bossWins, deathReason: metrics.deathReason, endReason: metrics.endReason, playerLevel: save.profile.playerLevel, selectedSkin: save.profile.selectedSkin, selectedPet: save.profile.selectedPet, runNumberInSession: this.runNumberInSession };
+    if (this.runStarted) {
+      analytics.track("run_finished", { gameVersion: runProperties.gameVersion, platform: runProperties.platform, mode: runProperties.mode, startingWorld: runProperties.startingWorld, durationSeconds: runProperties.durationSeconds, score: runProperties.score, coinsCollected: runProperties.coinsCollected, normalCoins: runProperties.normalCoins, blueCoins: runProperties.blueCoins, diamondCoins: runProperties.diamondCoins, goldenCoins: runProperties.goldenCoins, specialCoins: runProperties.specialCoins, maxCombo: runProperties.maxCombo, snakeMaxLength: runProperties.snakeMaxLength, turboUses: runProperties.turboUses, shrinkFruitUses: runProperties.shrinkFruitUses, magnetUses: runProperties.magnetUses, shieldUses: runProperties.shieldUses, portalsEntered: runProperties.portalsEntered, secretWorldsVisited: runProperties.secretWorldsVisited, bossAttempts: runProperties.bossAttempts, bossWins: runProperties.bossWins, deathReason: runProperties.deathReason, endReason: runProperties.endReason, playerLevel: runProperties.playerLevel, selectedSkin: runProperties.selectedSkin, selectedPet: runProperties.selectedPet, runNumberInSession: runProperties.runNumberInSession });
+      analytics.track("session_gameplay_summary", { runs: this.runNumberInSession, totalPlaySeconds: Math.max(0, Math.round((Date.now() - this.sessionStartedAt) / 1000)), bossAttempts: this.attemptedBossCount, bossWins: this.completedBossCount, worldsVisited: this.visitedWorlds.size });
+    }
     void save.save();
   }
 }

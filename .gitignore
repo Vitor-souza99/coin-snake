@@ -10,4 +10,10 @@ android/local.properties
 android/**/build/
 *.jks
 *.keystore
+key.properties
+.env
+.env.*
+!.env.example
+release/*/*.apk
+release/*/*.aab
 browser-results/

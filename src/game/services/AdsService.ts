@@ -14,10 +14,12 @@ export class AdsService {
   private consentReady = false;
 
   isRewardedAdReady(): boolean {
+    if (import.meta.env.VITE_BUILD_CHANNEL === "itch-web" || import.meta.env.VITE_BUILD_CHANNEL === "itch-android") return false;
     return Capacitor.isNativePlatform() && this.consentReady && Boolean(import.meta.env.DEV || configuredUnit?.trim()) && !this.busy;
   }
 
   async requestConsent(): Promise<void> {
+    if (import.meta.env.VITE_BUILD_CHANNEL === "itch-web" || import.meta.env.VITE_BUILD_CHANNEL === "itch-android") return;
     if (!Capacitor.isNativePlatform() || this.consentReady) return;
     try {
       let info = await AdMob.requestConsentInfo();
@@ -32,6 +34,7 @@ export class AdsService {
   }
 
   async showRewardedAd(_reason: RewardedPlacement): Promise<boolean> {
+    if (import.meta.env.VITE_BUILD_CHANNEL === "itch-web" || import.meta.env.VITE_BUILD_CHANNEL === "itch-android") return false;
     void _reason;
     if (!this.isRewardedAdReady()) return false;
     this.busy = true;

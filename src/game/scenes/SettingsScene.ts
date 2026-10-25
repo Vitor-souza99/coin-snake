@@ -4,6 +4,9 @@ import { audio } from "../services/AudioService";
 import { ScreenUI, header } from "../ui/ScreenUI";
 import { applyOrientation } from "../services/OrientationService";
 import { resolveLanguage, setLanguage, t } from "../services/LocalizationService";
+import { analytics, APP_VERSION, platform } from "../services/AnalyticsService";
+import { feedback } from "../services/FeedbackService";
+import { releaseConfig } from "../config/release";
 export class SettingsScene extends Phaser.Scene {
   constructor() {
     super("Settings");
@@ -12,7 +15,17 @@ export class SettingsScene extends Phaser.Scene {
     const ui = new ScreenUI(this),
       s = save.profile.settings;
     ui.html(`${header(t("settingsTitle"), t("settingsKicker"))}<div class="settings-grid"><div class="card setting-row"><label for="language">${t("language")}</label><select id="language"><option value="auto" ${s.language === "auto" ? "selected" : ""}>${t("languageAuto")}</option><option value="pt-BR" ${s.language === "pt-BR" ? "selected" : ""}>${t("languagePortuguese")}</option><option value="en" ${s.language === "en" ? "selected" : ""}>${t("languageEnglish")}</option></select></div><div class="card setting-row"><label for="left">${t("leftHanded")}<small>${t("leftHandedHelp")}</small></label><input type="checkbox" id="left" ${s.leftHanded ? "checked" : ""}></div><div class="card setting-row"><label for="camera">${t("camera")}</label><select id="camera"><option value="standard" ${s.cameraMode === "standard" ? "selected" : ""}>${t("standard")}</option><option value="panoramic" ${s.cameraMode === "panoramic" ? "selected" : ""}>${t("panoramic")}</option></select></div><div class="card setting-row"><label for="orientation">${t("orientation")}</label><select id="orientation"><option value="auto" ${s.orientation === "auto" ? "selected" : ""}>${t("automatic")}</option><option value="portrait" ${s.orientation === "portrait" ? "selected" : ""}>${t("portrait")}</option><option value="landscape" ${s.orientation === "landscape" ? "selected" : ""}>${t("landscape")}</option></select></div><div class="card setting-row"><label for="mute">${t("mute")}</label><input type="checkbox" id="mute" ${s.muted ? "checked" : ""}></div><div class="card setting-row"><label for="sfx">${t("sfx")}</label><input type="range" id="sfx" min="0" max="1" step="0.05" value="${s.sfxVolume}"></div><div class="card setting-row"><label for="music">${t("music")}<small>${t("musicHelp")}</small></label><input type="range" id="music" min="0" max="1" step="0.05" value="${s.musicVolume}"></div><div class="card setting-row"><label for="haptics">${t("haptics")}<small>${t("hapticsHelp")}</small></label><input type="checkbox" id="haptics" ${s.haptics ? "checked" : ""}></div><div class="card setting-row"><label for="motion">${t("reducedMotion")}</label><input type="checkbox" id="motion" ${s.reducedMotion ? "checked" : ""}></div><article class="card computer-controls"><b>${t("computer")}</b><ul><li>${t("computerMove")}</li><li>${t("computerTurbo")}</li><li>${t("computerFreeze")}</li><li>${t("computerPause")}</li></ul></article><button class="action secondary" id="tutorial">${t("tutorial")}</button><button class="action gold" id="classic-snake">${t("classicPlay")}</button><button class="action secondary" id="collection">${t("collection")}</button><button class="action secondary" id="reset-save">${t("reset")}</button></div>`);
+    const analyticsAvailable = releaseConfig.analyticsEnabled && releaseConfig.posthogKeyConfigured && releaseConfig.posthogHostConfigured;
+    const feedbackAvailable = feedback.getUrl().startsWith("https://");
+    const privacyAvailable = import.meta.env.VITE_PRIVACY_URL?.startsWith("https://");
+    ui.root.insertAdjacentHTML("beforeend", `<section class="card"><h2>COIN SNAKE BETA</h2><p>Version ${APP_VERSION} · ${platform}</p><label class="setting-row" for="analytics-consent"><span>Share anonymous gameplay analytics</span><input id="analytics-consent" type="checkbox" ${analytics.getConsent() ? "checked" : ""} ${analyticsAvailable ? "" : "disabled"}></label><p class="muted">No name, email, precise location, or save data is sent.${analyticsAvailable ? "" : " Analytics provider is not configured for this build."}</p><button id="send-feedback" class="action secondary" ${feedbackAvailable ? "" : "disabled"}>FEEDBACK / REPORT BUG</button>${privacyAvailable ? `<a class="action secondary" href="${import.meta.env.VITE_PRIVACY_URL}" target="_blank" rel="noopener noreferrer">Privacy</a>` : ""}</section>`);
     ui.on("#back", () => this.scene.start("Menu"));
+    ui.get<HTMLInputElement>("#analytics-consent").addEventListener("change", async (event) => {
+      s.analyticsConsent = (event.target as HTMLInputElement).checked;
+      analytics.setConsent(s.analyticsConsent);
+      await save.save();
+    });
+    ui.on("#send-feedback", () => { void feedback.open().then((opened) => { if (!opened) ui.toast(feedbackAvailable ? "Não foi possível abrir o feedback." : "Feedback ainda não configurado para este beta."); }); });
     ui.get<HTMLSelectElement>("#language").addEventListener("change", (event) => {
       const selected = (event.target as HTMLSelectElement).value;
       s.language = selected === "pt-BR" || selected === "en" ? selected : "auto";

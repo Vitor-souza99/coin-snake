@@ -1,5 +1,9 @@
 # Coin Snake 1.1
 
+## Beta 0.9.0 distribution
+
+Release preparation guides: [`docs/BETA_RELEASE.md`](docs/BETA_RELEASE.md), [`docs/ITCH_IO_RELEASE.md`](docs/ITCH_IO_RELEASE.md), [`docs/ITCH_ANDROID_RELEASE.md`](docs/ITCH_ANDROID_RELEASE.md), [`docs/BETA_QA.md`](docs/BETA_QA.md). Anonymous analytics are off by default and only available when the beta operator configures PostHog. Privacy details: [`PRIVACY.md`](PRIVACY.md). Build the validated itch.io HTML ZIP with `npm run release:web`.
+
 Jogo casual de cobra com movimento contínuo em Green Valley. Esta entrega executa a **próxima fase necessária** solicitada no master prompt: controles, turbo, Shrink Fruit e responsividade. O roadmap de portais/bosses/pets foi preservado para fases seguintes. Moedas exclusivamente virtuais.
 
 ## Executar

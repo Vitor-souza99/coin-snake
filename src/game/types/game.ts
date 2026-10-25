@@ -16,6 +16,7 @@ export interface Settings {
   gameDifficulty: GameDifficulty;
   orientation: "auto" | "portrait" | "landscape";
   language: LanguagePreference;
+  analyticsConsent: boolean;
 }
 export interface GameStatistics {
   totalGames: number;

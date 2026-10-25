@@ -8,6 +8,7 @@ import { borealPetArt } from "../ui/BorealPetArt";
 import { tidalTurtlePetArt } from "../ui/TidalTurtlePetArt";
 import { phoenixPetArt } from "../ui/PhoenixPetArt";
 import { celestialSerpentPetArt } from "../ui/CelestialSerpentPetArt";
+import { analytics } from "../services/AnalyticsService";
 
 export class CollectionScene extends Phaser.Scene {
   constructor() { super("Collection"); }
@@ -32,7 +33,7 @@ export class CollectionScene extends Phaser.Scene {
       <article class="card collection-section"><h2>${en ? "Achievements" : "Conquistas"}</h2><div class="collection-list">${achievementDefinitions.map(a => `<p class="collection-row">${p.achievements.includes(a.id) ? "🏆" : "○"} <span><b>${a.title}</b><small class="muted">${a.description}</small></span></p>`).join("")}</div></article>
       <article class="card collection-section"><h2>${en ? "Skin mastery" : "Domínio de skins"}</h2><div class="collection-list">${Object.entries(p.mastery).map(([id, level]) => `<p class="collection-row"><b>${id}</b><span class="muted">${en ? `Level ${level} · ${Math.max(0, 10 - level)} runs to next level` : `Nível ${level} · ${Math.max(0, 10 - level)} partidas para próximo nível`}</span></p>`).join("") || `<p class="muted">${en ? "No mastery progress yet." : "Ainda não há progresso de domínio."}</p>`}</div></article></main>`);
     ui.on("#back", () => this.scene.start("Menu"));
-    for (const pet of pets) if (pet.id !== "lucky-leprechaun" && p.unlockedPets.includes(pet.id)) ui.on(`#pet-${pet.id}`, () => { p.selectedPet = pet.id; void save.save().then(() => this.scene.restart()); });
-    ui.on("#pet-none", () => { p.selectedPet = null; void save.save().then(() => this.scene.restart()); });
+    for (const pet of pets) if (pet.id !== "lucky-leprechaun" && p.unlockedPets.includes(pet.id)) ui.on(`#pet-${pet.id}`, () => { p.selectedPet = pet.id; analytics.track("pet_equipped", { petId: pet.id }); void save.save().then(() => this.scene.restart()); });
+    ui.on("#pet-none", () => { p.selectedPet = null; analytics.track("pet_equipped", { petId: null }); void save.save().then(() => this.scene.restart()); });
   }
 }

@@ -1,0 +1,9 @@
+# Coin Snake Public Beta — Privacy
+
+Anonymous gameplay analytics are optional and off until you enable **Share anonymous gameplay analytics** in Settings. Analytics can only be enabled in builds whose operator configured the beta PostHog project and explicitly enabled analytics. If enabled, the beta may send gameplay events, approximate run duration, worlds and bosses visited, game feature use, cosmetic interest, broad platform/build information, game version, and technical errors needed to understand beta stability. The current build has no PostHog key/host or feedback URL configured, so remote analytics and feedback are unavailable until an operator supplies them.
+
+The game does not require an account. It does not intentionally send your name, email, telephone number, precise location, messages, documents, device identifiers such as IMEI/MAC/advertising ID, full save data, or snake position/frame data. We do not send a separate event for every coin. The analytics provider may process ordinary network connection information (such as IP) as part of delivering its service; the game does not add precise location or manually attach IP to events. Session Replay is not enabled.
+
+You can turn analytics off in Settings; after opting out, no new product analytics events are submitted. Offline play is unaffected. Feedback opens an external form configured for the beta. The form should not require a name or email; provide contact information only optionally if you want a reply. Error-reporting SDK integration is not enabled in this beta build unless separately configured and documented.
+
+For questions, use the contact details on the Coin Snake itch.io page.
