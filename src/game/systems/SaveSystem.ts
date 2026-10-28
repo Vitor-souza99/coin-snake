@@ -38,7 +38,7 @@ export function defaults(): PlayerProfile {
       reducedMotion: false,
       cameraMode: "standard",
       gameDifficulty: "normal",
-      orientation: "auto",
+      orientation: "landscape",
       language: "auto",
       analyticsConsent: false,
       analyticsPromptDismissed: false,
@@ -151,7 +151,7 @@ export function validateSave(input: unknown): PlayerProfile {
         : s.speedPreference === "high" || s.speedPreference === "very-high"
           ? "hard"
           : "normal";
-  p.settings.orientation = s.orientation === "portrait" || s.orientation === "landscape" ? s.orientation : "auto";
+  p.settings.orientation = s.orientation === "portrait" || s.orientation === "auto" ? s.orientation : "landscape";
   p.settings.language = s.language === "pt-BR" || s.language === "en" ? s.language : "auto";
   p.settings.analyticsConsent = bool(s.analyticsConsent, false);
   p.settings.analyticsPromptDismissed = bool(s.analyticsPromptDismissed, false);

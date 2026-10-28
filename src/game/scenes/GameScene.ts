@@ -149,6 +149,7 @@ export class GameScene extends Phaser.Scene {
   private bossAuraGraphics?: Phaser.GameObjects.Graphics;
   private bossCollisionGrace = 0;
   private bossHud?: HTMLElement;
+  private bossDirectionIndicator?: Phaser.GameObjects.Graphics;
   private bossEnergyHud?: HTMLElement;
   private auraStatusHud?: HTMLElement;
   private petSprite?: Phaser.GameObjects.Container;
@@ -1877,6 +1878,51 @@ export class GameScene extends Phaser.Scene {
       this.bossEnergyHud.hidden = true;
     if (this.bossEnergyHud && !this.boss && !this.cloverGardenBoss && !this.bossEnergyHud.hidden) this.bossEnergyHud.textContent = `BOSS ENERGY ${Math.floor(this.run.bossEnergy)}/${this.currentWorld === "clover-garden" ? "—" : this.bossEnergyRequirement()}`;
     this.updateCamera(Math.min(delta / 1000, 0.05));
+    this.updateBossDirectionIndicator();
+  }
+  private updateBossDirectionIndicator() {
+    const indicator = this.bossDirectionIndicator ??= this.add.graphics().setScrollFactor(0).setDepth(1000);
+    const boss = this.boss?.image ?? this.cloverGardenBoss;
+    const camera = this.cameras.main;
+    indicator.clear();
+    if (!boss || this.halted || this.dead) {
+      indicator.setVisible(false);
+      return;
+    }
+
+    const screenX = (boss.x - camera.scrollX) * camera.zoom;
+    const screenY = (boss.y - camera.scrollY) * camera.zoom;
+    const halfWidth = camera.width / 2;
+    const halfHeight = camera.height / 2;
+    const margin = 38;
+    if (screenX >= margin && screenX <= camera.width - margin && screenY >= margin && screenY <= camera.height - margin) {
+      indicator.setVisible(false);
+      return;
+    }
+
+    const dx = screenX - halfWidth;
+    const dy = screenY - halfHeight;
+    const scale = Math.min(
+      (halfWidth - margin) / Math.max(Math.abs(dx), 0.001),
+      (halfHeight - margin) / Math.max(Math.abs(dy), 0.001),
+    );
+    const x = halfWidth + dx * scale;
+    const y = halfHeight + dy * scale;
+    const angle = Math.atan2(dy, dx);
+    const length = 15;
+    const wing = 8;
+    const tipX = x + Math.cos(angle) * length;
+    const tipY = y + Math.sin(angle) * length;
+    const backX = x - Math.cos(angle) * length * 0.6;
+    const backY = y - Math.sin(angle) * length * 0.6;
+    indicator.fillStyle(0x10251d, 0.75).fillCircle(x, y, 14);
+    indicator.fillStyle(0xffd166, 0.98)
+      .fillTriangle(
+        tipX, tipY,
+        backX + Math.cos(angle + Math.PI / 2) * wing, backY + Math.sin(angle + Math.PI / 2) * wing,
+        backX + Math.cos(angle - Math.PI / 2) * wing, backY + Math.sin(angle - Math.PI / 2) * wing,
+      );
+    indicator.setVisible(true);
   }
   private updateBossHealthHud(status = "") {
     const hud = this.bossHud;

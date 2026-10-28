@@ -116,10 +116,12 @@ describe("v1 migration", () => {
     expect(validateSave({ ...defaults(), settings: {} }).settings.cameraMode).toBe("standard");
     expect(validateSave({ ...defaults(), settings: { cameraMode: "invalid" } }).settings.cameraMode).toBe("standard");
   });
-  it("defaults missing or invalid screen orientation to automatic", () => {
-    expect(validateSave({ ...defaults(), saveVersion: 16, settings: {} }).settings.orientation).toBe("auto");
-    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { orientation: "diagonal" } }).settings.orientation).toBe("auto");
+  it("defaults missing or invalid screen orientation to landscape", () => {
+    expect(defaults().settings.orientation).toBe("landscape");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: {} }).settings.orientation).toBe("landscape");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { orientation: "diagonal" } }).settings.orientation).toBe("landscape");
     expect(validateSave({ ...defaults(), saveVersion: 16, settings: { orientation: "portrait" } }).settings.orientation).toBe("portrait");
+    expect(validateSave({ ...defaults(), saveVersion: 16, settings: { orientation: "auto" } }).settings.orientation).toBe("auto");
   });
   it("persists game difficulties and migrates legacy speed preferences", () => {
     expect(defaults().settings.gameDifficulty).toBe("normal");
