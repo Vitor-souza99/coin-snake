@@ -414,7 +414,7 @@ describe("boss entry hints", () => {
   });
   it("keeps the first boss accessible to beginners", () => {
     const king = bosses.find((boss) => boss.id === "king-snake")!;
-    expect(king.maxHealth).toBe(6);
+    expect(king.maxHealth).toBe(4);
     expect(king.movementSpeed).toBe(50);
     expect(king.combat.attackCooldown).toBe(6);
     expect(king.combat.telegraphDuration).toBe(1.3);
@@ -422,7 +422,7 @@ describe("boss entry hints", () => {
     expect(king.entryHint).toMatch(/4 Boss Coins/i);
     expect(king.entryHint).toMatch(/25\/100/i);
     expect(king.entryHint).toMatch(/coroa/i);
-    expect(king.phases).toContain(2);
+    expect(king.phases).toEqual([3, 2]);
   });
   it("configures the Candy Monster's six-hit fight, faster attacks, and four-coin aura charge", () => {
     const candy = bosses.find((boss) => boss.id === "candy-monster")!;
@@ -988,7 +988,7 @@ describe("roadmap progression systems", () => {
     expect(current.cloverGardenProgress).toBe(3);
     expect(current.cloverGardenBossesDefeated).toEqual(["candy-garden-guardian"]);
     expect(current.cloverGardenCollected).toEqual([0, 1, 2]);
-    expect(current.saveVersion).toBe(20);
+    expect(current.saveVersion).toBe(21);
   });
   it("preserves individual clovers collected in any order in v18 saves", () => {
     const current = validateSave({ saveVersion: 17, cloverGardenProgress: 2, cloverGardenCollected: [3, 1, 1, 7, -1], cloverGardenBossesDefeated: ["candy-garden-guardian"] });
@@ -1017,7 +1017,7 @@ describe("roadmap progression systems", () => {
   });
   it("migrates shop reward dates and awards new pets for prior boss victories", () => {
     const profile = validateSave({ saveVersion: 5, rewardedShopDate: "2026-10-08", bossesDefeated: ["king-snake", "unknown"] });
-    expect(profile.saveVersion).toBe(20);
+    expect(profile.saveVersion).toBe(21);
     expect(profile.rewardedShopDate).toBe("2026-10-08");
     expect(profile.unlockedPets).not.toContain("tiny-dragon");
     expect(profile.availablePets).toContain("firefly");
@@ -1026,7 +1026,7 @@ describe("roadmap progression systems", () => {
   });
   it("preserves an already-earned firefly from legacy saves without charging again", () => {
     const profile = validateSave({ saveVersion: 8, bossesDefeated: ["king-snake"], selectedPet: "firefly" });
-    expect(profile.saveVersion).toBe(20);
+    expect(profile.saveVersion).toBe(21);
     expect(profile.availablePets).toContain("firefly");
     expect(profile.unlockedPets).toContain("firefly");
     expect(profile.selectedPet).toBe("firefly");
@@ -1227,7 +1227,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates v3 ownership into v5 without trusting local premium entitlements", () => {
     const migrated = validateSave({ saveVersion: 3, unlockedSkins: ["classic", "cat", "fire-dragon"], selectedSkin: "cat", premiumEntitlements: ["fire-dragon"] });
-    expect(migrated.saveVersion).toBe(20);
+    expect(migrated.saveVersion).toBe(21);
     expect(migrated.unlockedSkins).toEqual(["classic", "cat", "fire-dragon"]);
     expect(migrated.premiumEntitlements).toEqual([]);
   });
@@ -1264,14 +1264,14 @@ describe("save validation and I/O", () => {
   });
   it("migrates legacy saves without inventing unlocked roadmap content", () => {
     const migrated = validateSave({ saveVersion: 2, totalCoins: 95, xp: 500, unlockedPets: ["hacked"], worldsUnlocked: ["ocean", "unknown"] });
-    expect(migrated.saveVersion).toBe(20);
+    expect(migrated.saveVersion).toBe(21);
     expect(migrated.totalCoins).toBe(95);
     expect(migrated.worldsUnlocked).toEqual(["green-valley"]);
     expect(migrated.unlockedPets).toEqual([]);
   });
   it("preserves Candy World and boss progress when loading a current version save", () => {
     const profile = validateSave({ saveVersion: 8, xp: 1150, bossesDefeated: ["king-snake"], worldsUnlocked: ["green-valley", "candy-world"], selectedWorld: "candy-world" });
-    expect(profile.saveVersion).toBe(20);
+    expect(profile.saveVersion).toBe(21);
     expect(profile.bossesDefeated).toContain("king-snake");
     expect(profile.worldsUnlocked).toContain("candy-world");
     expect(profile.selectedWorld).toBe("candy-world");
@@ -1291,7 +1291,7 @@ describe("save validation and I/O", () => {
   });
   it("migrates world aliases and selected world while preserving legacy unlocks", () => {
     const migrated = validateSave({ saveVersion: 4, worldsUnlocked: ["green_valley", "candy_world", "ocean_world", "dragon_kingdom"], selectedWorld: "ocean_world", xp: 2500, bossesDefeated: ["king-snake", "candy-monster"] });
-    expect(migrated.saveVersion).toBe(20);
+    expect(migrated.saveVersion).toBe(21);
     expect(migrated.worldsUnlocked).toEqual(["green-valley", "candy-world", "ocean"]);
     expect(migrated.selectedWorld).toBe("ocean");
     const old = validateSave({ saveVersion: 3, worldsUnlocked: ["ocean"] });
@@ -1687,14 +1687,14 @@ describe("snake and powers", () => {
     p.activate("precision");
     p.activate("lucky-star");
     p.activate("ghost");
-    expect([p.precision, p.luckyStar, p.ghost]).toEqual([4, 8, 3]);
+    expect([p.precision, p.luckyStar, p.ghost]).toEqual([4, 7, 3]);
     p.update(3);
     expect(p.ghost).toBe(0);
-    expect([p.precision, p.luckyStar, p.ghost]).toEqual([1, 5, 0]);
+    expect([p.precision, p.luckyStar, p.ghost]).toEqual([1, 4, 0]);
     expect(p.ghostGrace).toBeLessThanOrEqual(B.power.ghostClearanceGrace);
     p.update(1);
     expect(p.precision).toBe(0);
-    expect(p.luckyStar).toBe(4);
+    expect(p.luckyStar).toBe(3);
   });
   it("exposes ghost protection only while the power-up itself is active", () => {
     const p = new PowerUpSystem();
@@ -1719,10 +1719,12 @@ describe("snake and powers", () => {
   });
   it("increases the relative weights of valuable coins during lucky star", () => {
     const normal = B.coins.reduce((sum, coin) => sum + coin.weight, 0);
-    const lucky = [65, 24, 9, 2, 0.1].reduce((sum, weight) => sum + weight, 0);
-    expect(1 - 75 / normal).toBeLessThan(1 - 65 / lucky);
+    const lucky = [15, 20, 45, 18, 2].reduce((sum, weight) => sum + weight, 0);
+    expect(1 - 75 / normal).toBeLessThan(1 - 15 / lucky);
     expect(1 - 75 / normal).toBeCloseTo(0.251, 2);
-    expect(1 - 65 / lucky).toBeCloseTo(0.351, 2);
+    expect(1 - 15 / lucky).toBeCloseTo(0.85, 2);
+    expect(18 / lucky).toBeCloseTo(0.18, 2);
+    expect(2 / lucky).toBeCloseTo(0.02, 2);
   });
   it("poison slows movement temporarily and refreshes instead of stacking", () => {
     expect(B.hazard.slowMultiplier).toBe(0.55);

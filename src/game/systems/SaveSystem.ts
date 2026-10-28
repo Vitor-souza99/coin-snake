@@ -17,7 +17,7 @@ const bool = (v: unknown, fallback: boolean) =>
   typeof v === "boolean" ? v : fallback;
 export function defaults(): PlayerProfile {
   return {
-    saveVersion: 20,
+    saveVersion: 21,
     feedbackPrompts: { games: false, ocean: false },
     totalCoins: 0,
     bossCoinBalance: 0,
@@ -72,6 +72,7 @@ export function defaults(): PlayerProfile {
     cloverGardenBossesDefeated: [],
     rewardedShopDate: "",
     bossesDefeated: [],
+    bossTutorialsSeen: [],
     achievements: [],
     mastery: {},
     worldsUnlocked: ["green-valley"],
@@ -200,6 +201,9 @@ export function validateSave(input: unknown): PlayerProfile {
   p.rewardedShopDate = typeof r.rewardedShopDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.rewardedShopDate) ? r.rewardedShopDate : "";
   const bossIds = new Set(bosses.map((boss) => boss.id));
   p.bossesDefeated = isV3 && Array.isArray(r.bossesDefeated) ? [...new Set(r.bossesDefeated.filter((id): id is string => typeof id === "string" && bossIds.has(id)))] : [];
+  p.bossTutorialsSeen = Array.isArray(r.bossTutorialsSeen)
+    ? [...new Set(r.bossTutorialsSeen.filter((id): id is string => typeof id === "string" && bossIds.has(id)))]
+    : [...p.bossesDefeated];
   const bossWins = new Set(p.bossesDefeated);
   const bossUnlockedPets = earnablePetIds.filter((id) => {
     const pet = pets.find((entry) => entry.id === id);
@@ -322,7 +326,7 @@ export function validateSave(input: unknown): PlayerProfile {
   p.availablePets = p.availablePets.filter((id) => id !== "tiny-dragon");
   p.unlockedPets = p.unlockedPets.filter((id) => id !== "tiny-dragon");
   if (p.selectedPet === "tiny-dragon") p.selectedPet = null;
-  p.saveVersion = 20;
+  p.saveVersion = 21;
   return p;
 }
 export interface SaveStorage {
@@ -344,7 +348,7 @@ export class SaveSystem {
       const raw = await this.backend.get();
       const parsed:unknown=raw?JSON.parse(raw):null;
       const version=record(parsed).saveVersion;
-      if(typeof version==='number'&&version>20){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
+      if(typeof version==='number'&&version>21){this.incompatibleVersion=true;this.error='Save de uma versão mais nova: gravação desativada para preservar seus dados.';return;}
       this.profile = validateSave(parsed);
     } catch {
       this.profile = defaults();

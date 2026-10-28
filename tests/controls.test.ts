@@ -90,7 +90,7 @@ describe("v1 migration", () => {
       missions: { collector: { progress: 70, claimed: false } },
     };
     const p = validateSave(old);
-    expect(p.saveVersion).toBe(20);
+    expect(p.saveVersion).toBe(21);
     expect(p.totalCoins).toBe(812);
     expect(p.selectedSkin).toBe("cat");
     expect(p.xp).toBe(900);
@@ -167,6 +167,7 @@ it("never overwrites a save from a newer version", async () => {
 
 it("loads the current save version without resetting progress", async () => {
   const profile = defaults();
+  profile.saveVersion = 21;
   profile.totalCoins = 450;
   profile.bestScore = 1200;
   const s = new SaveSystem({ get: async () => JSON.stringify(profile), set: async () => {} });

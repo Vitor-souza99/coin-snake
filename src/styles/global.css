@@ -940,6 +940,33 @@ canvas {
   background: linear-gradient(90deg, #5bb96b, #b0d949);
   transition: width 0.25s ease;
 }
+.boss-health-hud {
+  position: absolute;
+  z-index: 8;
+  top: 76px;
+  left: 50%;
+  width: min(310px, calc(100% - 190px));
+  min-width: 180px;
+  padding: 7px 10px 8px;
+  transform: translateX(-50%);
+  border: 1px solid #ffffff80;
+  border-radius: 11px;
+  background: #14241bdc;
+  box-shadow: 0 3px 12px #09071355;
+  color: #fffdf0;
+  pointer-events: none;
+}
+.boss-health-hud[hidden] { display: none; }
+.boss-health-hud__heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; line-height: 1.2; }
+.boss-health-hud__heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.boss-health-hud__heading span { flex: none; font-variant-numeric: tabular-nums; font-weight: 900; }
+.boss-health-hud__track { height: 9px; margin-top: 5px; overflow: hidden; border: 1px solid #ffffff50; border-radius: 8px; background: #080d0a; }
+.boss-health-hud__track i { display: block; width: 100%; height: 100%; border-radius: inherit; transition: width 0.22s ease, background-color 0.22s ease; }
+.boss-health-hud--healthy .boss-health-hud__track i { background: #55c96b; }
+.boss-health-hud--warning .boss-health-hud__track i { background: #f0c447; }
+.boss-health-hud--critical .boss-health-hud__track i { background: #ed5555; }
+.boss-health-hud__status { min-height: 0; margin-top: 3px; color: #ffedb0; font-size: 9px; font-weight: 800; line-height: 1.15; text-align: center; }
+.boss-health-hud__status:empty { display: none; }
 .pause-button {
   margin-left: auto;
   pointer-events: auto;
@@ -1441,6 +1468,9 @@ canvas {
     top: 78px;
     left: 15px;
   }
+  .boss-health-hud { top: 66px; width: min(260px, calc(100% - 126px)); min-width: 150px; padding: 6px 8px; }
+  .boss-health-hud__heading { font-size: 10px; }
+  .boss-health-hud__track { height: 8px; }
   .game-ui .boss-energy,
   .game-ui #abyss-timer {
     top: 110px;

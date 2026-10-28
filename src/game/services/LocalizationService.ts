@@ -30,6 +30,7 @@ const messages = {
     abyssVictoryTitle: "A fenda silenciou", abyssVictoryBody: "Você sobreviveu por 90 segundos no Abismo Mudo. A Serpente Abissal foi desbloqueada e está disponível na sua coleção.",
     sanctuaryTitle: "Serpente Celestial desbloqueada!", sanctuaryBody: "Os três santuários despertaram a Serpente Celestial. Ela já está disponível na sua coleção de mascotes.",
     bossOptional: "A luta é opcional. Sua Boss Energy só será usada quando a luta começar.", bossStart: "Começar a luta", bossLater: "Agora não",
+    bossTutorialNext: "Próximo", bossTutorialSkip: "Pular tutorial", bossTutorialStep: "DICA {current} DE {total}", bossTutorialReady: "Começar a luta", bossTutorialCountdown: "Começar em {seconds}s", bossTutorialHowTo: "Como vencer", bossTutorialWatchOut: "Fique atento",
     difficultyTipTitle: "DICA DA PARTIDA", difficultyTipNext: "Outra dica", difficultyTipCount: "{current} de {total}",
     difficultyTips: {
       easy: ["Use o joystick com movimentos curtos para fazer curvas suaves.", "Pegue power-ups: eles ajudam a controlar momentos perigosos.", "Olhe adiante e planeje por onde sua cobra vai passar.", "Evite encurralar a cobra nas bordas da arena.", "Colete moedas no caminho, sem fazer curvas arriscadas.", "O turbo acelera a cobra; use-o em trechos livres.", "Quando surgir um chefe, observe antes de se aproximar.", "Mantenha espaço para virar se aparecer um obstáculo.", "Crescer aumenta sua pontuação, mas exige mais espaço.", "Faça pausas entre as partidas para experimentar outra estratégia."],
@@ -55,6 +56,7 @@ const messages = {
     abyssVictoryTitle: "The rift falls silent", abyssVictoryBody: "You survived the Silent Abyss for 90 seconds. The Abyssal Serpent is unlocked and available in your collection.",
     sanctuaryTitle: "Celestial Serpent unlocked!", sanctuaryBody: "The three sanctuaries awakened the Celestial Serpent. It’s now available in your pet collection.",
     bossOptional: "The fight is optional. Your Boss Energy is only spent when the fight begins.", bossStart: "Start fight", bossLater: "Not now",
+    bossTutorialNext: "Next", bossTutorialSkip: "Skip tutorial", bossTutorialStep: "TIP {current} OF {total}", bossTutorialReady: "Start fight", bossTutorialCountdown: "Start in {seconds}s", bossTutorialHowTo: "How to win", bossTutorialWatchOut: "Watch out",
     difficultyTipTitle: "RUN TIP", difficultyTipNext: "Another tip", difficultyTipCount: "{current} of {total}",
     difficultyTips: {
       easy: ["Use short joystick movements for smooth turns.", "Collect power-ups to help handle dangerous moments.", "Look ahead and plan where your snake will travel.", "Avoid trapping your snake against the arena edges.", "Collect coins along the way without risky turns.", "Boost speeds you up; use it on clear stretches.", "When a boss appears, observe before moving closer.", "Leave room to turn if an obstacle appears.", "Growing raises your score but requires more space.", "Take a break between runs and try a new strategy."],

@@ -36,7 +36,7 @@ export interface MissionProgress {
   claimed: boolean;
 }
 export interface PlayerProfile {
-  saveVersion: 20;
+  saveVersion: 21;
   feedbackPrompts: { games: boolean; ocean: boolean };
   totalCoins: number;
   bossCoinBalance: number;
@@ -67,6 +67,7 @@ export interface PlayerProfile {
   cloverGardenBossesDefeated: string[];
   rewardedShopDate: string;
   bossesDefeated: string[];
+  bossTutorialsSeen: string[];
   achievements: string[];
   mastery: Record<string, number>;
   worldsUnlocked: string[];

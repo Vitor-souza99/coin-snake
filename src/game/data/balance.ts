@@ -86,7 +86,7 @@ export const B = {
     precisionDuration: 4,
     precisionSpeed: 0.75,
     precisionTurn: 1.3,
-    luckyStarDuration: 8,
+    luckyStarDuration: 7,
     ghostDuration: 3,
     turtleGhostDuration: 5,
     turtleShieldInterval: 45,
@@ -132,11 +132,11 @@ export const fireflyCoins = [
   { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
 ] as const;
 export const luckyStarCoins = [
-  { id: "normal", value: 1, score: 10, weight: 65, color: 0xffd35a, label: "1" },
-  { id: "blue", value: 5, score: 50, weight: 24, color: 0x4cc9f0, label: "5" },
-  { id: "diamond", value: 20, score: 200, weight: 9, color: 0xd9a7ff, label: "20" },
-  { id: "golden", value: 50, score: 500, weight: 2, color: 0xff9c36, label: "50" },
-  { id: "mythic", value: 100, score: 1000, weight: 0.1, color: 0xff4fd8, label: "100" },
+  { id: "normal", value: 1, score: 10, weight: 15, color: 0xffd35a, label: "1" },
+  { id: "blue", value: 5, score: 50, weight: 20, color: 0x4cc9f0, label: "5" },
+  { id: "diamond", value: 20, score: 200, weight: 45, color: 0xd9a7ff, label: "20" },
+  { id: "golden", value: 50, score: 500, weight: 18, color: 0xff9c36, label: "50" },
+  { id: "mythic", value: 100, score: 1000, weight: 2, color: 0xff4fd8, label: "100" },
 ] as const;
 export const candyWorldCoinWeights = <T extends { id: string; weight: number }>(coins: readonly T[]): Array<Omit<T, "weight"> & { weight: number }> =>
   coins.map((coin) => ({

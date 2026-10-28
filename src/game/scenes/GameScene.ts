@@ -494,7 +494,7 @@ export class GameScene extends Phaser.Scene {
       save.profile.settings.leftHanded,
     );
     this.ui.html(
-      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div class="player-level"><div class="player-level__label"><b id="player-level-value">NÍVEL ${save.profile.playerLevel}</b><span id="player-xp-value"></span></div><div class="player-level__track"><i id="player-xp-bar"></i></div></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}${this.currentWorld === "silent-abyss" && save.profile.abyssSanctuaryProgress < 3 ? `<div id="abyss-sanctuaries" class="world-tag">SANTUÁRIOS · ${save.profile.abyssSanctuaryProgress}/3</div>` : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><div id="boss-hud" class="effects" hidden></div><div id="aura-status" class="aura-status" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">⚡ TURBO</button><button id="freeze" class="turbo-button freeze-button" aria-label="Ativar Freeze" hidden>❄ FREEZE</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
+      `<div class="hud"><div class="hud-stats"><div><span class="hud-label">PONTOS</span><b class="hud-value" id="score">0</b></div><div><span class="hud-label">MOEDAS</span><b class="hud-value" id="coins">0</b></div><div><span class="hud-label">COMBO</span><b class="hud-value" id="combo">×1</b></div></div><div id="lives" class="lives-indicator" aria-label="Vidas restantes">♥ 2</div><button id="pause" class="action small pause-button" aria-label="Pausar partida">Ⅱ</button></div><div class="player-level"><div class="player-level__label"><b id="player-level-value">NÍVEL ${save.profile.playerLevel}</b><span id="player-xp-value"></span></div><div class="player-level__track"><i id="player-xp-bar"></i></div></div><div id="effects" class="effects"></div><div class="world-tag" id="world-tag">${worldById(this.currentWorld).name.toUpperCase()}</div>${this.currentWorld === "silent-abyss" && !save.profile.abyssChallengeCompleted ? '<div id="abyss-timer" class="world-tag">DESAFIO · 90 s</div>' : ""}${this.currentWorld === "silent-abyss" && save.profile.abyssSanctuaryProgress < 3 ? `<div id="abyss-sanctuaries" class="world-tag">SANTUÁRIOS · ${save.profile.abyssSanctuaryProgress}/3</div>` : ""}<div id="boss-energy" class="boss-energy">BOSS ENERGY 0/350</div><section id="boss-hud" class="boss-health-hud" aria-label="Vida do chefe" aria-live="polite" hidden><div class="boss-health-hud__heading"><strong data-boss-name></strong><span data-boss-hp></span></div><div class="boss-health-hud__track" role="meter" aria-label="Vida do chefe" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1"><i data-boss-health-bar></i></div><div class="boss-health-hud__status" data-boss-status></div></section><div id="aura-status" class="aura-status" hidden></div><div id="joystick" class="joystick-zone" aria-label="Área do joystick"></div><div class="turbo-control"><button id="turbo" class="turbo-button" aria-label="Segure para acelerar">⚡ TURBO</button><button id="freeze" class="turbo-button freeze-button" aria-label="Ativar Freeze" hidden>❄ FREEZE</button><div class="track"><i id="turbo-bar" style="width:100%"></i></div><small id="turbo-value">100 / 100</small></div>`,
     );
     if (save.profile.selectedPet) {
       const petColor = save.profile.selectedPet === "bee" ? 0xffd84d : save.profile.selectedPet === "snow-pup" ? 0x9edfff : save.profile.selectedPet === "tiny-dragon" ? 0xaaa59b : save.profile.selectedPet === "firefly" ? 0xc7ff72 : save.profile.selectedPet === "tidal-turtle" ? 0x56c9b0 : save.profile.selectedPet === "phoenix" ? 0xff793f : save.profile.selectedPet === "celestial-serpent" ? 0x42c978 : save.profile.selectedPet === "scorpionling" ? 0xf5a642 : save.profile.selectedPet === "baby-octopus" ? 0x9f7aea : 0xe783d0;
@@ -1878,6 +1878,32 @@ export class GameScene extends Phaser.Scene {
     if (this.bossEnergyHud && !this.boss && !this.cloverGardenBoss && !this.bossEnergyHud.hidden) this.bossEnergyHud.textContent = `BOSS ENERGY ${Math.floor(this.run.bossEnergy)}/${this.currentWorld === "clover-garden" ? "—" : this.bossEnergyRequirement()}`;
     this.updateCamera(Math.min(delta / 1000, 0.05));
   }
+  private updateBossHealthHud(status = "") {
+    const hud = this.bossHud;
+    if (!hud) return;
+    const regular = this.boss;
+    const garden = !regular && this.cloverGardenBoss?.active ? this.cloverGardenBoss : undefined;
+    if (!regular && !garden) {
+      hud.hidden = true;
+      return;
+    }
+    const name = regular?.definition.name ?? (this.cloverGardenBossId() === "candy-garden-guardian" ? "SAPO-REI DO TREVO" : this.cloverGardenBossId() === "ocean-garden-guardian" ? "GUARDIÃO ABISSAL" : "GUARDIÃO ESPINHO-DOCE");
+    const health = regular?.health ?? (garden?.getData("health") as number | undefined) ?? 0;
+    const maxHealth = regular?.definition.maxHealth ?? 4;
+    const ratio = Phaser.Math.Clamp(health / maxHealth, 0, 1);
+    const state = ratio > 0.5 ? "healthy" : ratio > 0.25 ? "warning" : "critical";
+    hud.hidden = false;
+    hud.classList.remove("boss-health-hud--healthy", "boss-health-hud--warning", "boss-health-hud--critical");
+    hud.classList.add(`boss-health-hud--${state}`);
+    hud.querySelector<HTMLElement>("[data-boss-name]")!.textContent = name;
+    hud.querySelector<HTMLElement>("[role=meter]")!.setAttribute("aria-label", `${name}: ${health} de ${maxHealth} HP`);
+    hud.querySelector<HTMLElement>("[data-boss-hp]")!.textContent = `${health}/${maxHealth} HP`;
+    hud.querySelector<HTMLElement>("[data-boss-health-bar]")!.style.width = `${ratio * 100}%`;
+    const meter = hud.querySelector<HTMLElement>("[role=meter]")!;
+    meter.setAttribute("aria-valuemax", String(maxHealth));
+    meter.setAttribute("aria-valuenow", String(health));
+    hud.querySelector<HTMLElement>("[data-boss-status]")!.textContent = status;
+  }
   private updateAuraStatusHud(message?: string) {
     const hud = this.auraStatusHud;
     const boss = this.boss;
@@ -2229,32 +2255,58 @@ export class GameScene extends Phaser.Scene {
         this.halted = true;
         this.bossIntroOpen = true;
         this.resetControls();
-        this.overlay = this.ui.modal(
-          `${getLanguage() === "en" ? "Challenge" : "Desafio"}: ${definition.name}`,
-          `${localizedBossHint(definition.id, definition.entryHint)}\n\n${t("bossOptional")}`,
-          [{
-            label: t("bossStart"),
-            run: () => {
-              if (!this.bossIntroOpen || this.boss || !this.scene.isActive()) return;
-              this.overlay?.destroy();
-              this.overlay = undefined;
-              this.bossIntroOpen = false;
-              this.resetControls();
-              this.accumulator = 0;
-              this.run.bossEnergy -= requiredEnergy;
-              this.startBoss(definition);
-              this.halted = false;
-            },
-          }, {
-            label: t("bossLater"),
-            run: () => {
-              if (!this.bossIntroOpen) return;
-              this.bossPortal?.setData("hintDismissed", true);
-              this.bossIntroOpen = false;
-              this.continue();
-            },
-          }],
-        );
+        const startFight = () => {
+          if (!this.bossIntroOpen || this.boss || !this.scene.isActive()) return;
+          this.overlay?.destroy(); this.overlay = undefined; this.bossIntroOpen = false;
+          this.resetControls(); this.accumulator = 0;
+          this.run.bossEnergy -= requiredEnergy;
+          this.startBoss(definition); this.halted = false;
+        };
+        const hint = localizedBossHint(definition.id, definition.entryHint);
+        if (save.profile.bossTutorialsSeen.includes(definition.id) || save.profile.bossesDefeated.includes(definition.id)) {
+          this.overlay = this.ui.modal(`${getLanguage() === "en" ? "Challenge" : "Desafio"}: ${definition.name}`,
+            `${hint}\n\n${t("bossOptional")}`, [
+              { label: t("bossStart"), run: startFight },
+              { label: t("bossLater"), run: () => { if (!this.bossIntroOpen) return; this.bossPortal?.setData("hintDismissed", true); this.bossIntroOpen = false; this.continue(); } },
+            ]);
+        } else {
+          save.profile.bossTutorialsSeen.push(definition.id);
+          void save.save();
+          const sentences = hint.split(/(?<=[.!?])\s+/).filter(Boolean);
+          const midpoint = Math.ceil(sentences.length / 2);
+          const tips = [sentences.slice(0, midpoint).join(" "), sentences.slice(midpoint).join(" ") || hint];
+          let step = 0;
+          let countdown = 6;
+          const renderStep = () => {
+            if (!this.bossIntroOpen || !this.scene.isActive()) return;
+            this.overlay?.destroy();
+            this.overlay = undefined;
+            const finalStep = step === tips.length - 1;
+            const title = `${getLanguage() === "en" ? "Challenge" : "Desafio"}: ${definition.name}`;
+            const body = `${t(finalStep ? "bossTutorialWatchOut" : "bossTutorialHowTo")} · ${t("bossTutorialStep", { current: step + 1, total: tips.length })}\n\n${tips[step]}${finalStep ? `\n\n${t("bossOptional")}` : ""}`;
+            this.overlay = this.ui.modal(title, body, [
+              { label: finalStep ? t("bossTutorialCountdown", { seconds: countdown }) : t("bossTutorialNext"), run: () => {
+                if (!this.bossIntroOpen) return;
+                if (!finalStep) { step++; renderStep(); return; }
+                if (countdown > 0) return;
+                startFight();
+              } },
+              { label: t("bossTutorialSkip"), run: startFight },
+            ]);
+            if (finalStep && countdown > 0) {
+              const tick = () => {
+                window.setTimeout(() => {
+                  if (!this.bossIntroOpen || !this.scene.isActive()) return;
+                  countdown--;
+                  if (countdown > 0) tick();
+                  else renderStep();
+                }, 1000);
+              };
+              tick();
+            }
+          };
+          renderStep();
+        }
       }
     }
     if (this.halted || this.dead) return;
@@ -3244,10 +3296,10 @@ export class GameScene extends Phaser.Scene {
     shell.lineStyle(4, 0x326d37).lineBetween(-39, 39, -53, 51).lineBetween(-53, 51, -42, 53).lineBetween(39, 39, 53, 51).lineBetween(53, 51, 42, 53);
     shell.fillStyle(0xf6a2a0, 0.8).fillEllipse(-45, 4, 12, 7).fillEllipse(45, 4, 12, 7);
     boss.add(shell);
-    const hp = this.add.text(0, -78, "SAPO-REI DO TREVO · 4 HP", { fontSize: "16px", color: "#ffffff", fontStyle: "bold", backgroundColor: "#24452fee", padding: { x: 8, y: 4 } }).setOrigin(0.5);
-    boss.add(hp); boss.setData("gardenBoss", true); boss.setData("health", 4); boss.setData("attackTimer", 2.2);
+    boss.setData("gardenBoss", true); boss.setData("health", 4); boss.setData("attackTimer", 2.2);
     this.cloverGardenBoss = boss;
     this.bossFight.start(); this.bossFight.combat.bossId = this.cloverGardenBossId();
+    this.updateBossHealthHud();
     this.bossCoinsTimer = 2;
     this.ui.toast("SAPO-REI: desvie do salto marcado e da língua puxadora; use a aura para atacar!");
   }
@@ -3457,7 +3509,11 @@ export class GameScene extends Phaser.Scene {
     if (auraActive && vulnerable && Math.hypot(this.snake.x - boss.x, this.snake.y - boss.y) < 78 && this.bossFight.combat.hitInvulnerability <= 0 && this.bossFight.combat.consumeHit(this.cloverGardenBossId())) {
       const health = Math.max(0, (boss.getData("health") as number) - 1);
       boss.setData("health", health);
-      (boss.getAt(1) as Phaser.GameObjects.Text).setText(`${ocean ? "GUARDIÃO ABISSAL" : "GUARDIÃO ESPINHO-DOCE"} · ${health} HP`);
+      this.updateBossHealthHud();
+      this.tweens.add({ targets: boss, alpha: 0.35, duration: 80, yoyo: true, repeat: 2 });
+      const hitDx = this.snake.x - boss.x, hitDy = this.snake.y - boss.y;
+      const hitDistance = Math.hypot(hitDx, hitDy) || 1;
+      this.tweens.add({ targets: boss, x: boss.x + hitDx / hitDistance * 24, y: boss.y + hitDy / hitDistance * 24, duration: 130, yoyo: true, ease: "Sine.easeOut" });
       this.feedback(boss.x, boss.y, "−1 HP", 0xffdf6c, true); audio.play("power"); haptic("power");
       if (health <= 0) {
         const bossId = this.cloverGardenBossId();
@@ -3465,6 +3521,7 @@ export class GameScene extends Phaser.Scene {
         const firstVictory = !save.profile.cloverGardenBossesDefeated.includes(bossId);
         if (firstVictory) save.profile.cloverGardenBossesDefeated.push(bossId);
         boss.destroy(); this.cloverGardenBoss = undefined;
+        this.updateBossHealthHud();
         this.cloverGardenHazard?.destroy(); this.cloverGardenHazard = undefined;
         if (defeatedFrogKing) {
           this.bossPickups.filter((pickup) => pickup.kind === "crown-orb").forEach((pickup) => pickup.image.destroy());
@@ -3473,6 +3530,7 @@ export class GameScene extends Phaser.Scene {
           this.feedback(boss.x, boss.y, firstVictory ? "SAPO REI ELIMINADO" : "SAPO-REI DERROTADO NOVAMENTE", 0xbaff78, true);
         }
         this.bossFight.finish();
+        this.updateBossHealthHud();
         this.cloverRevengePortal?.destroy(); this.cloverRevengePortal = undefined;
         if (firstVictory && save.profile.cloverGardenProgress < 4) {
           this.worldPortal?.destroy();
@@ -3889,11 +3947,11 @@ export class GameScene extends Phaser.Scene {
     const initialState = definition.id === "kraken" || isSpiderQueen ? "IDLE" : "CHASE";
     const preference = this.gameDifficulty;
     const attackCooldown = bossAttackTiming(definition.combat.attackCooldown, preference, 1.5);
-    const boss = this.boss = { definition, health: definition.maxHealth, phase: 0, attack: attackCooldown, speed: bossMovementSpeed(definition.movementSpeed, preference), image, bodySegments, trail, visualAngle: 0, lastVisualX: initialX, lastVisualY: initialY, state: initialState, stateTimer: attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0, krakenTentacles: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("tentacles") as Phaser.GameObjects.Graphics[] : undefined, krakenSuckers: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("suckers") as Phaser.GameObjects.Graphics[] : undefined, krakenTentacleTimers: isKraken ? Array(8).fill(0) as number[] : undefined, scorpionTail: isScorpionKing && image instanceof Phaser.GameObjects.Container ? image.getData("scorpionTail") as Phaser.GameObjects.Container : undefined };
+    this.boss = { definition, health: definition.maxHealth, phase: 0, attack: attackCooldown, speed: bossMovementSpeed(definition.movementSpeed, preference), image, bodySegments, trail, visualAngle: 0, lastVisualX: initialX, lastVisualY: initialY, state: initialState, stateTimer: attackCooldown, targetX: this.snake.x, targetY: this.snake.y, chargeX: 0, chargeY: 0, doubleCharge: 0, krakenTentacles: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("tentacles") as Phaser.GameObjects.Graphics[] : undefined, krakenSuckers: isKraken && image instanceof Phaser.GameObjects.Container ? image.getData("suckers") as Phaser.GameObjects.Graphics[] : undefined, krakenTentacleTimers: isKraken ? Array(8).fill(0) as number[] : undefined, scorpionTail: isScorpionKing && image instanceof Phaser.GameObjects.Container ? image.getData("scorpionTail") as Phaser.GameObjects.Container : undefined };
     if (isSpiderQueen) this.createSpiderArena();
     this.bossHud!.hidden = false;
     if (this.bossEnergyHud) this.bossEnergyHud.hidden = true;
-    this.bossHud!.textContent = `${definition.name} · ${boss.health}/${definition.maxHealth} HP`;
+    this.updateBossHealthHud();
     this.bossFight.active = true;
     if (isSpiderQueen && this.bossEnergyHud) this.bossEnergyHud.hidden = true;
     this.bossCoinsTimer = 2;
@@ -4522,16 +4580,14 @@ export class GameScene extends Phaser.Scene {
         }
       }
     } else this.bossAuraGraphics?.clear();
-    if (boss.definition.id === "spider-queen" && this.spiderStalactite && this.bossHud)
-      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP`;
-    if (this.bossHud && boss.definition.id !== "spider-queen") {
+    if (this.bossHud) {
       const kingSnake = boss.definition.id === "king-snake";
       const candy = boss.definition.id === "candy-monster";
-      const ready = !kingSnake && !candy && this.bossFight.combat.attackCharge >= 100 ? " · ATAQUE PRONTO!" : "";
-      const aura = this.bossFight.combat.active ? ` · ${candy ? "ESCUDO ATIVO" : `AURA ×${this.bossFight.combat.remainingHits}`}` : "";
-      const attackCharge = kingSnake || candy ? "" : ` · ATAQUE ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
-      const krakenHealTimer = boss.definition.id === "kraken" && boss.state === "KRAKEN_HEAL" ? ` · INTERROMPA A CURA: ${Math.ceil(boss.stateTimer)}s` : "";
-      this.bossHud.textContent = `${boss.definition.name} · ${boss.health}/${boss.definition.maxHealth} HP · FASE ${boss.phase + 1}${krakenHealTimer}${attackCharge}${ready}${aura}`;
+      const ready = !kingSnake && !candy && this.bossFight.combat.attackCharge >= 100 ? "ATAQUE PRONTO!" : "";
+      const aura = this.bossFight.combat.active ? (candy ? "ESCUDO ATIVO" : `AURA ×${this.bossFight.combat.remainingHits}`) : "";
+      const attackCharge = kingSnake || candy ? "" : `ATAQUE ${Math.floor(this.bossFight.combat.attackCharge)}/100`;
+      const krakenHealTimer = boss.definition.id === "kraken" && boss.state === "KRAKEN_HEAL" ? `INTERROMPA A CURA: ${Math.ceil(boss.stateTimer)}s` : "";
+      this.updateBossHealthHud([`FASE ${boss.phase + 1}`, krakenHealTimer, attackCharge, ready, aura].filter(Boolean).join(" · "));
     }
   }
   private updateSpiderBehavior(boss: NonNullable<GameScene["boss"]>) {
